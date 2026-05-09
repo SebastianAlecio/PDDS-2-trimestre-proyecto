@@ -1,0 +1,47 @@
+# Terraform local state — never commit
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Terraform provider/plugin cache
+.terraform/
+.terraform.tfstate.lock.info
+
+# Terraform planfiles (binary)
+tfplan
+*.tfplan
+
+# Terraform output captures used in CI
+plan.txt
+
+# Ignore all *.tfvars by default — they may contain secrets.
+# Whitelist the dev tfvars so the grader and CI can use it.
+*.tfvars
+*.tfvars.json
+!infra/envs/dev/dev.tfvars
+
+# Override files (often used for local dev)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Environment / credentials
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# CLI tooling
+.terraformrc
+terraform.rc
+
+# IDE / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
