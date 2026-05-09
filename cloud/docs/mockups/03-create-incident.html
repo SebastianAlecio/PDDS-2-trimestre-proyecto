@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mockup 03 · Crear incidente manualmente</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="wireframe-banner">Wireframe low-fi · Mockup 03 · Crear incidente</div>
+
+  <header class="app-header">
+    <div>
+      <span class="brand">Acme · Incidents</span>
+      <span class="breadcrumb">  /  Incidents  /  Nuevo</span>
+    </div>
+    <div class="user-chip">
+      <span class="avatar">SA</span>
+      <span>Sebastián A.</span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="app-sidebar">
+      <ul>
+        <li>Dashboard</li>
+        <li class="active">Incidents</li>
+        <li>Services</li>
+        <li>On-call schedule</li>
+        <li>Postmortems</li>
+        <li>Settings</li>
+      </ul>
+    </nav>
+
+    <main class="app-main" style="max-width:780px;">
+      <h1 class="page-title">Declarar incidente</h1>
+      <p class="page-subtitle">El sistema asigna automáticamente al on-call del servicio elegido y dispara las notificaciones.</p>
+
+      <div class="card">
+        <div class="form-row">
+          <label>Título del incidente *</label>
+          <input type="text" placeholder="Ej: Login latency p99 superior a 8s">
+          <p class="help-text">Será visible en Slack, status page interna y postmortem. Sé específico.</p>
+        </div>
+
+        <div class="form-row">
+          <label>Servicios afectados *</label>
+          <input type="text" placeholder="Buscar servicios… (puedes seleccionar varios)">
+          <div style="margin-top:8px;">
+            <span class="chip">auth-service ✕</span>
+            <span class="chip">api-gateway ✕</span>
+          </div>
+          <p class="help-text">El on-call se resuelve a partir del primer servicio. Para multi-servicio, se notifica a todos los on-call.</p>
+        </div>
+
+        <div class="form-row">
+          <label>Severidad</label>
+          <div class="radio-group">
+            <label><input type="radio" name="sev" checked> SEV1 <span class="muted">(major outage)</span></label>
+            <label><input type="radio" name="sev"> SEV2 <span class="muted">(degraded)</span></label>
+            <label><input type="radio" name="sev"> SEV3 <span class="muted">(minor)</span></label>
+            <label><input type="radio" name="sev"> SEV4 <span class="muted">(info)</span></label>
+          </div>
+          <p class="help-text">
+            <span class="badge badge-sev1">Sugerido: SEV1</span>
+            por regla <code>error_rate &gt; 5% AND customer_facing</code>. Podés cambiarla manualmente y el cambio queda en el timeline.
+          </p>
+        </div>
+
+        <div class="form-row">
+          <label>Descripción inicial</label>
+          <textarea placeholder="¿Qué viste? ¿Cómo lo detectaste? Síntomas, métricas, alertas relacionadas…"></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>Notificaciones</label>
+          <div style="display:grid; gap:6px; font-size:13px;">
+            <label style="font-weight:400; text-transform:none; letter-spacing:0; color:#2a2a2a;"><input type="checkbox" checked> Slack #incidents (canal global del equipo)</label>
+            <label style="font-weight:400; text-transform:none; letter-spacing:0; color:#2a2a2a;"><input type="checkbox" checked> Crear war room dedicado <span class="chip">#inc-YYYY-MM-XYZ</span></label>
+            <label style="font-weight:400; text-transform:none; letter-spacing:0; color:#2a2a2a;"><input type="checkbox" checked> Email al on-call resuelto</label>
+            <label style="font-weight:400; text-transform:none; letter-spacing:0; color:#2a2a2a;"><input type="checkbox"> Publicar a status page pública (auto si SEV1/2)</label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Estado inicial</label>
+          <select>
+            <option>Investigating (default)</option>
+            <option>Identified</option>
+            <option>Monitoring</option>
+          </select>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; padding-top:8px; border-top:1px solid #eaeaea;">
+          <button class="btn">Cancelar</button>
+          <button class="btn btn-primary">Declarar incidente</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="mockup-caption">
+  <strong>Cubre:</strong> creación manual de incidentes (alternativa al webhook automático de US-07). Las funcionalidades específicas #1 (auto-priorización por reglas) y #2 (asignación automática al on-call) son visibles en este flujo.
+  <strong>Notas de diseño:</strong> la severidad sugerida y la regla aplicada son explícitas para que el on-call entienda y pueda overridear.
+</div>
+</body>
+</html>

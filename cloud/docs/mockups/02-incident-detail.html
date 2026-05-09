@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mockup 02 · Detalle del incidente con timeline</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="wireframe-banner">Wireframe low-fi · Mockup 02 · Detalle del incidente</div>
+
+  <header class="app-header">
+    <div>
+      <span class="brand">Acme · Incidents</span>
+      <span class="breadcrumb">  /  Incidents  /  INC-2026-05-104</span>
+    </div>
+    <div class="user-chip">
+      <span class="avatar">SA</span>
+      <span>Sebastián A. · <strong>On-call</strong></span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="app-sidebar">
+      <ul>
+        <li>Dashboard</li>
+        <li class="active">Incidents</li>
+        <li>Services</li>
+        <li>On-call schedule</li>
+        <li>Postmortems</li>
+        <li>Settings</li>
+      </ul>
+    </nav>
+
+    <main class="app-main">
+      <div class="toolbar">
+        <div>
+          <h1 class="page-title">
+            <span class="badge badge-sev1" style="vertical-align:middle;">SEV1</span>
+            Login latency p99 &gt; 8s
+          </h1>
+          <p class="page-subtitle">
+            <strong>INC-2026-05-104</strong> ·
+            <span class="badge badge-state-investigating">Investigating</span> ·
+            Asignado a <strong>Sebastián A.</strong> ·
+            Declarado hace 4m 12s
+          </p>
+        </div>
+        <div class="btn-group">
+          <button class="btn">+ Add to timeline</button>
+          <button class="btn">Update status ▾</button>
+          <button class="btn btn-primary">Generate postmortem</button>
+        </div>
+      </div>
+
+      <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="kpi">
+          <div class="kpi-label">Servicios afectados</div>
+          <div class="kpi-value" style="font-size:14px; line-height:1.4; padding-top:4px;">
+            <span class="chip">auth-service</span>
+            <span class="chip">api-gateway</span>
+          </div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Severidad (auto)</div>
+          <div class="kpi-value">SEV1</div>
+          <div class="kpi-trend muted">regla: error_rate &gt; 5%</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Duración</div>
+          <div class="kpi-value">4m 12s</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Escalation</div>
+          <div class="kpi-value" style="font-size:14px; line-height:1.4; padding-top:4px;">
+            L1 ✓ → L2 (en 5m si no resuelve) → Manager
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Timeline en vivo</span>
+              <span class="card-action">Auto-actualizado · 6 eventos</span>
+            </div>
+            <ul class="timeline">
+              <li class="event-status">
+                <div class="event-meta">14:12:08 · status_change</div>
+                <div class="event-text"><span class="event-author">Sebastián A.</span> reconoció el incidente y lo movió a <strong>Investigating</strong>.</div>
+              </li>
+              <li class="event-observation">
+                <div class="event-meta">14:13:21 · observation</div>
+                <div class="event-text"><span class="event-author">Sebastián A.</span>: "Veo spike de latencia coincide con el deploy de auth-service v2.14.0 a las 14:08."</div>
+              </li>
+              <li class="event-action">
+                <div class="event-meta">14:14:55 · action</div>
+                <div class="event-text"><span class="event-author">Sebastián A.</span> inició rollback de auth-service a v2.13.4.</div>
+              </li>
+              <li class="event-comm">
+                <div class="event-meta">14:15:02 · comm_sent</div>
+                <div class="event-text">Status page actualizada: Auth Service → <strong>Degraded</strong>.</div>
+              </li>
+              <li class="event-observation">
+                <div class="event-meta">14:16:40 · observation</div>
+                <div class="event-text"><span class="event-author">Camila R.</span>: "p99 bajando: 8.2s → 5.1s en últimos 90s."</div>
+              </li>
+              <li class="event-action">
+                <div class="event-meta">14:18:10 · action</div>
+                <div class="event-text">[adjunto: <span class="chip">grafana-p99-latency.png</span>] capturado por Sebastián A.</div>
+              </li>
+            </ul>
+            <hr style="border:none; border-top:1px solid #eaeaea; margin:16px 0;">
+            <label>Agregar evento al timeline</label>
+            <div style="display:grid; grid-template-columns: 140px 1fr auto; gap:8px;">
+              <select>
+                <option>action</option>
+                <option>observation</option>
+                <option>comm_sent</option>
+              </select>
+              <input type="text" placeholder="Describí qué hiciste o qué viste…">
+              <button class="btn btn-primary">Publicar</button>
+            </div>
+          </div>
+        </div>
+
+        <aside>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Servicios y owners</span></div>
+            <div style="font-size:13px;">
+              <p><strong>auth-service</strong><br><span class="muted">team-platform · runbook ↗</span></p>
+              <p style="margin-top:10px;"><strong>api-gateway</strong><br><span class="muted">team-platform · runbook ↗</span></p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">War room</span></div>
+            <div style="font-size:13px;">
+              <p>📣 <strong>#inc-2026-05-104</strong></p>
+              <p class="muted">Slack · 4 participantes</p>
+              <button class="btn" style="margin-top:8px;">Abrir en Slack →</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Adjuntos (1)</span></div>
+            <div style="font-size:13px;">
+              <p><span class="chip">grafana-p99-latency.png</span> <span class="muted">· 142 KB · 14:18</span></p>
+              <button class="btn" style="margin-top:8px;">+ Adjuntar archivo</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="mockup-caption">
+  <strong>Cubre:</strong> US-02 (timeline en vivo con tipos de evento), US-08 (adjuntos de evidencia).
+  <strong>Notas de diseño:</strong> el composer del timeline está siempre visible al final de la lista; el sidebar derecho ofrece contexto (servicios, war room, adjuntos) sin sacar al on-call del flujo central; el escalation timer queda visible en el KPI superior derecho.
+</div>
+</body>
+</html>

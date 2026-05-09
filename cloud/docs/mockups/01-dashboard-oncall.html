@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mockup 01 · Dashboard del on-call</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="wireframe-banner">Wireframe low-fi · Mockup 01 · Dashboard del on-call</div>
+
+  <header class="app-header">
+    <div>
+      <span class="brand">Acme · Incidents</span>
+      <span class="breadcrumb">  /  Dashboard</span>
+    </div>
+    <div class="user-chip">
+      <span class="avatar">SA</span>
+      <span>Sebastián A. · <strong>On-call</strong></span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="app-sidebar">
+      <ul>
+        <li class="active">Dashboard</li>
+        <li>Incidents</li>
+        <li>Services</li>
+        <li>On-call schedule</li>
+        <li>Postmortems</li>
+        <li>Settings</li>
+      </ul>
+    </nav>
+
+    <main class="app-main">
+      <div class="toolbar">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Estás <strong>on-call</strong> hasta el dom 17 may · 17:00</p>
+        </div>
+        <div class="btn-group">
+          <button class="btn">Tomar receso</button>
+          <button class="btn btn-primary">+ Declarar incidente</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <span class="muted" style="font-size:12px;">Rotación activa para:</span>
+        <span class="tag-list" style="margin-left:8px;">
+          <span class="chip">api-gateway</span>
+          <span class="chip">auth-service</span>
+          <span class="chip">billing-api</span>
+        </span>
+      </div>
+
+      <div class="card" style="border-left: 4px solid #b00020;">
+        <div class="card-header">
+          <span class="card-title">⚠ Pendiente de reconocer (1)</span>
+          <span class="card-action muted">Escalation timer: 3:42 restantes</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Sev</th><th>Servicio</th><th>Título</th><th>Edad</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>INC-2026-05-104</strong></td>
+              <td><span class="badge badge-sev1">SEV1</span></td>
+              <td>auth-service</td>
+              <td>Login latency p99 &gt; 8s</td>
+              <td>1m 18s</td>
+              <td><span class="badge badge-state-investigating">Investigating</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary">Acknowledge</button>
+          <button class="btn">Reasignar</button>
+          <button class="btn">Ver detalle →</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Incidentes activos asignados a vos (3)</span>
+          <span class="card-action">Filtrar ▾</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Sev</th><th>Servicio</th><th>Título</th><th>Edad</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>INC-2026-05-103</td>
+              <td><span class="badge badge-sev2">SEV2</span></td>
+              <td>billing-api</td>
+              <td>Webhook retries spike</td>
+              <td>14m</td>
+              <td><span class="badge badge-state-identified">Identified</span></td>
+            </tr>
+            <tr>
+              <td>INC-2026-05-099</td>
+              <td><span class="badge badge-sev3">SEV3</span></td>
+              <td>api-gateway</td>
+              <td>Rate limit warnings tenant X</td>
+              <td>2h 11m</td>
+              <td><span class="badge badge-state-monitoring">Monitoring</span></td>
+            </tr>
+            <tr>
+              <td>INC-2026-05-095</td>
+              <td><span class="badge badge-sev4">SEV4</span></td>
+              <td>auth-service</td>
+              <td>Logs verbosos en login flow</td>
+              <td>5h 02m</td>
+              <td><span class="badge badge-state-monitoring">Monitoring</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Actividad reciente del equipo</span>
+          <span class="card-action">Últimos 60 min</span>
+        </div>
+        <ul class="timeline">
+          <li class="event-status">
+            <div class="event-meta">14:08 · status_change</div>
+            <div class="event-text"><span class="event-author">Camila R.</span> cambió INC-103 a <strong>Identified</strong>: "DB de billing rechaza conexiones por max_connections."</div>
+          </li>
+          <li class="event-action">
+            <div class="event-meta">14:02 · action</div>
+            <div class="event-text"><span class="event-author">Camila R.</span> aumentó max_connections de 50 → 200 en billing-db.</div>
+          </li>
+          <li class="event-comm">
+            <div class="event-meta">13:55 · comm_sent</div>
+            <div class="event-text">Status page actualizada: Billing API → Degraded.</div>
+          </li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="mockup-caption">
+  <strong>Cubre:</strong> US-01 (notificación al on-call con visibilidad inmediata), US-03 (visibilidad del escalation timer activo).
+  <strong>Notas de diseño:</strong> el panel rojo de "Pendiente de reconocer" siempre flota arriba para minimizar MTTA; el botón "Declarar incidente" está siempre accesible.
+</div>
+</body>
+</html>

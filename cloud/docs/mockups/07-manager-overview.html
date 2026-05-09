@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mockup 07 · Vista del Engineering Manager</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="wireframe-banner">Wireframe low-fi · Mockup 07 · Engineering Manager overview</div>
+
+  <header class="app-header">
+    <div>
+      <span class="brand">Acme · Incidents</span>
+      <span class="breadcrumb">  /  Manager view</span>
+    </div>
+    <div class="user-chip">
+      <span class="avatar">CR</span>
+      <span>Camila R. · <strong>Manager</strong></span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="app-sidebar">
+      <ul>
+        <li class="active">Manager view</li>
+        <li>Incidents</li>
+        <li>Services</li>
+        <li>On-call schedule</li>
+        <li>Postmortems</li>
+        <li>Settings</li>
+      </ul>
+    </nav>
+
+    <main class="app-main">
+      <div class="toolbar">
+        <div>
+          <h1 class="page-title">Manager overview · team-platform</h1>
+          <p class="page-subtitle">Visibilidad de incidentes activos, escalamientos y salud SLA del equipo</p>
+        </div>
+        <div class="btn-group">
+          <select style="width:140px;"><option>team-platform</option><option>team-payments</option><option>todos los equipos</option></select>
+          <select style="width:140px;"><option>Últimos 7 días</option><option>Últimos 30 días</option></select>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-label">Incidentes activos (equipo)</div>
+          <div class="kpi-value">4</div>
+          <div class="kpi-trend bad">1 SEV1 · 2 SEV2 · 1 SEV3</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">En escalation L2+</div>
+          <div class="kpi-value">1</div>
+          <div class="kpi-trend bad">requiere atención</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">MTTR rolling-7d</div>
+          <div class="kpi-value">1h 06m</div>
+          <div class="kpi-trend bad">▲ alarma activa (objetivo: ≤ 60m)</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">SLA compliance (mes)</div>
+          <div class="kpi-value">94.2%</div>
+          <div class="kpi-trend bad">objetivo: ≥ 99.0%</div>
+        </div>
+      </div>
+
+      <div class="card" style="border-left: 4px solid #b00020;">
+        <div class="card-header">
+          <span class="card-title">⚠ Alarmas activas (2)</span>
+        </div>
+        <ul style="list-style:none; font-size:13px;">
+          <li style="padding:8px 0; border-bottom:1px solid #eaeaea;">
+            <strong>MTTR rolling-7d &gt; 60min</strong> en <code>auth-service</code>.
+            <span class="muted">Disparada hace 2h 14m · acción: revisar action items pendientes en postmortems recientes.</span>
+          </li>
+          <li style="padding:8px 0;">
+            <strong>SEV1 sin reconocer escaló a Manager</strong> · INC-2026-05-098.
+            <span class="muted">Disparada hace 18h.</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Incidentes activos del equipo</span>
+            </div>
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Sev</th><th>Servicio</th><th>Edad</th><th>Asignado</th><th>Escalation</th></tr>
+              </thead>
+              <tbody>
+                <tr style="background:#fde7e7;">
+                  <td><strong>INC-104</strong></td>
+                  <td><span class="badge badge-sev1">SEV1</span></td>
+                  <td>auth-service</td>
+                  <td>4m</td>
+                  <td>Sebastián A.</td>
+                  <td><span class="muted">L1 · timer 5m</span></td>
+                </tr>
+                <tr>
+                  <td>INC-103</td>
+                  <td><span class="badge badge-sev2">SEV2</span></td>
+                  <td>billing-api</td>
+                  <td>14m</td>
+                  <td>Camila R.</td>
+                  <td><span class="muted">L1</span></td>
+                </tr>
+                <tr style="background:#fff3e0;">
+                  <td>INC-098</td>
+                  <td><span class="badge badge-sev1">SEV1</span></td>
+                  <td>auth-service</td>
+                  <td>18h 04m</td>
+                  <td>Federico L.</td>
+                  <td><strong>L3 (Manager)</strong></td>
+                </tr>
+                <tr>
+                  <td>INC-099</td>
+                  <td><span class="badge badge-sev3">SEV3</span></td>
+                  <td>api-gateway</td>
+                  <td>2h 11m</td>
+                  <td>Sebastián A.</td>
+                  <td><span class="muted">L1</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Servicios con más incidentes (mes)</span>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Servicio</th><th># inc.</th><th>SEV1+2</th><th>MTTR</th><th>SLO</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>auth-service</strong></td><td>9</td><td>5</td><td>1h 12m</td><td><span style="color:#b00020;">89.1%</span></td></tr>
+                <tr><td><strong>billing-api</strong></td><td>6</td><td>2</td><td>38m</td><td>96.4%</td></tr>
+                <tr><td><strong>api-gateway</strong></td><td>5</td><td>1</td><td>22m</td><td>98.7%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside>
+          <div class="card">
+            <div class="card-header"><span class="card-title">On-call ahora · team-platform</span></div>
+            <div style="font-size:13px;">
+              <p><span class="chip" style="margin-right:6px;">Primario</span> <strong>Sebastián A.</strong><br><span class="muted">hasta dom 17 may 17:00</span></p>
+              <p style="margin-top:10px;"><span class="chip">Backup</span> <strong>Federico L.</strong><br><span class="muted">L2 escalation</span></p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Postmortems pendientes (3)</span></div>
+            <ul style="list-style:none; font-size:13px;">
+              <li style="padding:6px 0; border-bottom:1px solid #eaeaea;">INC-098 · auth-service <span class="muted" style="font-size:11px;">draft 18h</span></li>
+              <li style="padding:6px 0; border-bottom:1px solid #eaeaea;">INC-091 · billing-api <span class="muted" style="font-size:11px;">draft 4d</span></li>
+              <li style="padding:6px 0;">INC-087 · auth-service <span class="muted" style="font-size:11px;">draft 7d ⚠</span></li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Acción recomendada</span></div>
+            <p style="font-size:13px;">El MTTR de <strong>auth-service</strong> está sobre objetivo 3 semanas seguidas. Sugerencia: revisar los action items abiertos de los postmortems recientes.</p>
+            <button class="btn" style="margin-top:8px;">Ver action items abiertos →</button>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="mockup-caption">
+  <strong>Cubre:</strong> US-06 (visibilidad de métricas para manager) y la parte de US-03 que el manager necesita ver (escalamientos activos a su nivel).
+  <strong>Notas de diseño:</strong> alarmas y filas de incidentes en escalation L2+ resaltadas con color de severidad. Los postmortems pendientes con &gt;7 días tienen flag visible — incentivo a cerrar el ciclo.
+</div>
+</body>
+</html>

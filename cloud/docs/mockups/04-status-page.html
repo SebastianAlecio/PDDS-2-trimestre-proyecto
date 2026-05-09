@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mockup 04 · Status page pública</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="wireframe-banner">Wireframe low-fi · Mockup 04 · Status page pública (vista del cliente)</div>
+
+  <div class="public-page">
+    <div class="public-header">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <strong style="font-size:20px;">Acme</strong>
+          <span class="muted" style="font-size:13px; margin-left:8px;">· Status</span>
+        </div>
+        <div style="font-size:12px;" class="muted">
+          Última actualización: hace 38 segundos · <a href="#" style="color:#555;">Suscribirse a updates</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="public-banner">
+      <strong>Algunos servicios están operando en modo degradado.</strong>
+      Estamos investigando latencia elevada en autenticación. ETA inicial: 30 minutos.
+      <span style="font-size:12px; opacity:0.7;">  · INC-2026-05-104 · 14:08 UTC-3</span>
+    </div>
+
+    <div class="public-content">
+      <h2 style="font-size:16px; margin-bottom:12px;">Estado actual de los servicios</h2>
+
+      <div class="components-list">
+        <div class="component-row">
+          <span class="component-name">Web app</span>
+          <span class="badge badge-state-operational">Operational</span>
+        </div>
+        <div class="component-row">
+          <span class="component-name">API · Authentication</span>
+          <span class="badge badge-state-degraded">Degraded performance</span>
+        </div>
+        <div class="component-row">
+          <span class="component-name">API · Core</span>
+          <span class="badge badge-state-operational">Operational</span>
+        </div>
+        <div class="component-row">
+          <span class="component-name">API · Billing</span>
+          <span class="badge badge-state-operational">Operational</span>
+        </div>
+        <div class="component-row">
+          <span class="component-name">Background jobs</span>
+          <span class="badge badge-state-operational">Operational</span>
+        </div>
+        <div class="component-row">
+          <span class="component-name">File uploads (S3)</span>
+          <span class="badge badge-state-operational">Operational</span>
+        </div>
+      </div>
+
+      <h2 style="font-size:16px; margin: 32px 0 12px;">Incidente activo</h2>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:start;">
+          <div>
+            <strong>Login latency elevada</strong><br>
+            <span class="muted" style="font-size:12px;">Iniciado: 9 may 2026, 14:08 UTC-3</span>
+          </div>
+          <span class="badge badge-state-investigating">Investigating</span>
+        </div>
+        <ul class="timeline" style="margin-top:16px;">
+          <li class="event-status">
+            <div class="event-meta">14:15 · Update</div>
+            <div class="event-text">Iniciamos rollback al deploy anterior. Esperamos recuperación en ~10 minutos.</div>
+          </li>
+          <li class="event-status">
+            <div class="event-meta">14:08 · Detected</div>
+            <div class="event-text">Detectamos latencia p99 elevada en login. Estamos investigando.</div>
+          </li>
+        </ul>
+      </div>
+
+      <h2 style="font-size:16px; margin: 32px 0 12px;">Historial reciente (últimos 7 días)</h2>
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Componente</th><th>Resumen</th><th>Duración</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>5 may</td><td>API · Billing</td><td>Webhook retries spike</td><td>1h 12m</td></tr>
+          <tr><td>3 may</td><td>Background jobs</td><td>Backlog en cola de notificaciones</td><td>22m</td></tr>
+          <tr><td>2 may</td><td>—</td><td>Sin incidentes</td><td>—</td></tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:32px; padding-top:16px; border-top:1px solid #eaeaea; font-size:12px;" class="muted">
+        Esta página se sincroniza automáticamente con nuestro sistema interno de incidentes.
+        Para soporte específico de tu cuenta, contactá <a href="#" style="color:#555;">support@acme.example</a>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-caption">
+  <strong>Cubre:</strong> US-04 (status page pública auto-actualizada).
+  <strong>Notas de diseño:</strong> banner sticky con incidente activo arriba; lista de componentes con estados claros; updates del incidente en formato timeline para mostrar progreso. Sin nav de la app — esta vista es para clientes externos no autenticados.
+</div>
+</body>
+</html>

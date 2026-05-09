@@ -1,0 +1,356 @@
+/* Estilo wireframe low-fi compartido por todos los mockups.
+   Intencionalmente sobrio: grises + bordes punteados/sólidos + sans-serif del sistema.
+   No representa el diseño visual final — comunica estructura y flujo. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #2a2a2a;
+  background: #f4f4f4;
+  padding: 24px;
+}
+
+.canvas {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #fdfdfd;
+  border: 1px solid #c0c0c0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.wireframe-banner {
+  background: #fffbe6;
+  border-bottom: 1px dashed #d0a000;
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #806000;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Header de aplicación */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #f0f0f0;
+  border-bottom: 1px solid #c0c0c0;
+}
+.app-header .brand {
+  font-weight: 600;
+  font-size: 15px;
+}
+.app-header .breadcrumb {
+  color: #666;
+  font-size: 13px;
+}
+.app-header .user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid #c0c0c0;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 12px;
+}
+.app-header .user-chip .avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #d0d0d0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #555;
+}
+
+/* Layout de aplicación: sidebar + main */
+.app-body {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 600px;
+}
+
+.app-sidebar {
+  background: #fafafa;
+  border-right: 1px solid #c0c0c0;
+  padding: 16px 0;
+}
+.app-sidebar ul {
+  list-style: none;
+}
+.app-sidebar li {
+  padding: 8px 20px;
+  font-size: 13px;
+  color: #444;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.app-sidebar li.active {
+  background: #eaeaea;
+  border-left-color: #555;
+  font-weight: 600;
+}
+
+.app-main {
+  padding: 24px 32px;
+  background: #fdfdfd;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.page-subtitle {
+  color: #777;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+/* Botones (estilo wireframe — sin colores ricos) */
+.btn {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 1px solid #888;
+  background: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.btn:hover { background: #f0f0f0; }
+.btn-primary {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #2a2a2a;
+}
+.btn-danger {
+  border-color: #b00020;
+  color: #b00020;
+}
+.btn-group { display: inline-flex; gap: 8px; }
+
+/* Tarjetas */
+.card {
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.card-action {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Badges de severidad y estado */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border: 1px solid;
+}
+.badge-sev1 { background: #fde7e7; border-color: #b00020; color: #800010; }
+.badge-sev2 { background: #fff3e0; border-color: #c47a00; color: #6a4100; }
+.badge-sev3 { background: #fff9c4; border-color: #888500; color: #555000; }
+.badge-sev4 { background: #f1f1f1; border-color: #888; color: #444; }
+.badge-state-investigating { background: #fde7e7; border-color: #b00020; color: #800010; }
+.badge-state-identified    { background: #fff3e0; border-color: #c47a00; color: #6a4100; }
+.badge-state-monitoring    { background: #e3f2fd; border-color: #1565c0; color: #0d3d75; }
+.badge-state-resolved      { background: #e8f5e9; border-color: #2e7d32; color: #1b5320; }
+.badge-state-operational   { background: #e8f5e9; border-color: #2e7d32; color: #1b5320; }
+.badge-state-degraded      { background: #fff3e0; border-color: #c47a00; color: #6a4100; }
+.badge-state-outage        { background: #fde7e7; border-color: #b00020; color: #800010; }
+
+/* Listas tipo tabla */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eaeaea;
+  font-size: 13px;
+}
+th {
+  background: #f6f6f6;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 11px;
+}
+tr:hover td { background: #fafafa; }
+
+/* Forms */
+.form-row { margin-bottom: 16px; }
+label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+input[type="text"], textarea, select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #c0c0c0;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 3px;
+}
+textarea { min-height: 100px; resize: vertical; }
+.radio-group { display: flex; gap: 16px; }
+.radio-group label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 13px; color: #2a2a2a; }
+.help-text { font-size: 12px; color: #888; margin-top: 4px; }
+
+/* Timeline */
+.timeline { list-style: none; padding-left: 0; }
+.timeline li {
+  position: relative;
+  padding: 12px 0 12px 20px;
+  border-left: 2px solid #d0d0d0;
+  margin-left: 8px;
+}
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #888;
+}
+.timeline li.event-action::before    { background: #2a2a2a; border-color: #2a2a2a; }
+.timeline li.event-observation::before { background: #fff;   border-color: #1565c0; }
+.timeline li.event-status::before    { background: #c47a00; border-color: #c47a00; }
+.timeline li.event-comm::before      { background: #2e7d32; border-color: #2e7d32; }
+.timeline .event-meta {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.timeline .event-text { font-size: 14px; color: #2a2a2a; }
+.timeline .event-author { font-weight: 600; color: #444; }
+
+/* KPI cards */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.kpi {
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 14px;
+}
+.kpi-label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: 0.3px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: #2a2a2a; margin-top: 4px; }
+.kpi-trend { font-size: 11px; color: #2e7d32; margin-top: 4px; }
+.kpi-trend.bad { color: #b00020; }
+
+/* Layout dos columnas */
+.two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+
+/* Status page (público) */
+.public-page { padding: 0; background: #fff; }
+.public-header {
+  padding: 24px 32px;
+  border-bottom: 1px solid #d0d0d0;
+}
+.public-banner {
+  padding: 14px 32px;
+  background: #fff3e0;
+  border-bottom: 1px solid #c47a00;
+  color: #6a4100;
+  font-weight: 600;
+}
+.public-banner.outage { background: #fde7e7; border-color: #b00020; color: #800010; }
+.public-content { padding: 32px; }
+
+/* Components grid (status page) */
+.components-list { border: 1px solid #d0d0d0; border-radius: 4px; }
+.component-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eaeaea;
+}
+.component-row:last-child { border-bottom: none; }
+.component-name { font-weight: 600; }
+
+/* Postmortem doc */
+.doc {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px;
+  background: #fff;
+}
+.doc h2 { font-size: 18px; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #d0d0d0; }
+.doc h3 { font-size: 15px; margin: 16px 0 6px; color: #555; }
+.doc p { margin-bottom: 10px; }
+.doc .draft-banner {
+  background: #fffbe6;
+  border: 1px dashed #d0a000;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #806000;
+  margin-bottom: 24px;
+}
+
+/* Caption / nota debajo del mockup */
+.mockup-caption {
+  max-width: 1200px;
+  margin: 16px auto 0;
+  padding: 12px 16px;
+  background: #f0f0f0;
+  border-left: 3px solid #888;
+  font-size: 12px;
+  color: #555;
+}
+
+.muted { color: #888; }
+.tag-list { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid #c0c0c0;
+  background: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #555;
+}
