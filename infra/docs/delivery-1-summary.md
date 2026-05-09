@@ -122,3 +122,34 @@ El wrapper default de `setup-terraform` inyecta códigos ANSI y mezcla stdout/st
 
 **(c) `.terraform.lock.hcl` versionado; todos los `*.tfvars` ignorados salvo `dev.tfvars`.**
 Pinear las versiones de los providers es un requisito de determinismo — sin el lock file, `terraform init` resuelve la versión más fresca que matchee el constraint y CI puede diverger del entorno local. El patrón de los `*.tfvars` es el trade-off inverso: los tfvars muchas veces transportan secretos, así que el default seguro es ignorarlos, con `dev.tfvars` whitelisted explícitamente porque tanto el grader como el CI lo necesitan. Los tfvars de producción (cuando existan) se whitelistean por nombre también; los tfvars locales ad-hoc quedan fuera del repo.
+
+## 6. Evidencia de ejecución del CI
+
+[![Terraform CI](https://github.com/dacaslles/PDDS-2-trimestre-proyecto/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/dacaslles/PDDS-2-trimestre-proyecto/actions/workflows/terraform-ci.yml)
+
+El pipeline descrito en la sección 3 fue validado end-to-end mediante un smoke test del workspace antes del corte de Delivery 1. La corrida concluyó en verde sobre el commit etiquetado como `oyd-delivery-1`.
+
+| Item | Detalle |
+|------|---------|
+| Workflow run | [#25609174941](https://github.com/dacaslles/PDDS-2-trimestre-proyecto/actions/runs/25609174941) — `success` en 18 s |
+| Pull request | [#1](https://github.com/dacaslles/PDDS-2-trimestre-proyecto/pull/1) — `delivery-1-bootstrap` → `main`; incluye el comentario automático con el plan colapsable |
+| Commit auditado | `850fded` (apuntado por el tag `oyd-delivery-1`) |
+| Branch del PR | `delivery-1-bootstrap` |
+| Trigger | `pull_request` contra `main` |
+
+Resultado por step del job `Terraform fmt / init / validate / plan`:
+
+| # | Step | Resultado |
+|---|------|:---------:|
+| 1 | `actions/checkout@v4` | ✅ |
+| 2 | `hashicorp/setup-terraform@v3` (Terraform `~> 1.8`, `terraform_wrapper: false`) | ✅ |
+| 3 | `aws-actions/configure-aws-credentials@v4` (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION desde GitHub Actions secrets) | ✅ |
+| 4 | `terraform fmt -check -recursive` | ✅ |
+| 5 | `terraform init -backend=false` | ✅ |
+| 6 | `terraform validate` | ✅ |
+| 7 | `terraform plan -var-file=envs/dev/dev.tfvars -no-color -input=false 2>&1 \| tee plan.txt` | ✅ |
+| 8 | `actions/github-script@v7` — postea `plan.txt` como comentario colapsable en el PR | ✅ |
+
+Del plan se desprenden los **5 recursos a crear** (bucket S3 + versioning + SSE + public-access-block + random_id), consistente con el excerpt de la sección 2 y con el output completo capturado en `plan-delivery-1.txt`. El comentario automático en el PR replica ese plan dentro de un `<details>` para que cualquier reviewer pueda inspeccionarlo sin abrir los logs del Action.
+
+El badge al inicio de esta sección refleja el estado del último run del workflow `terraform-ci.yml` y se actualiza automáticamente; los enlaces al run y al PR son evidencia inmutable del run que validó esta entrega.
