@@ -2,106 +2,155 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Mockup 04 · Status page pública</title>
+<title>Acme · Status</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="canvas">
-  <div class="wireframe-banner">Wireframe low-fi · Mockup 04 · Status page pública (vista del cliente)</div>
 
-  <div class="public-page">
-    <div class="public-header">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
+<div class="public-shell">
+
+  <!-- Public header (no app sub-nav — esta vista es para clientes externos) -->
+  <header class="public-header">
+    <div class="row">
+      <div class="brand">
+        Acme<span class="sub">Status</span>
+      </div>
+      <div class="updated">
+        Última actualización: hace 38 segundos · <a class="text-link" href="#">Suscribirse a updates</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Banner del incidente activo -->
+  <section class="public-banner">
+    <div class="row">
+      <h2>Algunos servicios están operando en modo degradado.</h2>
+      <p>Estamos investigando latencia elevada en autenticación. ETA inicial: 30 minutos. <span class="muted">· INC-2026-05-104 · 14:08 UTC-3</span></p>
+    </div>
+  </section>
+
+  <!-- Body -->
+  <section class="public-page-body">
+
+    <h2 style="margin-top: 0 !important;">Estado actual de los servicios</h2>
+
+    <div class="component-list">
+      <div class="component-row">
         <div>
-          <strong style="font-size:20px;">Acme</strong>
-          <span class="muted" style="font-size:13px; margin-left:8px;">· Status</span>
+          <div class="name">Web app</div>
+          <div class="meta">marketing site, dashboard, app shell</div>
         </div>
-        <div style="font-size:12px;" class="muted">
-          Última actualización: hace 38 segundos · <a href="#" style="color:#555;">Suscribirse a updates</a>
+        <span class="tag tag-state operational"><span class="dot"></span>Operational</span>
+      </div>
+      <div class="component-row">
+        <div>
+          <div class="name">API · Authentication</div>
+          <div class="meta">login, session, oauth</div>
         </div>
+        <span class="tag tag-state degraded"><span class="dot"></span>Degraded performance</span>
+      </div>
+      <div class="component-row">
+        <div>
+          <div class="name">API · Core</div>
+          <div class="meta">application data and business logic</div>
+        </div>
+        <span class="tag tag-state operational"><span class="dot"></span>Operational</span>
+      </div>
+      <div class="component-row">
+        <div>
+          <div class="name">API · Billing</div>
+          <div class="meta">subscriptions, invoices, payment webhooks</div>
+        </div>
+        <span class="tag tag-state operational"><span class="dot"></span>Operational</span>
+      </div>
+      <div class="component-row">
+        <div>
+          <div class="name">Background jobs</div>
+          <div class="meta">notifications, exports, scheduled tasks</div>
+        </div>
+        <span class="tag tag-state operational"><span class="dot"></span>Operational</span>
+      </div>
+      <div class="component-row">
+        <div>
+          <div class="name">File uploads (S3)</div>
+          <div class="meta">customer file storage</div>
+        </div>
+        <span class="tag tag-state operational"><span class="dot"></span>Operational</span>
       </div>
     </div>
 
-    <div class="public-banner">
-      <strong>Algunos servicios están operando en modo degradado.</strong>
-      Estamos investigando latencia elevada en autenticación. ETA inicial: 30 minutos.
-      <span style="font-size:12px; opacity:0.7;">  · INC-2026-05-104 · 14:08 UTC-3</span>
-    </div>
+    <h2>Incidente activo</h2>
 
-    <div class="public-content">
-      <h2 style="font-size:16px; margin-bottom:12px;">Estado actual de los servicios</h2>
-
-      <div class="components-list">
-        <div class="component-row">
-          <span class="component-name">Web app</span>
-          <span class="badge badge-state-operational">Operational</span>
+    <article class="card" style="padding: 32px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: -0.014em; color: var(--ink); margin-bottom: 4px;">Login latency elevada</h3>
+          <p class="muted" style="font-size: 14px;">Iniciado: 9 may 2026 · 14:08 UTC-3 · Servicios afectados: Authentication API</p>
         </div>
-        <div class="component-row">
-          <span class="component-name">API · Authentication</span>
-          <span class="badge badge-state-degraded">Degraded performance</span>
-        </div>
-        <div class="component-row">
-          <span class="component-name">API · Core</span>
-          <span class="badge badge-state-operational">Operational</span>
-        </div>
-        <div class="component-row">
-          <span class="component-name">API · Billing</span>
-          <span class="badge badge-state-operational">Operational</span>
-        </div>
-        <div class="component-row">
-          <span class="component-name">Background jobs</span>
-          <span class="badge badge-state-operational">Operational</span>
-        </div>
-        <div class="component-row">
-          <span class="component-name">File uploads (S3)</span>
-          <span class="badge badge-state-operational">Operational</span>
-        </div>
+        <span class="tag tag-state investigating"><span class="dot"></span>Investigating</span>
       </div>
+      <ul class="activity" style="margin: 0;">
+        <li class="status">
+          <span class="ts">14:15</span>
+          <span class="kind"><span class="dot"></span>Update</span>
+          <span class="ev">Iniciamos rollback al deploy anterior. Esperamos recuperación en ~10 minutos.</span>
+        </li>
+        <li class="status" style="border-bottom: none;">
+          <span class="ts">14:08</span>
+          <span class="kind"><span class="dot"></span>Detected</span>
+          <span class="ev">Detectamos latencia p99 elevada en login. Estamos investigando.</span>
+        </li>
+      </ul>
+    </article>
 
-      <h2 style="font-size:16px; margin: 32px 0 12px;">Incidente activo</h2>
-      <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:start;">
-          <div>
-            <strong>Login latency elevada</strong><br>
-            <span class="muted" style="font-size:12px;">Iniciado: 9 may 2026, 14:08 UTC-3</span>
-          </div>
-          <span class="badge badge-state-investigating">Investigating</span>
-        </div>
-        <ul class="timeline" style="margin-top:16px;">
-          <li class="event-status">
-            <div class="event-meta">14:15 · Update</div>
-            <div class="event-text">Iniciamos rollback al deploy anterior. Esperamos recuperación en ~10 minutos.</div>
-          </li>
-          <li class="event-status">
-            <div class="event-meta">14:08 · Detected</div>
-            <div class="event-text">Detectamos latencia p99 elevada en login. Estamos investigando.</div>
-          </li>
-        </ul>
-      </div>
+    <h2>Historial reciente</h2>
 
-      <h2 style="font-size:16px; margin: 32px 0 12px;">Historial reciente (últimos 7 días)</h2>
-      <table>
+    <article class="card card-flush">
+      <table class="ledger">
         <thead>
-          <tr><th>Fecha</th><th>Componente</th><th>Resumen</th><th>Duración</th></tr>
+          <tr>
+            <th style="width: 110px;">Fecha</th>
+            <th style="width: 200px;">Componente</th>
+            <th>Resumen</th>
+            <th class="right" style="width: 110px;">Duración</th>
+          </tr>
         </thead>
         <tbody>
-          <tr><td>5 may</td><td>API · Billing</td><td>Webhook retries spike</td><td>1h 12m</td></tr>
-          <tr><td>3 may</td><td>Background jobs</td><td>Backlog en cola de notificaciones</td><td>22m</td></tr>
-          <tr><td>2 may</td><td>—</td><td>Sin incidentes</td><td>—</td></tr>
+          <tr>
+            <td class="muted">5 may 2026</td>
+            <td class="title">API · Billing</td>
+            <td>Webhook retries spike — se recuperó tras subir <code style="font-family: ui-monospace, monospace; font-size: 13px; background: var(--parchment); padding: 1px 6px; border-radius: 5px;">max_connections</code> en BD.</td>
+            <td class="right">1h 12m</td>
+          </tr>
+          <tr>
+            <td class="muted">3 may 2026</td>
+            <td class="title">Background jobs</td>
+            <td>Backlog en cola de notificaciones — sin impacto a clientes finales.</td>
+            <td class="right">22m</td>
+          </tr>
+          <tr>
+            <td class="muted">2 may 2026</td>
+            <td class="title">—</td>
+            <td><span class="muted">Sin incidentes reportados.</span></td>
+            <td class="right muted">—</td>
+          </tr>
         </tbody>
       </table>
+    </article>
 
-      <div style="margin-top:32px; padding-top:16px; border-top:1px solid #eaeaea; font-size:12px;" class="muted">
-        Esta página se sincroniza automáticamente con nuestro sistema interno de incidentes.
-        Para soporte específico de tu cuenta, contactá <a href="#" style="color:#555;">support@acme.example</a>.
-      </div>
-    </div>
-  </div>
+    <p style="margin-top: 56px; font-size: 14px; color: var(--ink-muted-48); text-align: center; border-top: 1px solid var(--hairline); padding-top: 32px;">
+      Esta página se sincroniza automáticamente con nuestro sistema interno de incidentes.
+      Para soporte específico de tu cuenta, contactá <a class="text-link" href="#">support@acme.example</a>.
+    </p>
+
+  </section>
+
 </div>
 
-<div class="mockup-caption">
+<aside class="mockup-caption" style="max-width: 1240px; margin: 24px auto 0;">
   <strong>Cubre:</strong> US-04 (status page pública auto-actualizada).
-  <strong>Notas de diseño:</strong> banner sticky con incidente activo arriba; lista de componentes con estados claros; updates del incidente en formato timeline para mostrar progreso. Sin nav de la app — esta vista es para clientes externos no autenticados.
-</div>
+  <strong>Notas de diseño:</strong> esta vista no usa la sub-nav del producto — es la cara pública para clientes externos sin login. Header simple <em>Acme · Status</em>, banner sutil arriba con el estado actual (border-left ámbar para degraded, rojo para outage), lista de componentes con dot semántico de estado, incidente activo con timeline de updates, y debajo el historial. Todo respira a 980px de ancho central, mucho más editorial que la app interna.
+</aside>
+
 </body>
 </html>

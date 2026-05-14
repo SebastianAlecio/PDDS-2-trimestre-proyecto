@@ -1,35 +1,64 @@
-# Proyecto · Sistema de Gestión de Incidentes de Producción
+# Sistema de Gestión de Incidentes de Producción
 
-> **Curso:** Infraestructura en la Nube · Postgrado en Diseño y Desarrollo de Software · Galileo · ciclo Mayo–Junio 2026
-> **Equipo:** Sebastián Alecio · *(integrante 2)* · *(integrante 3)*
-> **Documento iterativo:** este archivo crece de E1 a E5. Cada entrega agrega una capa de diseño sobre la anterior — no se reescribe.
-
----
-
-## Resumen de cambios desde la entrega anterior
-
-*Primera versión del documento (E1). En entregas siguientes esta sección listará qué cambió respecto a la versión previa.*
+> **Curso:** Infraestructura en la Nube · Postgrado en Diseño y Desarrollo de Software · Universidad Galileo · ciclo Mayo–Junio 2026
+> **Entrega:** 1 — Pitch, scope y mockups · dom 17 may 2026
+> **Equipo:** Alessandro Alecio · David Garcia · Joaquin Marroquin
 
 ---
 
-## 1. Resumen ejecutivo (E1)
+## 1. Resumen ejecutivo
 
-Diseñamos un **sistema de gestión de incidentes de producción** que permite a equipos de ingeniería detectar, coordinar la respuesta y aprender de fallas que afectan a sus servicios en producción. El sistema reemplaza la combinación informal de *Slack + Google Doc + planilla* que muchos equipos usan hoy, centralizando en una sola plataforma: la creación del incidente (manual o vía webhook desde un sistema de monitoreo), el *paging* del *on-call*, el *timeline* en vivo de acciones tomadas, el escalamiento automático cuando un incidente queda sin respuesta, la *status page* pública para clientes, y el *postmortem* generado automáticamente a partir del *timeline*.
+### El problema
 
-**A quién sirve.** A equipos de SRE/DevOps de empresas SaaS B2B medianas (50–500 ingenieros) que operan servicios críticos 24×7 y tienen compromisos de SLA con sus clientes. El usuario primario es el **ingeniero on-call**: quien recibe la primera alerta y dispara la respuesta. Los usuarios secundarios son el *engineering manager* (que necesita visibilidad de SLA y MTTR) y el cliente final (que consulta la *status page*).
+Imaginá un servicio de software en producción — Netflix, un banco digital, una app de delivery. A las 3 AM una pieza crítica se rompe: el sistema de pagos deja de procesar. ¿Qué pasa hoy en la mayoría de las empresas? Caos coordinado por chat. Alguien ve el error en un dashboard, escribe en un grupo de Slack, otra persona abre un Google Doc para anotar acciones, una hoja de cálculo para llevar el tracking. El cliente se entera por Twitter antes de que la empresa publique nada oficial. Al día siguiente nadie recuerda con precisión qué se hizo, en qué orden, ni por qué.
 
-**Qué evita / automatiza.** Evita que un incidente *quede colgado* porque el *on-call* no se enteró (escalamiento automático con timer). Evita la pérdida de información post-incidente (timeline persistente y *postmortem* auto-generado). Evita que el cliente sepa del problema por Twitter y no por nosotros (status page automática). Automatiza la asignación inicial al *on-call* del servicio afectado.
+### La solución
+
+Una plataforma única que **centraliza todo el ciclo de vida del incidente** — desde la detección hasta el informe final — y automatiza las partes que hoy dependen de que alguien se acuerde de hacerlas. Cuando un incidente arranca (manual o automáticamente desde un sistema de monitoreo), el sistema:
+
+1. **Clasifica la severidad** (SEV1 crítico → SEV4 menor; detalle en §3) y arranca el flujo correspondiente.
+2. **Notifica a quien le toca** — la persona del equipo que está "de guardia" esa semana para ese servicio.
+3. **Registra todo en vivo** — cada acción, observación o cambio de estado queda en una línea de tiempo persistente.
+4. **Escala automáticamente** si nadie responde en X minutos, sin que alguien se acuerde de hacerlo a mano.
+5. **Informa al cliente** vía una página pública de estado (*status page*) que se actualiza sola.
+6. **Genera el informe post-incidente** (*postmortem*) a partir de la línea de tiempo, listo para que el equipo lo complete con análisis humano.
+
+### A quién sirve
+
+A equipos de ingeniería que operan servicios en producción 24×7 con compromisos contractuales sobre disponibilidad — empresas SaaS medianas (50–500 ingenieros) donde la caída de un servicio se mide en plata perdida por minuto. El usuario primario es el **ingeniero de guardia** (presentado en §2). Los secundarios: el jefe del equipo (métricas y validación de postmortems) y el cliente final (consulta la página pública para saber si el problema lo afecta).
+
+### Glosario rápido
+
+Términos de la industria que aparecen a lo largo del documento. Sirve como referencia — no hace falta leerlo de corrido.
+
+| Término | Qué es |
+|---|---|
+| **SRE** | *Site Reliability Engineer.* Ingeniero responsable de que un servicio en producción esté disponible, sea rápido, y no se caiga. Rol inventado por Google; hoy estándar en empresas tech (Netflix, Spotify, Stripe, etc.). |
+| **DevOps** | Concepto más amplio que combina desarrollo y operaciones. Para este proyecto, considerá SRE y DevOps intercambiables. |
+| **On-call / de guardia** | Estar disponible para responder a incidentes en este momento, 24/7. Rota entre los integrantes del equipo (típicamente una semana al mes por persona). |
+| **Paging** | El acto de "despertar" a alguien con una notificación urgente que rompe el silencio (push de Slack, llamada, SMS). |
+| **War room** | Canal de Slack que el sistema crea para coordinar la respuesta a un incidente específico. Se archiva cuando el incidente cierra. |
+| **Timeline** | Línea de tiempo del incidente — secuencia ordenada de eventos. Es el material crudo con el que se arma el postmortem. |
+| **Postmortem** | Informe escrito después de resolver un incidente. Documenta qué pasó, la causa raíz, qué se hizo bien, qué se hizo mal, y qué *action items* quedan para que no vuelva a pasar. |
+| **Escalation** | Pasar el incidente al siguiente nivel de la cadena (de guardia → respaldo → manager → VP) cuando el nivel actual no responde a tiempo. |
+| **MTTA** | *Mean Time To Acknowledge.* Tiempo promedio desde que un incidente arranca hasta que alguien reconoce que está trabajando en él. |
+| **MTTR** | *Mean Time To Resolve.* Tiempo promedio para resolver el incidente desde que arranca. |
+| **SLA / SLO** | *Service Level Agreement* (compromiso contractual con el cliente sobre disponibilidad) y *Service Level Objective* (objetivo interno del equipo, suele ser más estricto que el SLA). |
+| **Status page** | Página pública donde el cliente consulta el estado del servicio en tiempo real. Ejemplos: `status.notion.so`, `status.github.com`, `status.stripe.com`. |
+| **Webhook** | Endpoint HTTP que un sistema externo llama para notificar un evento. Ej.: Datadog llama a nuestro webhook cuando dispara una alerta. |
+| **SEV1 / SEV2 / SEV3 / SEV4** | Niveles de severidad del incidente. Detalle en §3. |
 
 ---
 
-## 2. Actores (E1)
+## 2. Actores
 
 ### Humanos
-- **SRE on-call** *(actor primario)* — recibe la notificación, reconoce, investiga, documenta acciones, resuelve.
-- **SRE escalation / segundo nivel** — recibe escalamiento automático cuando el primer nivel no reconoce o la severidad lo amerita.
-- **Engineering Manager** — supervisa incidentes activos del equipo, revisa métricas de SLA y MTTR, valida postmortems.
-- **Engineer (no-on-call)** — colabora en el incidente cuando es invitado al *war room*; consulta postmortems para aprender.
-- **Customer** — consulta la *status page* pública para saber si una caída afecta su uso del producto.
+
+- **Ingeniero de guardia** *(SRE on-call — actor primario)* — el miembro del equipo que esta semana tiene la responsabilidad de responder a alertas críticas 24/7. La guardia rota entre los integrantes (típicamente una semana al mes por persona). Durante un incidente: recibe el aviso, reconoce que está trabajando en él, investiga la causa, documenta acciones, resuelve.
+- **Ingeniero de respaldo** *(SRE escalation / segundo nivel)* — el siguiente en la cadena. Recibe el incidente automáticamente cuando vence el *timer* de escalation del de guardia (típicamente 5–10 minutos sin respuesta), o cuando la severidad lo amerita desde el inicio.
+- **Jefe del equipo de ingeniería** *(Engineering Manager)* — supervisa los incidentes activos del equipo, revisa métricas agregadas (MTTA, MTTR), valida los postmortems. Recibe los SEV1 que escalaron hasta el final de la cadena sin respuesta.
+- **Otro ingeniero del equipo** *(Engineer no-on-call)* — colabora puntualmente cuando lo invitan al *war room*. Consulta postmortems pasados como material de aprendizaje sobre incidentes en los que no participó.
+- **Cliente final** *(Customer)* — consulta la *status page* pública para saber si una caída del servicio lo afecta antes de abrir un ticket de soporte.
 
 ### Sistemas externos
 - **Sistema de monitoreo** (Datadog / Grafana / Prometheus Alertmanager) — emite *webhooks* al sistema cuando se dispara una alerta.
@@ -40,7 +69,22 @@ Diseñamos un **sistema de gestión de incidentes de producción** que permite a
 
 ---
 
-## 3. Casos de uso priorizados (E1)
+## 3. Niveles de severidad
+
+Clasificación que el sistema asigna al incidente al momento de declararlo. La severidad determina si se dispara el flujo de *paging* y escalation automático, o si el incidente entra al backlog normal del equipo. La asignación inicial es automática por reglas declarativas (§5, funcionalidad 1) y puede ser revisada por el *on-call* antes de confirmar la declaración.
+
+| Severidad | Impacto | Ejemplo | Comportamiento del sistema |
+|---|---|---|---|
+| **SEV1** | Crítico — producto inoperable o riesgo de pérdida de datos | El checkout no procesa ningún pago; la API devuelve 500 a todos los requests | Notifica al on-call por Slack + email; crea *war room*; arranca *escalation timer* (5 min) |
+| **SEV2** | Mayor — funcionalidad clave rota o degradación grave | Latencia de la API duplicada para >30% de usuarios; un servicio core falla en 5–30% de los casos | Notifica al on-call por Slack + email; crea *war room*; arranca *escalation timer* (5 min) |
+| **SEV3** | Moderado — degradación visible que no bloquea el flujo principal | La búsqueda tarda 3× lo normal; un endpoint secundario devuelve datos *stale* | Notifica al on-call por Slack; sin *war room* ni escalation automática |
+| **SEV4** | Menor — bug aislado, cosmético o de baja prioridad | Falta una imagen en un help text; warning de log irrelevante | Queda en el backlog del equipo; sin paging |
+
+US-01 y US-03 disparan únicamente para SEV1/SEV2 — es la regla que evita despertar al on-call a las 3 AM por incidentes que pueden esperar al horario hábil.
+
+---
+
+## 4. Casos de uso priorizados
 
 User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito explícito y prioridad **P0** (crítica para el MVP), **P1** (importante pero no bloqueante) o **P2** (deseable).
 
@@ -57,7 +101,7 @@ User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito expl
 
 ---
 
-## 4. Funcionalidades específicas (E1)
+## 5. Funcionalidades específicas
 
 Lo que diferencia este sistema del enunciado genérico de "tickets e incidentes":
 
@@ -72,39 +116,78 @@ Lo que diferencia este sistema del enunciado genérico de "tickets e incidentes"
 
 ---
 
-## 5. Mockups (E1)
+## 6. Mockups
 
-7 mockups *low-fi* en formato HTML estático en `cloud/docs/mockups/`. Cada uno cubre uno o más casos de uso priorizados; ver `cloud/docs/mockups/README.md` para el índice detallado.
+7 mockups *low-fi* de las pantallas principales. Los archivos `.html` están en `mockups/` (abren en cualquier navegador); las grabaciones `.webp` se embebenan a continuación.
 
-| # | Pantalla | User stories cubiertas |
-|---|---|---|
-| 01 | Dashboard del *on-call* | US-01, US-03 (vista de mis incidentes activos) |
-| 02 | Detail view del incidente con *timeline* en vivo | US-02, US-08 |
-| 03 | Crear incidente manualmente (form) | (alternativa a US-07) |
-| 04 | Status page pública | US-04 |
-| 05 | Servicios con métricas MTTR / MTTA | US-06 |
-| 06 | Postmortem auto-generado (draft editable) | US-05 |
-| 07 | Vista del Engineering Manager | US-06, US-03 (visibilidad de escalamientos) |
+### 5.1 · Dashboard del on-call
+
+<img src="mockups/recordings/01-dashboard-oncall.webp" width="100%" alt="Dashboard del on-call">
+
+Incidentes asignados, alerta pendiente con countdown de escalation, actividad del equipo en los últimos 60 minutos.
+**Cubre:** US-01, US-03.
+
+### 5.2 · Detalle del incidente con timeline en vivo
+
+<img src="mockups/recordings/02-incident-detail.webp" width="100%" alt="Detalle del incidente con timeline en vivo">
+
+Header con severity / state / case ID, timeline central en vivo, sidebar con severity rule, services, escalation ladder y war room.
+**Cubre:** US-02, US-08.
+
+### 5.3 · Declarar incidente
+
+<img src="mockups/recordings/03-create-incident.webp" width="100%" alt="Declarar incidente">
+
+Form con severidad auto-sugerida por regla, asignación automática al on-call resuelto, notificaciones configurables.
+**Cubre:** creación manual (alternativa a US-07); ejercita las funcionalidades 1 (auto-priorización) y 2 (asignación automática) de §5.
+
+### 5.4 · Status page pública
+
+<img src="mockups/recordings/04-status-page.webp" width="100%" alt="Status page pública">
+
+Vista pública sin autenticación. Banner con el estado actual, lista de componentes con estado semántico, incidente activo con timeline de updates, historial reciente.
+**Cubre:** US-04.
+
+### 5.5 · Servicios con métricas
+
+<img src="mockups/recordings/05-services-metrics.webp" width="100%" alt="Servicios con métricas">
+
+KPIs de MTTA, MTTR, SLO compliance e incidentes (30 días). Tabla de servicios con celdas resaltadas cuando MTTR/SLO está fuera de objetivo. Chart MTTR rolling-7d.
+**Cubre:** US-06.
+
+### 5.6 · Postmortem auto-generado
+
+<img src="mockups/recordings/06-postmortem.webp" width="100%" alt="Postmortem auto-generado">
+
+Documento editorial single-column. Pre-llena timeline, duración, métricas de respuesta; secciones que requieren análisis humano (causa raíz, impacto cuantitativo) quedan marcadas como *pendiente*.
+**Cubre:** US-05.
+
+### 5.7 · Vista del Engineering Manager
+
+<img src="mockups/recordings/07-manager-overview.webp" width="100%" alt="Vista del Engineering Manager">
+
+KPIs del equipo, alarmas activas como cards (ámbar = SLO breach, rojo = SEV-1 escalado a manager), tabla de incidentes con filas resaltadas en escalation L2+, postmortems pendientes con flag si >7 días.
+**Cubre:** US-06, US-03 (lado manager).
 
 ---
 
-## 6. Mapeo funcionalidad → componente del curso (E1)
+## 7. Mapeo funcionalidad → componente del curso
 
-Cómo cada funcionalidad del sistema ejercita los siete componentes que el curso evaluará en E2–E5.
+Cómo cada funcionalidad del sistema ejercita los siete componentes que el curso evaluará en las entregas siguientes.
 
 | Componente del curso | Cómo lo ejercita este proyecto |
 |---|---|
-| **Cómputo (API)** *(detalle en E2)* | Endpoints REST: `POST /incidents` (crea con auto-priorización + auto-asignación), `PATCH /incidents/{id}` (cambio de estado), `POST /incidents/{id}/timeline` (agregar evento), `POST /webhooks/monitoring` (receptor de alertas externas firmado), `GET /status` (status page pública). Workers asíncronos para escalamiento, notificaciones y generación de postmortem. |
-| **Base de datos** *(detalle en E2)* | Tablas / colecciones: `incidents`, `timeline_events`, `services`, `users`, `on_call_schedule`, `escalation_policies`, `notifications`, `postmortems`. Patrones de acceso principales: lectura por `incident_id` con timeline, query de incidentes activos por on-call, query histórico para métricas. |
-| **Almacenamiento de archivos** *(detalle en E2)* | Adjuntos del timeline (PNG/JPG de gráficos, fragmentos de log en `.txt`/`.log`), postmortems exportados a PDF, snapshots de la status page para auditoría. Separados de la BD para que el costo de storage no infle el costo de la BD. |
-| **Red** *(detalle en E3)* | Capa pública: ALB con FE web, API y receptor de webhooks. Capa privada-app: cómputo y workers. Capa privada-data: BD y caché. Status page servida desde CDN para resistir picos sin tocar el origen. |
-| **Procesamiento asíncrono** *(detalle en E4)* | Notificaciones (Slack, email) desacopladas vía cola; *escalation timers* implementados como mensajes diferidos; generación de postmortem como job pesado; publicación a status page como evento. Idempotencia en notificaciones (no duplicar pagos al on-call si la API se reintenta). |
-| **Seguridad** *(detalle en E5)* | Roles: `on_call`, `manager`, `viewer`, `customer` (público, solo status page). Autenticación de webhook por firma HMAC con secret rotable. Auditoría de quién cambió estado de qué incidente y cuándo. |
-| **Observabilidad** *(detalle en E5)* | Logs estructurados con `incident_id` como correlation ID. Métricas RED por endpoint. Métricas de negocio: MTTA, MTTR, # incidentes activos. Alarmas: si nuestro MTTR rolling-7d > 60 min, si la cola de notificaciones crece sostenidamente, si la status page no se actualiza > 5 min. |
+| **Cómputo (API)** | Endpoints REST: `POST /incidents` (crea con auto-priorización + auto-asignación), `PATCH /incidents/{id}` (cambio de estado), `POST /incidents/{id}/timeline` (agregar evento), `POST /webhooks/monitoring` (receptor de alertas externas firmado), `GET /status` (status page pública). Workers asíncronos para escalamiento, notificaciones y generación de postmortem. |
+| **Base de datos** | Tablas / colecciones: `incidents`, `timeline_events`, `services`, `users`, `on_call_schedule`, `escalation_policies`, `notifications`, `postmortems`. Patrones de acceso principales: lectura por `incident_id` con timeline, query de incidentes activos por on-call, query histórico para métricas. |
+| **Almacenamiento de archivos** | Adjuntos del timeline (PNG/JPG de gráficos, fragmentos de log en `.txt`/`.log`), postmortems exportados a PDF, snapshots de la status page para auditoría. Separados de la BD para que el costo de storage no infle el costo de la BD. |
+| **Red** | Capa pública: ALB con FE web, API y receptor de webhooks. Capa privada-app: cómputo y workers. Capa privada-data: BD y caché. Status page servida desde CDN para resistir picos sin tocar el origen. |
+| **Procesamiento asíncrono** | Notificaciones (Slack, email) desacopladas vía cola; *escalation timers* implementados como mensajes diferidos; generación de postmortem como job pesado; publicación a status page como evento. Idempotencia en notificaciones (no duplicar pagos al on-call si la API se reintenta). |
+| **Seguridad** | Roles: `on_call`, `manager`, `viewer`, `customer` (público, solo status page). Autenticación de webhook por firma HMAC con secret rotable. Auditoría de quién cambió estado de qué incidente y cuándo. |
+| **Observabilidad** | Logs estructurados con `incident_id` como correlation ID. Métricas RED por endpoint. Métricas de negocio: MTTA, MTTR, # incidentes activos. Alarmas: si nuestro MTTR rolling-7d > 60 min, si la cola de notificaciones crece sostenidamente, si la status page no se actualiza > 5 min. |
 
 ---
 
-## 7. Scope (in / out) (E1)
+## 8. Scope (in / out)
 
 ### IN — lo que el sistema SÍ hace
 - Ciclo de vida completo del incidente: detección → reconocimiento → investigación → mitigación → resolución → postmortem.
@@ -118,75 +201,72 @@ Cómo cada funcionalidad del sistema ejercita los siete componentes que el curso
 - Adjuntos al timeline (capturas, logs).
 - Roles diferenciados: on-call, manager, viewer, customer (público).
 
-### OUT — lo que el sistema NO hace (al menos en este alcance)
+### OUT — lo que el sistema NO hace
 - **Integración con PagerDuty / Opsgenie.** Asumimos rotación on-call interna gestionada en el sistema.
 - **Correlación automática de alertas con ML / detección de incidentes duplicados.** Cada alerta = un incidente; la deduplicación queda a cargo del *on-call*.
 - **Auto-ejecución de runbooks.** El sistema enlaza al runbook; no lo ejecuta.
 - **Integración con sistemas de ticketing externos** (Jira, ServiceNow, Zendesk).
 - **Comunicación bidireccional con el cliente** desde la status page (ni comments, ni subscripciones por email — solo lectura pública).
-- **Voice paging (llamadas telefónicas).** Solo Slack + email en este alcance.
+- **Voice paging (llamadas telefónicas).** Solo Slack + email.
 - **Análisis predictivo o detección de anomalías.** Es un sistema reactivo, no proactivo.
 - **Mobile app nativa.** Web responsive es suficiente para el MVP.
 
 ---
 
-## 8. Preguntas abiertas (E1)
+## 9. Preguntas abiertas
 
 Decisiones técnicas que aún no tomamos. Conscientes y honestas — se cierran en las entregas correspondientes:
 
-- **Cómputo:** ¿Lambda con API Gateway, ECS Fargate detrás de ALB, o EC2 con Auto Scaling? *(E2)* Trade-off: Lambda escala a cero pero tiene cold starts que pueden impactar US-01; Fargate da control sobre el runtime pero cuesta más en idle.
-- **Base de datos:** ¿BD relacional (RDS Postgres) para el modelo principal, o documental (DynamoDB) por los patrones de timeline append-only? *(E2)* Trade-off: el timeline es append-heavy y pide DynamoDB; los joins de métricas piden Postgres. Posible solución híbrida.
+- **Cómputo:** ¿Lambda con API Gateway, ECS Fargate detrás de ALB, o EC2 con Auto Scaling? Trade-off: Lambda escala a cero pero tiene cold starts que pueden impactar US-01; Fargate da control sobre el runtime pero cuesta más en idle.
+- **Base de datos:** ¿BD relacional (RDS Postgres) para el modelo principal, o documental (DynamoDB) por los patrones de timeline append-only? Trade-off: el timeline es append-heavy y pide DynamoDB; los joins de métricas piden Postgres. Posible solución híbrida.
 - **State machine del incidente:** ¿estados explícitos en BD o derivados del último timeline event? Implica decisiones sobre concurrencia y consistencia.
-- **Verificación de webhooks:** ¿HMAC compartido con cada origen, o JWT firmado por un IdP intermedio? *(E5)*
+- **Verificación de webhooks:** ¿HMAC compartido con cada origen, o JWT firmado por un IdP intermedio?
 - **SLO propios objetivo:** ¿qué MTTA/MTTR nos comprometemos a cumplir como sistema? Necesario para definir alarmas.
 - **¿Multi-tenant o single-tenant?** Para el alcance del curso asumimos single-tenant (una sola empresa lo opera para sí misma); multi-tenant agrega complejidad de seguridad significativa.
 - **Persistencia del war room en Slack:** ¿qué pasa si Slack está caído cuando declaramos un incidente?
 
 ---
 
-## 9. Cómputo y datos *(pendiente — E2, jue 21 may 2026)*
+## 10. Anexo IA
 
-*Esta sección se completa en la Entrega 2: diagrama de contexto, decisión de cómputo (Lambda / Fargate / EC2 con trade-offs y desventaja reconocida), modelo de datos (estructura del dominio, patrones de acceso, BD vs storage de objetos, decisión de caché si aplica).*
+### Qué le pedimos a la IA
 
----
+Trabajamos con **Claude Code (Opus 4.7)** durante una sesión de planificación + redacción asistida. Pedidos concretos:
 
-## 10. Red *(pendiente — E3, dom 31 may 2026)*
+1. **Lectura completa del rubric (PDF) y separación entre requisitos vs. elecciones.** Específicamente, le pedimos que detectara si la entrega 1 requería implementación de aplicación o sólo documentación.
+2. **Brainstorm del sub-dominio específico** dentro de "sistema de tickets e incidentes" — partiendo del enunciado genérico del rubric.
+3. **Estructura completa del documento** según las secciones que el rubric exige para E1.
+4. **Generación de las user stories priorizadas** (P0/P1/P2) con criterio de éxito explícito.
+5. **Diseño de los 7 mockups *low-fi*** en HTML estático.
 
-*Esta sección se completa en la Entrega 3: VPC con CIDR explícito, subnets públicas (ALB, NAT) y privadas (compute, BD), Availability Zones justificadas, NAT vs VPC endpoints. Incluye primera versión del diagrama de contenedores.*
+### Qué aceptamos sin cambios sustanciales
 
----
+- La **separación crítica** entre requisitos del rubric y elecciones nuestras: la IA detectó que la página 1 dice *"No se requiere implementación en código ni despliegue real"* y que la página 10 dice *"Un equipo puede sacar puntaje completo sin haber tocado un servicio cloud"*. La decisión final fue nuestra de no implementar código para esta primer entrega, sino que hasta la segunda.
+- **Diseño y composición de los 7 mockups HTML**, incluyendo el sistema de badges semánticos (SEV1–4, estados) y la coherencia narrativa entre ellos (el mismo `INC-2026-05-104` atraviesa varias pantallas).
 
-## 11. Procesamiento asíncrono *(pendiente — E4, dom 7 jun 2026)*
+### Qué editamos
 
-*Esta sección se completa en la Entrega 4: lista de eventos/mensajes con productor, consumidor, formato del payload, manejo de fallos (DLQ con threshold de reintentos), idempotencia. Diagrama de contenedores actualizado con queues / topics.*
+1. **Estética de los mockups.** El primer rumbo que tomó la IA con los mockups fue un estilo "informe operacional" sobrio tipo *NASA mission control* — IBM Plex Mono, papel cálido, hairlines duras, todo con esquinas cuadradas. Lo descartamos porque se sentía genérico y muy "técnico", y pedimos rediseñar todo con un lenguaje **Apple-inspired** utilizando un design.md para guiar el estilo. Rehicimos los 7 mockups y el `styles.css` desde cero. La razón: queríamos que el sistema se viera *cuidado* aún siendo low-fi — un producto que un on-call usaría con gusto a las 3 AM, no una herramienta hostil más.
 
----
+2. **Sub-dominio específico del sistema.** La IA nos ofreció varias opciones para encarar el enunciado genérico de "sistema de tickets e incidentes": helpdesk TI corporativo, soporte SaaS B2B, gestión de incidentes de producción para SRE, tickets de servicios públicos. Elegimos **incidentes de producción para equipos SRE/DevOps** porque ejercita los siete componentes del curso de forma más natural que las otras opciones — escalamiento automático ejercita procesamiento asíncrono, timeline append-heavy ejercita patrones de BD distintos al CRUD clásico, status page ejercita CDN, postmortems ejercitan storage de objetos.
 
-## 12. Seguridad, observabilidad y costos *(pendiente — E5, jue 11 jun 2026)*
+3. **Estructura del entregable.** Originalmente la IA armó la entrega como **cuatro archivos separados**: `project.md` (doc maestro), `delivery-1-summary.md` (resumen de la entrega), `anexo-ia.md` (reflexión sobre uso de IA) y `mockups/README.md` (índice de mockups). Decidimos consolidar todo en **un único documento** (este `project.md`) porque el rubric del curso pide un solo documento que crece de E1 a E5 — partirlo en cuatro pierde esa coherencia y hace más difícil para el ingeniero al momento de evaluar, seguir el hilo. Eliminamos los otros tres archivos y movimos el contenido relevante acá.
 
-*Esta sección se completa en la Entrega 5: modelo de seguridad detallado (IAM por servicio con mínimo privilegio, secretos con dueño y rotación, KMS keys con alcance, cifrado en tránsito y reposo); plan de observabilidad (logs estructurados con correlation IDs, métricas RED, ≥ 2 alarmas con threshold y acción, comportamiento ante degradación); estimado de costo mensual con supuestos explícitos; riesgos y decisiones pendientes; detalle del componente más complejo del sistema (probablemente la state machine de incidentes + escalamiento).*
+### Qué descartamos y por qué
 
----
+1. **Integración con PagerDuty / Opsgenie.** La IA inicialmente la consideró *in scope*. La descartamos porque metía un servicio externo que aumentaba la complejidad del modelo de seguridad (autenticación cruzada, secretos rotables) sin sumar valor pedagógico al curso. Decidimos que la rotación on-call vive dentro del sistema.
+2. **Correlación automática de alertas con ML.** Sugerida por la IA como *"funcionalidad específica avanzada"*. La descartamos porque el rubric premia simplicidad bien justificada (p. 19: *"Un sistema simple bien justificado supera a uno complejo sin razón"*). ML era complejidad sin justificación.
+3. **Mobile app nativa.** Descartada porque web responsive cumple el caso de uso del *on-call* sin agregar costo de mantener dos plataformas.
 
-## 13. Anexo IA (E1)
+### Cómo verificamos cada parte
 
-Reflexión sobre uso de inteligencia artificial en esta entrega — ver archivo separado `cloud/docs/anexo-ia.md`.
+Como exige la política del curso, **cada miembro del equipo puede explicar cualquier parte del documento sin la IA presente**. Para asegurarlo:
 
----
+- Revisamos cada user story preguntándonos *"¿qué métrica usamos para verificar que se cumplió?"* — cualquier respuesta vaga la editamos.
+- Cada mockup tiene una *caption* al final del HTML explicando qué cubre y por qué se ve así; si no podemos defender esa caption, rehacemos el mockup.
 
-## Coordinación con curso de Automatización
+### Aprendizaje sobre colaboración con IA
 
-El curso paralelo (Automatización con IaC) consume las decisiones de este documento para construir la infraestructura real con Terraform. La tabla de mapeo:
+La IA tuvo el reflejo correcto de leer el rubric primero y flaggear la diferencia entre lo que pedíamos ("construir la app") y lo que el curso pedía ("documento de diseño"). Sin esa fricción, hubiéramos perdido tiempo en código que el rubric no evalúa en E1. **La fricción útil de la IA es cuando dice "esperá" en vez de ejecutar lo pedido sin chequear.**
 
-| Delivery Automatización | Fecha | Insumo desde Cloud Infra |
-|---|---|---|
-| D1 — Workspace Terraform y CI baseline | dom 10 may | E1 (mismo día) — proveedor AWS, naming, región. *Ya entregado en `infra/`.* |
-| D2 — Módulos cómputo / almacenamiento / BD | jue 21 may | E2 — decisión de cómputo, esquema BD, qué va a S3 vs BD |
-| D3 — Capa de red automatizada | dom 7 jun | E3 — CIDR, subnets, NAT vs endpoints |
-| D4 — Infraestructura asíncrona + pipeline CD | dom 21 jun | E4 + E5 — eventos, payloads, DLQ, ambientes |
-| D5 — Seguridad, observabilidad, deployment one-click | jue 25 jun | E5 — IAM, secretos, métricas, alarmas |
-
-**Decisiones de E1 ya consumidas por D1 (curso de Automatización):**
-- Proveedor: **AWS**.
-- Región principal: **us-east-1**.
-- Naming convention: ver `infra/README.md`.
+*(pendiente: ampliar con observaciones de las próximas entregas)*

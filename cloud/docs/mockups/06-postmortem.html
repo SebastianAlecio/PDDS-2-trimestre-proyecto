@@ -2,121 +2,177 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Mockup 06 · Postmortem auto-generado</title>
+<title>Postmortem · INC-2026-05-104</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="canvas">
-  <div class="wireframe-banner">Wireframe low-fi · Mockup 06 · Postmortem (draft auto-generado, editable)</div>
 
-  <header class="app-header">
-    <div>
-      <span class="brand">Acme · Incidents</span>
-      <span class="breadcrumb">  /  Postmortems  /  INC-2026-05-104</span>
-    </div>
-    <div class="user-chip">
-      <span class="avatar">SA</span>
-      <span>Sebastián A.</span>
-    </div>
-  </header>
+<header class="global-nav">
+  <span class="brand">Acme</span>
+  <nav>
+    <a href="#">Product</a>
+    <a href="#">Customers</a>
+    <a href="#">Status</a>
+    <a href="#">Docs</a>
+    <a href="#">Support</a>
+  </nav>
+  <div class="right">
+    <a href="#">Search</a>
+    <span class="icon-btn">SA</span>
+  </div>
+</header>
 
-  <div style="background:#f4f4f4; padding: 0 0 24px;">
-    <div class="doc">
-      <div class="draft-banner">
-        <strong>Borrador auto-generado.</strong> Generado automáticamente al cerrar el incidente con datos del timeline.
-        Las secciones marcadas con <span class="chip">[a llenar]</span> requieren completarse antes de publicar.
-        <div style="margin-top:8px; display:flex; gap:8px;">
-          <button class="btn">Editar</button>
-          <button class="btn">Guardar borrador</button>
-          <button class="btn btn-primary">Publicar postmortem</button>
-        </div>
-      </div>
+<header class="sub-nav">
+  <span class="product">Incidents</span>
+  <nav>
+    <a href="#">Dashboard</a>
+    <a href="#">Live</a>
+    <a href="#">Services</a>
+    <a href="#">Schedule</a>
+    <a href="#" class="active">Postmortems</a>
+    <a href="#">Settings</a>
+  </nav>
+  <div class="who">
+    <span>Sebastián A. · on-call</span>
+    <span class="avatar">SA</span>
+  </div>
+  <button class="pill-primary" style="font-size: 14px; padding: 8px 18px;">+ Declare incident</button>
+</header>
 
-      <h1 style="font-size:24px; margin-bottom: 4px;">Postmortem: Login latency p99 &gt; 8s</h1>
-      <p class="muted" style="font-size:13px;">
-        <strong>INC-2026-05-104</strong> ·
-        9 may 2026 · 14:08 → 14:36 UTC-3 ·
-        Duración: <strong>28m 04s</strong> ·
-        SEV: <span class="badge badge-sev1">SEV1</span> ·
-        Servicios: auth-service, api-gateway
-      </p>
-
-      <h2>Resumen</h2>
-      <p>
-        El 9 de mayo de 2026 a las 14:08 UTC-3, un deploy de <code>auth-service v2.14.0</code> introdujo latencia elevada en el flujo de login.
-        El p99 de <code>POST /login</code> superó los 8 segundos durante 28 minutos, afectando a aproximadamente
-        <span class="chip">[a llenar: % tráfico afectado]</span> de los usuarios. Se mitigó haciendo rollback a <code>v2.13.4</code>
-        y se restableció el servicio normal a las 14:36.
-      </p>
-
-      <h2>Impacto</h2>
-      <ul style="padding-left:20px; margin-bottom:12px;">
-        <li><strong>Usuarios afectados:</strong> <span class="chip">[a llenar]</span> (estimado a partir de % de error en logins durante la ventana).</li>
-        <li><strong>Servicios afectados:</strong> auth-service (directo), api-gateway (cascada).</li>
-        <li><strong>SLA:</strong> <span class="chip">[a llenar: ¿se rompió SLA del cliente X?]</span></li>
-        <li><strong>Soporte:</strong> <span class="chip">[a llenar: # tickets abiertos durante la ventana]</span></li>
-      </ul>
-
-      <h2>Timeline</h2>
-      <p class="muted" style="font-size:12px; margin-bottom:6px;">Auto-importado del timeline del incidente — editable.</p>
-      <ul style="padding-left:20px; font-size:13px;">
-        <li><strong>14:08:00</strong> — Deploy de auth-service v2.14.0 a producción (CD pipeline).</li>
-        <li><strong>14:08:34</strong> — Alerta dispara: <code>p99_latency_login &gt; 5s</code>. Webhook a Acme Incidents.</li>
-        <li><strong>14:08:36</strong> — Sistema crea INC-2026-05-104 (SEV1 auto), asigna a Sebastián A. (on-call platform).</li>
-        <li><strong>14:12:08</strong> — Sebastián A. reconoce y mueve a <em>Investigating</em>.</li>
-        <li><strong>14:13:21</strong> — Observación: spike correlaciona con deploy de v2.14.0.</li>
-        <li><strong>14:14:55</strong> — Inicio de rollback a v2.13.4.</li>
-        <li><strong>14:15:02</strong> — Status page actualizada → Degraded.</li>
-        <li><strong>14:16:40</strong> — p99 bajando: 8.2s → 5.1s.</li>
-        <li><strong>14:32:18</strong> — Métricas en niveles normales por &gt; 10 min. Estado → Monitoring.</li>
-        <li><strong>14:36:00</strong> — Estado → Resolved. Status page → Operational.</li>
-      </ul>
-
-      <h2>Causa raíz</h2>
-      <p>
-        <span class="chip">[a llenar por el on-call: análisis técnico del root cause]</span>
-        Hipótesis inicial: la versión 2.14.0 introdujo un cambio en la query de validación de sesión que no usa el índice
-        <code>idx_sessions_user_active</code>. Pendiente confirmar con explain del query y revisión de migration aplicada.
-      </p>
-
-      <h2>Qué funcionó bien</h2>
-      <ul style="padding-left:20px;">
-        <li>Detección automática vía monitoring → alerta → incidente: 36 segundos desde deploy hasta paging.</li>
-        <li>El on-call reconoció en 4m 08s, debajo del threshold de escalation (5m).</li>
-        <li>Rollback ejecutado en 6m 55s desde el reconocimiento.</li>
-      </ul>
-
-      <h2>Qué no funcionó</h2>
-      <ul style="padding-left:20px;">
-        <li>El cambio no fue detectado por las pruebas de carga del CI — gap de cobertura.</li>
-        <li>No tenemos query plan checking automático en el pipeline de deploy.</li>
-        <li><span class="chip">[a llenar]</span></li>
-      </ul>
-
-      <h2>Action items</h2>
-      <table>
-        <thead>
-          <tr><th>Acción</th><th>Owner</th><th>Due</th><th>Prioridad</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Agregar test de carga sobre <code>POST /login</code> al CI con gate de p99 &lt; 500ms</td><td>team-platform</td><td>16 may</td><td>P0</td></tr>
-          <tr><td>Implementar query plan check en migrations de auth-service</td><td>team-platform</td><td>23 may</td><td>P1</td></tr>
-          <tr><td><span class="chip">[a llenar]</span></td><td></td><td></td><td></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Anexos</h2>
-      <ul style="padding-left:20px;">
-        <li>📎 <span class="chip">grafana-p99-latency.png</span> (capturado durante el incidente)</li>
-        <li>📎 Link a war room archivado: <span class="chip">#inc-2026-05-104</span></li>
-      </ul>
+<!-- Doc toolbar (sticky) -->
+<div class="doc-toolbar">
+  <div class="row">
+    <span class="crumb">Postmortems / INC-2026-05-104</span>
+    <div class="btn-row">
+      <button class="pill-ghost">Editar</button>
+      <button class="pill-ghost">Guardar borrador</button>
+      <button class="pill-primary">Publicar postmortem</button>
     </div>
   </div>
 </div>
 
-<div class="mockup-caption">
-  <strong>Cubre:</strong> US-05 (postmortem auto-generado desde el timeline del incidente).
-  <strong>Notas de diseño:</strong> el draft pre-llena lo que el sistema sabe (timeline, duración, servicios afectados, métricas de respuesta del equipo) y deja claramente marcado <em>[a llenar]</em> lo que necesita análisis humano. La política del rubric prohíbe que IA escriba justificaciones que el equipo no tomó — el postmortem refleja eso: causa raíz e impacto cuantitativo van a mano humana.
-</div>
+<main class="page">
+  <article class="doc-article">
+
+    <div class="draft-banner">
+      <span class="dot"></span>
+      <span><strong style="color: var(--ink);">Borrador auto-generado.</strong> Generado al cerrar el incidente con datos del timeline. Las secciones marcadas como <em>placeholder</em> requieren completarse antes de publicar.</span>
+    </div>
+
+    <h1>Login latency p99 superior a 8 segundos.</h1>
+
+    <p class="sub">
+      <span><strong style="color: var(--ink);">INC-2026-05-104</strong></span>
+      <span>9 may 2026 · 14:08 → 14:36 UTC-3</span>
+      <span>Duración: <strong style="color: var(--ink);">28m 04s</strong></span>
+      <span class="tag tag-sev1" style="vertical-align: 1px;"><span class="dot"></span>SEV-1</span>
+      <span>auth-service · api-gateway</span>
+    </p>
+
+    <h2>Resumen</h2>
+    <p>
+      El 9 de mayo de 2026 a las 14:08 UTC-3, un deploy de <code>auth-service v2.14.0</code> introdujo latencia
+      elevada en el flujo de login. El p99 de <code>POST /login</code> superó los 8 segundos durante 28 minutos,
+      afectando a aproximadamente <span class="placeholder">% tráfico afectado — completar</span> de los usuarios.
+      Se mitigó haciendo rollback a <code>v2.13.4</code> y se restableció el servicio normal a las 14:36.
+    </p>
+
+    <h2>Impacto</h2>
+    <ul>
+      <li><strong>Usuarios afectados:</strong> <span class="placeholder">a llenar — estimado a partir del % de error en logins durante la ventana</span>.</li>
+      <li><strong>Servicios afectados:</strong> auth-service (directo), api-gateway (cascada).</li>
+      <li><strong>SLA:</strong> <span class="placeholder">a llenar — ¿se rompió SLA del cliente Nordwind?</span></li>
+      <li><strong>Soporte:</strong> <span class="placeholder">a llenar — número de tickets abiertos durante la ventana</span></li>
+    </ul>
+
+    <h2>Timeline</h2>
+    <p class="muted" style="font-size: 14px;">Auto-importado del timeline del incidente — editable.</p>
+    <ul>
+      <li><strong>14:08:00</strong> — Deploy de auth-service v2.14.0 a producción (CD pipeline).</li>
+      <li><strong>14:08:34</strong> — Alerta dispara: <code>p99_latency_login &gt; 5s</code>. Webhook a Acme Incidents.</li>
+      <li><strong>14:08:36</strong> — Sistema crea INC-2026-05-104 (SEV-1 auto), asigna a Sebastián A. (on-call platform).</li>
+      <li><strong>14:12:08</strong> — Sebastián A. reconoce y mueve a <em>Investigating</em>.</li>
+      <li><strong>14:13:21</strong> — Observación: spike correlaciona con deploy de v2.14.0.</li>
+      <li><strong>14:14:55</strong> — Inicio de rollback a v2.13.4.</li>
+      <li><strong>14:15:02</strong> — Status page actualizada → Degraded performance.</li>
+      <li><strong>14:16:40</strong> — p99 bajando: 8.2s → 5.1s.</li>
+      <li><strong>14:32:18</strong> — Métricas en niveles normales por &gt; 10 min. Estado → Monitoring.</li>
+      <li><strong>14:36:00</strong> — Estado → Resolved. Status page → Operational.</li>
+    </ul>
+
+    <h2>Causa raíz</h2>
+    <p>
+      <span class="placeholder">a llenar por el on-call — análisis técnico del root cause</span>
+    </p>
+    <p>
+      Hipótesis inicial: la versión 2.14.0 introdujo un cambio en la query de validación de sesión que no usa
+      el índice <code>idx_sessions_user_active</code>. Pendiente confirmar con <code>EXPLAIN</code> del query
+      y revisión de la migration aplicada.
+    </p>
+
+    <h2>Qué funcionó bien</h2>
+    <ul>
+      <li>Detección automática vía monitoring → alerta → incidente: 36 segundos desde deploy hasta paging.</li>
+      <li>El on-call reconoció en 4m 08s, debajo del threshold de escalation (5m).</li>
+      <li>Rollback ejecutado en 6m 55s desde el reconocimiento.</li>
+    </ul>
+
+    <h2>Qué no funcionó</h2>
+    <ul>
+      <li>El cambio no fue detectado por las pruebas de carga del CI — gap de cobertura.</li>
+      <li>No tenemos query plan checking automático en el pipeline de deploy.</li>
+      <li><span class="placeholder">a llenar — observaciones del equipo durante el debrief</span></li>
+    </ul>
+
+    <h2>Action items</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Acción</th>
+          <th style="width: 160px;">Owner</th>
+          <th style="width: 100px;">Due</th>
+          <th style="width: 80px;">Prioridad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Agregar test de carga sobre <code>POST /login</code> al CI con gate de p99 &lt; 500ms.</td>
+          <td>team-platform</td>
+          <td>16 may</td>
+          <td><span class="tag tag-sev1"><span class="dot"></span>P0</span></td>
+        </tr>
+        <tr>
+          <td>Implementar query plan check en migrations de auth-service.</td>
+          <td>team-platform</td>
+          <td>23 may</td>
+          <td><span class="tag tag-sev2"><span class="dot"></span>P1</span></td>
+        </tr>
+        <tr>
+          <td><span class="placeholder">a llenar — acciones que surjan del debrief humano</span></td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Anexos</h2>
+    <ul>
+      <li><strong>grafana-p99-latency.png</strong> — capturado durante el incidente (14:18:10).</li>
+      <li>War room archivado: <a class="text-link" href="#">#inc-2026-05-104</a> en Slack.</li>
+    </ul>
+
+  </article>
+</main>
+
+<footer class="app-footer">
+  Acme Incidents · Postmortem INC-2026-05-104 · Confidencial
+</footer>
+
+<aside class="mockup-caption" style="max-width: 1240px; margin: 24px auto 0;">
+  <strong>Cubre:</strong> US-05 (postmortem auto-generado a partir del timeline).
+  <strong>Notas de diseño:</strong> presentación editorial — single-column de 760px con SF Pro Display 56px tight para el headline, SF Pro Text 17px para el cuerpo, leading 1.6. Toolbar sticky con las acciones (Editar / Guardar / Publicar) acompaña la lectura. Lo que el sistema sabe se pre-llena; lo que requiere mano humana queda como pill <em>placeholder</em> en parchment con texto en gris — claro, defendible, alineado con la regla del rubric "no pedir a la IA que escriba la justificación de una decisión que el equipo no tomó".
+</aside>
+
 </body>
 </html>
