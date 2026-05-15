@@ -38,13 +38,15 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform init
-        run: terraform init -backend=false
+        run: terraform init -input=false
 
       - name: Terraform validate
         run: terraform validate
 
       - name: Terraform plan
         id: plan
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
         run: |
           set -o pipefail
           terraform plan -var-file=envs/dev/dev.tfvars -no-color -input=false 2>&1 | tee plan.txt

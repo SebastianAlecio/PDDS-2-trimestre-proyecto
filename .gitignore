@@ -2,6 +2,12 @@
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
+
+# Whitelist the bootstrap workspace state. The bootstrap workspace manages the
+# S3 bucket and DynamoDB lock table that host the remote state for the main
+# workspace, so it must use local state and that file lives in the repo.
+!infra/bootstrap/terraform.tfstate
+
 crash.log
 crash.*.log
 
@@ -12,6 +18,9 @@ crash.*.log
 # Terraform planfiles (binary)
 tfplan
 *.tfplan
+
+# Lambda zip artifacts produced by data "archive_file" at plan/apply time
+infra/modules/compute/build/
 
 # Terraform output captures used in CI
 plan.txt
@@ -45,3 +54,4 @@ terraform.rc
 .idea/
 .vscode/
 *.swp
+.claude/

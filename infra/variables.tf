@@ -20,13 +20,50 @@ variable "region" {
   default     = "us-east-1"
 }
 
-variable "bucket_name_prefix" {
-  description = "Prefix for the bootstrap S3 bucket. A random suffix is appended to guarantee global uniqueness."
+variable "attachments_bucket_name_prefix" {
+  description = "Prefix for the attachments bucket created by the storage module. A random suffix is appended for global uniqueness."
   type        = string
-  default     = "pdds-oyd-bootstrap"
+  default     = "pdds-oyd-attachments"
+}
 
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$", var.bucket_name_prefix))
-    error_message = "bucket_name_prefix must be 3-42 lowercase chars: letters, digits, or hyphens; cannot start or end with a hyphen."
-  }
+variable "compute_function_name" {
+  description = "Base name of the Lambda function deployed by the compute module. The environment suffix is appended inside the module. In Ticke-T this function will sit behind API Gateway as the chat message handler (D3+)."
+  type        = string
+  default     = "chat-message-handler"
+}
+
+variable "compute_memory_size" {
+  description = "Memory allocation in MB for the Lambda function."
+  type        = number
+  default     = 128
+}
+
+variable "db_instance_class" {
+  description = "RDS DB instance class for the database module."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_multi_az" {
+  description = "Whether the RDS instance has a synchronous standby in a second AZ. False in dev to halve cost; true is recommended for prod."
+  type        = bool
+  default     = false
+}
+
+variable "db_backup_retention_period" {
+  description = "Days the RDS instance retains automated backups. Default 1 honors the AWS free-tier ceiling for dev accounts; raise to 7+ in prod."
+  type        = number
+  default     = 1
+}
+
+variable "db_username" {
+  description = "Master username for the RDS instance. Not a secret; lives in tfvars."
+  type        = string
+  default     = "tickets_admin"
+}
+
+variable "db_password" {
+  description = "Master password for the RDS instance. Sourced via TF_VAR_db_password (env var locally, GitHub Actions secret in CI). Must not appear in any committed file."
+  type        = string
+  sensitive   = true
 }
