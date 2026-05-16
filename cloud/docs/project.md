@@ -94,18 +94,6 @@ User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito expl
 
 | # | Prioridad | User story | Criterio de éxito |
 |---|---|---|---|
-| US-01 | **P0** | Como **sistema**, quiero **recibir una carga útil (payload) desde el widget de chat web** y transformarla en un ticket en la base de datos, para que los agentes puedan verlo en la cola sin intervención manual. | El mensaje del cliente aparece en el panel del agente en ≤ 3 s tras enviarlo desde el widget. |
-| US-02 | **P0** | Como **agente**, quiero **escribir una respuesta en el panel** del ticket, para que el cliente la reciba directamente en su widget de chat en la web. | El texto enviado cambia el estado del ticket a *Esperando cliente* y aparece en el widget del cliente en ≤ 2 s. |
-| US-03 | **P1** | Como **cliente final**, quiero **enviar una foto** (ej. captura de un error) por el chat web, para que el agente pueda diagnosticar el problema sin tener que pedírmela por otro canal. | La imagen se almacena en S3 con URL firmada y se renderiza con preview en la vista del ticket del agente. |
-| US-04 | **P1** | Como **administrador**, quiero **configurar un temporizador que cambie el estado del ticket a *Vencido*** si no hay respuesta en el SLA configurado, para detectar tickets desatendidos. | Un ticket sin respuesta del agente por más del SLA cambia su etiqueta visual en la cola y dispara una alerta al gerente. |
-| US-05 | **P2** | Como **agente N1**, quiero **presionar *Escalar*** para que el ticket pase a Nivel 2, enviando una alerta prioritaria al equipo técnico, para no quedarme bloqueado y para que el caso llegue al equipo correcto. | El equipo N2 recibe la notificación vía SNS y asume la propiedad del ticket; queda evento en el timeline con la nota técnica del N1. |
-
-## 4. Casos de uso priorizados
-
-User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito explícito y prioridad **P0** (crítica para el MVP), **P1** (importante pero no bloqueante) o **P2** (deseable).
-
-| # | Prioridad | User story | Criterio de éxito |
-|---|---|---|---|
 | US-01 | **P0** | Como **colaborador**, quiero **crear un ticket mediante un formulario en el portal interno**, para registrar una solicitud y dar seguimiento a su atención. | El ticket queda registrado en la base de datos y aparece en la cola del área responsable en ≤ 3 s. |
 | US-02 | **P0** | Como **colaborador**, quiero **iniciar una conversación desde el chat integrado**, para comunicarme en tiempo real con el área responsable. | El mensaje enviado aparece en el panel del agente en ≤ 3 s y queda asociado a un ticket. |
 | US-03 | **P0** | Como **agente**, quiero **responder desde el panel de gestión**, para que el colaborador reciba actualizaciones en tiempo real sobre su solicitud. | La respuesta aparece en la vista del colaborador en ≤ 2 s y el ticket actualiza su estado correctamente. |
