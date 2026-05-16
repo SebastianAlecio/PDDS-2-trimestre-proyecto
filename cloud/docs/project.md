@@ -8,26 +8,35 @@
 
 ## 1. Resumen ejecutivo
 
-### El problema
+### El problema  
+Las empresas medianas y grandes manejan un alto volumen de solicitudes internas entre distintas áreas corporativas. En muchas organizaciones, estas solicitudes todavía se gestionan por medios informales como correos electrónicos, mensajes directos o herramientas de mensajería corporativa. Eso fragmenta la comunicación, dificulta el seguimiento de los casos y limita la trazabilidad de las respuestas y tiempos de atención.
 
-Las startups y empresas *mid-market* manejan un alto volumen de interacciones de soporte y, en etapas tempranas, suelen depender de canales externos (email, redes sociales, mensajería de terceros) para responder a sus clientes. Eso fragmenta la conversación, deja al equipo sin métricas accionables, y entrega la experiencia del usuario a una plataforma de un tercero — con sus limitaciones, su rate-limiting, y su modelo de privacidad. Centralizar la atención en una página propia con un chat integrado le permite a la empresa controlar la experiencia y la privacidad de los datos sin pelearse con SDKs ajenos.
+Además, cuando las solicitudes no se centralizan, los colaboradores no tienen visibilidad del estado de sus requerimientos y los equipos pierden control sobre la priorización, el cumplimiento de SLA y los procesos de escalamiento. Contar con una plataforma interna de tickets permite estandarizar la atención, mejorar la comunicación entre áreas y mantener un historial auditable de cada caso.
 
-### La solución
+### La solución  
+Ticke-T es una plataforma de gestión de tickets basada en la nube orientada a la atención de solicitudes internas dentro de una organización. Los colaboradores pueden crear tickets desde un portal web mediante formularios o interactuar en tiempo real con los equipos responsables a través de un chat integrado.
 
-**Ticke-T** es un sistema de gestión de tickets basado en la nube que ingiere mensajes desde un **widget de chat en vivo propio** incrustado en la página web de la empresa. Cada conversación con un cliente se convierte automáticamente en un ticket auditable. El equipo de soporte trabaja desde una bandeja de entrada compartida con SLAs por prioridad, categorización del incidente y escalamiento explícito de N1 a N2. La comunicación entre el cliente y el agente es en tiempo real vía WebSockets — el cliente escribe en el widget de la web, el agente responde desde el panel, y el mensaje aparece en el widget del cliente sin recargar la página.
+Cada solicitud se convierte automáticamente en un ticket auditable con categorización, prioridad y seguimiento de SLA. Los equipos responsables trabajan desde una bandeja compartida donde pueden asignar casos, escalar incidentes y responder solicitudes desde un panel centralizado. La comunicación entre el colaborador y el agente se sincroniza en tiempo real mediante WebSockets, permitiendo actualizar conversaciones y estados sin recargar la página.
 
-### Cómo funciona, en seis pasos
+### Cómo funciona  
+1. El colaborador ingresa al portal interno y crea una solicitud mediante un formulario o inicia una conversación desde el chat integrado.
 
-1. **El cliente abre el widget** desde cualquier página de la empresa que lo tiene incrustado y escribe su mensaje. No necesita crear cuenta — opcionalmente puede dejar su email para que la conversación quede ligada a él.
-2. **El sistema crea el ticket** automáticamente con la categoría y prioridad inferidas de palabras clave o de una selección pre-chat (ej. *"problema con un pago"*).
-3. **El ticket aparece en la cola del equipo de soporte** en menos de 3 segundos. Si la prioridad es Alta, además se publica una notificación al canal de alertas del equipo.
-4. **Un agente toma el ticket** desde el panel y responde. La respuesta viaja por WebSocket al widget del cliente en tiempo real.
-5. **La conversación continúa en el widget** del lado del cliente y en el panel del lado del agente, registrando cada mensaje como un evento en el timeline del ticket.
-6. **Cuando el caso se resuelve**, el agente cierra el ticket con una resolución. Si en algún momento el agente excede el SLA sin responder, el sistema marca el ticket como *Vencido* y dispara una alerta al gerente.
+2. El sistema crea automáticamente el ticket con una categoría y prioridad según el tipo de solicitud seleccionada.
 
-### A quién sirve
+3. El ticket aparece en la cola del equipo responsable. Si la prioridad es Alta, además se publica una notificación al canal de alertas correspondiente.
 
-A startups y empresas *mid-market* (50–500 empleados) que ya tienen su propia presencia web y quieren ofrecer soporte interactivo desde ahí, sin delegarle el canal a un proveedor externo. Casos típicos: fintechs, e-commerces, SaaS B2B, plataformas educativas. El usuario primario del lado interno es el **agente de soporte**; el usuario primario del lado externo es el **cliente final** que visita la página y necesita ayuda.
+4. Un agente toma el ticket desde el panel de gestión y responde. La actualización se refleja en tiempo real para el colaborador.
+
+5. La conversación y cada cambio de estado quedan registrados como eventos dentro del timeline del ticket para mantener trazabilidad completa del caso.
+
+6. De ser necesario, el ticket puede ser escalado por el agente hacia agentes de nivel 2 o puede ser reasignado hacia otra área.
+
+7. Cuando la solicitud se resuelve, el agente cierra el ticket con una resolución documentada. Si el SLA de atención es excedido, el sistema marca el ticket como Vencido y genera una alerta al responsable correspondiente.
+
+### A quién sirve  
+A empresas medianas y grandes que necesitan centralizar y controlar la gestión de solicitudes internas entre colaboradores y áreas corporativas.
+
+El usuario primario del lado operativo es el agente encargado de atender solicitudes; el usuario primario del lado solicitante es el colaborador que necesita asistencia o gestión por parte de otra área interna.
 
 ### Glosario rápido
 
@@ -53,7 +62,7 @@ Términos que aparecen a lo largo del documento. Sirve como referencia.
 
 ### Humanos
 
-- **Cliente final** *(actor primario)* — visitante de la página web de la empresa que abre el widget de chat para pedir ayuda. No necesita registrarse; opcionalmente identifica su email para que la conversación quede ligada a su sesión y pueda retomarla después.
+- **Colaborador** *(actor primario)* — miembro de la empresa que crea el ticket por medio del formulario o inicia conversación desde el chat integrado para pedir ayuda. Sus solicitudes quedan ligadas a su cuenta interna para que pueda retomarlas después.
 - **Agente de soporte N1** *(actor primario)* — miembro del equipo de soporte que atiende la cola de tickets de primera línea. Lee la cola, toma tickets, responde por chat, cambia estados, resuelve, o escala a N2 si lo amerita.
 - **Agente N2 / Especialista** *(actor secundario)* — recibe tickets escalados por N1 cuando requieren conocimiento más profundo (problemas de infraestructura, casos legales, excepciones financieras).
 - **Administrador / Gerente** *(actor secundario)* — supervisa al equipo. Ve métricas agregadas (tickets abiertos, tiempo promedio de resolución, distribución por categoría), gestiona accesos del equipo y audita los tickets vencidos.
@@ -67,15 +76,15 @@ Términos que aparecen a lo largo del documento. Sirve como referencia.
 
 ## 3. Niveles de prioridad
 
-Clasificación que el sistema asigna automáticamente al ticket al crearlo, según palabras clave del mensaje inicial o una categoría que el cliente elige antes de abrir el chat. El agente puede revisarla y ajustarla. La prioridad determina el SLA y el orden de la cola.
+Clasificación asignada al ticket según el impacto y urgencia de la solicitud reportada. La prioridad puede ser definida al momento de crear el ticket y posteriormente ajustada por el agente responsable. La prioridad determina el SLA de atención y el orden en la cola de trabajo.
 
 | Prioridad | Cuándo aplica | SLA de primera respuesta |
 |---|---|---|
-| **Alta** | Algo está bloqueando una operación del cliente o de muchos a la vez. Ej.: no se puede procesar un pago, está caído un servicio crítico, hay sospecha de fraude. | 1 hora hábil |
-| **Media** | Algo no funciona bien pero hay un workaround o el impacto es limitado a un cliente. Ej.: pregunta sobre el estado de una transferencia, error puntual al iniciar sesión. | 4 horas hábiles |
-| **Baja** | Consulta general, pedido de información, solicitud no urgente. Ej.: dudas sobre comisiones, instrucciones de uso, agradecimientos. | 1 día hábil |
+| **Alta** | La solicitud bloquea una operación importante o afecta a múltiples usuarios. Ej.: caída de un sistema interno, problemas de acceso generalizados, incidentes críticos de operación. | 1 hora hábil |
+| **Media** | Existe un problema funcional con impacto limitado o con una alternativa temporal de trabajo. Ej.: errores puntuales en una funcionalidad, solicitudes de validación o seguimiento de casos. | 4 horas hábiles |
+| **Baja** | Solicitudes administrativas, consultas generales o requerimientos no urgentes. Ej.: solicitudes de información, cambios menores o consultas operativas. | 1 día hábil |
 
-Si el SLA se vence sin respuesta, el sistema marca el ticket como **Vencido** en la cola y dispara una alerta al gerente.
+Si el SLA se vence sin respuesta, el sistema marca el ticket como **Vencido** en la cola y genera una alerta al responsable correspondiente.
 
 ---
 
@@ -90,6 +99,20 @@ User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito expl
 | US-03 | **P1** | Como **cliente final**, quiero **enviar una foto** (ej. captura de un error) por el chat web, para que el agente pueda diagnosticar el problema sin tener que pedírmela por otro canal. | La imagen se almacena en S3 con URL firmada y se renderiza con preview en la vista del ticket del agente. |
 | US-04 | **P1** | Como **administrador**, quiero **configurar un temporizador que cambie el estado del ticket a *Vencido*** si no hay respuesta en el SLA configurado, para detectar tickets desatendidos. | Un ticket sin respuesta del agente por más del SLA cambia su etiqueta visual en la cola y dispara una alerta al gerente. |
 | US-05 | **P2** | Como **agente N1**, quiero **presionar *Escalar*** para que el ticket pase a Nivel 2, enviando una alerta prioritaria al equipo técnico, para no quedarme bloqueado y para que el caso llegue al equipo correcto. | El equipo N2 recibe la notificación vía SNS y asume la propiedad del ticket; queda evento en el timeline con la nota técnica del N1. |
+
+## 4. Casos de uso priorizados
+
+User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito explícito y prioridad **P0** (crítica para el MVP), **P1** (importante pero no bloqueante) o **P2** (deseable).
+
+| # | Prioridad | User story | Criterio de éxito |
+|---|---|---|---|
+| US-01 | **P0** | Como **colaborador**, quiero **crear un ticket mediante un formulario en el portal interno**, para registrar una solicitud y dar seguimiento a su atención. | El ticket queda registrado en la base de datos y aparece en la cola del área responsable en ≤ 3 s. |
+| US-02 | **P0** | Como **colaborador**, quiero **iniciar una conversación desde el chat integrado**, para comunicarme en tiempo real con el área responsable. | El mensaje enviado aparece en el panel del agente en ≤ 3 s y queda asociado a un ticket. |
+| US-03 | **P0** | Como **agente**, quiero **responder desde el panel de gestión**, para que el colaborador reciba actualizaciones en tiempo real sobre su solicitud. | La respuesta aparece en la vista del colaborador en ≤ 2 s y el ticket actualiza su estado correctamente. |
+| US-04 | **P1** | Como **colaborador**, quiero **adjuntar archivos o imágenes** a un ticket, para proporcionar evidencia o información adicional relacionada con mi solicitud. | El archivo se almacena en Amazon S3 y queda disponible desde la vista del ticket. |
+| US-05 | **P1** | Como **administrador**, quiero **configurar reglas de SLA y vencimiento de tickets**, para identificar solicitudes que no han sido atendidas dentro del tiempo esperado. | Un ticket sin respuesta dentro del SLA cambia su estado a *Vencido* y genera una alerta al responsable correspondiente. |
+| US-06 | **P1** | Como **administrador**, quiero **visualizar métricas y el estado general de los tickets**, para supervisar la carga operativa, el cumplimiento de SLA y el desempeño de las áreas responsables. | El sistema muestra indicadores actualizados de tickets abiertos, vencidos, resueltos y tiempos promedio de atención mediante un panel de monitoreo. |
+| US-07 | **P2** | Como **agente N1**, quiero **presionar *Escalar*** para que el ticket pase a Nivel 2, enviando una alerta prioritaria al equipo técnico, para no quedarme bloqueado y para que el caso llegue al equipo correcto. | El equipo N2 recibe la notificación vía SNS y asume la propiedad del ticket; queda evento en el timeline con la nota técnica del N1. |
 
 ---
 
