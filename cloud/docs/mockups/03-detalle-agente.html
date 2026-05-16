@@ -38,12 +38,12 @@
 <main class="page">
 
   <section class="page-hero">
-    <h1 class="tight">TKT-1042 · Mi transferencia interbancaria no aparece.</h1>
+    <h1 class="tight">TKT-1042 · No puedo acceder al sistema de facturación.</h1>
     <div style="display: flex; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap;">
       <span class="tag tag-state identified"><span class="dot"></span>En progreso</span>
       <span class="tag tag-sev2"><span class="dot"></span>Media</span>
-      <span class="tag tag-plain">Operaciones</span>
-      <span style="color: var(--ink-muted-48); font-size: 14px;">iniciado lun 15 may · 09:18 · age 1h 47m · canal: chat web</span>
+      <span class="tag tag-plain">Soporte técnico</span>
+      <span style="color: var(--ink-muted-48); font-size: 14px;">iniciado lun 15 may · 09:18 · age 1h 47m · canal: chat del portal interno</span>
     </div>
   </section>
 
@@ -54,8 +54,9 @@
         <li class="comm">
           <span class="ts">09:18</span>
           <span class="kind"><span class="dot"></span></span>
-          <div class="ev"><span class="by">Sebastián A.</span> (cliente) abrió chat con prioridad Media auto-asignada por palabras clave:
-            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Hola, hice una transferencia interbancaria hace 2 horas a una cuenta de otro banco y todavía no aparece como acreditada. ¿Pueden ayudarme?</div>
+          <div class="ev"><span class="by">Sebastián A.</span> (colaborador, Finanzas) abrió el chat con prioridad Media auto-asignada por palabras clave:
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Desde las 09:00 de hoy no logro entrar al sistema de facturación. Me sale un error "401 Unauthorized" después de ingresar usuario y contraseña. Adjunté la captura del error.</div>
+            <div style="margin-top: 8px; padding: 8px 12px; background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-sm); font-size: 13px; color: var(--ink-muted-48); display: inline-block;">📎 captura-error-facturacion.png · 214 KB</div>
           </div>
         </li>
         <li class="status">
@@ -67,34 +68,33 @@
           <span class="ts">09:24</span>
           <span class="kind"><span class="dot"></span></span>
           <div class="ev"><span class="by">María L.</span> (vos) respondiste:
-            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Hola Sebastián, gracias por escribir. Las transferencias interbancarias pueden tardar hasta 24 horas hábiles dependiendo del banco destino. ¿Me podés compartir el número de operación y el banco de destino?</div>
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Hola Sebastián, vi tu captura. El error 401 generalmente significa que la sesión del sistema de facturación expiró. Te voy a resetear el token, dame 5 minutos y volvé a intentar.</div>
           </div>
         </li>
         <li class="comm">
           <span class="ts">09:31</span>
           <span class="kind"><span class="dot"></span></span>
           <div class="ev"><span class="by">Sebastián A.</span> respondió:
-            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Número de operación: 88203401. Banco destino: Banco Nación. Adjunté el comprobante.</div>
-            <div style="margin-top: 8px; padding: 8px 12px; background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-sm); font-size: 13px; color: var(--ink-muted-48); display: inline-block;">📎 comprobante-transferencia.png · 84 KB</div>
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Probé y ahora me deja entrar pero me redirige a la pantalla de cambio de contraseña — ¿es esperado?</div>
           </div>
         </li>
         <li class="comm">
           <span class="ts">09:33</span>
           <span class="kind"><span class="dot"></span></span>
           <div class="ev"><span class="by">María L.</span> (vos) comentaste:
-            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Gracias. Estoy revisando el estado de la transferencia en nuestro sistema interno. Te aviso en unos minutos.</div>
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Sí, es esperado. El reset del token también fuerza el cambio de contraseña por política de seguridad. Cambiala y avisame si seguís pudiendo entrar después.</div>
           </div>
         </li>
         <li class="status">
           <span class="ts">09:34</span>
           <span class="kind"><span class="dot"></span></span>
-          <div class="ev"><span class="by">María L.</span> cambió el estado a <strong>Esperando cliente</strong>.</div>
+          <div class="ev"><span class="by">María L.</span> cambió el estado a <strong>Esperando colaborador</strong>.</div>
         </li>
       </ul>
 
       <div style="margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--hairline);">
         <label class="field-label" style="margin-bottom: 8px;">Agregar comentario</label>
-        <textarea class="textarea" rows="3" placeholder="Escribí tu respuesta al cliente..."></textarea>
+        <textarea class="textarea" rows="3" placeholder="Escribí tu respuesta al colaborador..."></textarea>
         <div class="btn-row" style="justify-content: space-between; margin-top: 14px;">
           <div class="btn-row">
             <button class="pill-ghost">Adjuntar</button>
@@ -109,10 +109,11 @@
       <article class="card side-card">
         <h3>Detalles del ticket</h3>
         <div class="kv-stack">
-          <div class="row"><span class="k">Cliente</span><span class="v">Sebastián A.</span></div>
-          <div class="row"><span class="k">Canal</span><span class="v">Chat web · Sesión w8f3</span></div>
+          <div class="row"><span class="k">Colaborador</span><span class="v">Sebastián A.</span></div>
+          <div class="row"><span class="k">Departamento</span><span class="v">Finanzas</span></div>
+          <div class="row"><span class="k">Canal</span><span class="v">Chat del portal interno</span></div>
           <div class="row"><span class="k">Asignado a</span><span class="v">María L. (vos)</span></div>
-          <div class="row"><span class="k">Categoría</span><span class="v">Operaciones</span></div>
+          <div class="row"><span class="k">Categoría</span><span class="v">Soporte técnico</span></div>
           <div class="row"><span class="k">Prioridad</span><span class="v">Media</span></div>
           <div class="row"><span class="k">SLA restante</span><span class="v" style="color: var(--ok); font-weight: 600;">3h 12m</span></div>
           <div class="row"><span class="k">Iniciado</span><span class="v">lun 15 may · 09:18</span></div>
@@ -136,8 +137,8 @@
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <div style="padding: 10px 12px; background: var(--pearl); border-radius: var(--r-sm); display: flex; align-items: center; gap: 10px; font-size: 13px;">
             <span style="font-size: 14px;">📎</span>
-            <span style="color: var(--ink); flex: 1;">comprobante-transferencia.png</span>
-            <span style="color: var(--ink-muted-48);">84 KB</span>
+            <span style="color: var(--ink); flex: 1;">captura-error-facturacion.png</span>
+            <span style="color: var(--ink-muted-48);">214 KB</span>
           </div>
         </div>
       </article>
@@ -146,8 +147,8 @@
   </div>
 
   <p class="mockup-caption" style="margin-top: 48px;">
-    <strong>3 · Detalle del ticket (vista agente, split-view).</strong> Conversación completa con el cliente en la columna principal; panel lateral con metadata y botones de acción (responder, reasignar, escalar, cerrar). El modal de escalamiento (mockup 4) aparece al hacer click en <em>Escalar a N2</em>.
-    <br>Cubre <strong>US-02</strong> (respuesta desde el panel).
+    <strong>3 · Detalle del ticket (vista agente, split-view).</strong> Conversación completa con el colaborador en la columna principal; panel lateral con metadata y botones de acción (responder, reasignar, escalar, cerrar). El modal de escalamiento (mockup 4) aparece al hacer click en <em>Escalar a N2</em>.
+    <br>Cubre <strong>US-03</strong> (respuesta desde el panel).
   </p>
 
 </main>

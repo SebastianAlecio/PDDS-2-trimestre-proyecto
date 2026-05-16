@@ -44,17 +44,18 @@ Términos que aparecen a lo largo del documento. Sirve como referencia.
 
 | Término | Qué es |
 |---|---|
-| **Widget de chat** | Pieza de UI flotante (típicamente en la esquina inferior derecha) que la empresa embebe en su página web. Permite al cliente conversar con soporte sin salir del sitio. |
-| **Agente** | Persona del equipo de soporte que atiende los tickets desde el panel web. Puede ser N1 (primera línea) o N2 (especialista). |
+| **Widget de chat** | Pieza de UI flotante (típicamente en la esquina inferior derecha) embebida en el portal interno de la empresa cliente. Permite al colaborador conversar con el área de soporte responsable sin salir del portal. |
+| **Colaborador** | Empleado de la empresa cliente que crea tickets y conversa con el área de soporte responsable. Tiene cuenta corporativa. |
+| **Agente** | Persona del equipo de soporte interno que atiende los tickets desde el panel web. Puede ser N1 (primera línea) o N2 (especialista). |
 | **N1 / N2** | Niveles de soporte. **N1** es el primer contacto y resuelve la mayoría de los casos básicos; **N2** es el equipo especializado al que se escalan los casos que N1 no puede resolver. |
 | **Cola de tickets** | Lista de todos los tickets activos que el equipo tiene pendientes de atender. Ordenada por prioridad y antigüedad. |
 | **SLA** | *Service Level Agreement.* Compromiso de tiempo en el que el equipo se compromete a responder o resolver. Ej.: "tickets de prioridad alta se responden en máx. 1 hora hábil". |
 | **Escalamiento** | Pasar el ticket al siguiente nivel (de N1 a N2, eventualmente al gerente) cuando el nivel actual no puede o no debe resolverlo. |
-| **WebSocket** | Conexión persistente bidireccional entre navegador y servidor que permite empujar mensajes en tiempo real sin que el cliente tenga que estar preguntando "¿hay algo nuevo?". |
-| **SSE** | *Server-Sent Events.* Mecanismo alternativo a WebSocket para que el servidor empuje mensajes al cliente, pero unidireccional (server → client). Más simple, menos potente. |
-| **Timeline** | Secuencia ordenada de eventos del ticket (mensaje del cliente, respuesta del agente, cambio de estado, adjunto, escalamiento). |
+| **WebSocket** | Conexión persistente bidireccional entre navegador y servidor que permite empujar mensajes en tiempo real sin que el cliente del navegador tenga que estar preguntando "¿hay algo nuevo?". |
+| **SSE** | *Server-Sent Events.* Mecanismo alternativo a WebSocket para que el servidor empuje mensajes al navegador, pero unidireccional (server → client). Más simple, menos potente. |
+| **Timeline** | Secuencia ordenada de eventos del ticket (mensaje del colaborador, respuesta del agente, cambio de estado, adjunto, escalamiento). |
 | **Watchdog** | Trabajo automático en segundo plano que revisa periódicamente si un ticket excedió su SLA sin respuesta y lo marca como *Vencido*. |
-| **Adjunto** | Archivo (imagen, documento) que el cliente o el agente sube al chat para dar contexto. Se guarda en un almacenamiento de objetos, no en la base de datos. |
+| **Adjunto** | Archivo (imagen, documento) que el colaborador o el agente sube al ticket para dar contexto. Se guarda en un almacenamiento de objetos, no en la base de datos. |
 
 ---
 
@@ -108,9 +109,9 @@ User stories en formato *"Como X, quiero Y, para Z"* con criterio de éxito expl
 
 Lo que diferencia a Ticke-T de un email genérico o un chat embebido de terceros:
 
-1. **Widget de chat en vivo propio.** Pieza embebible en cualquier página de la empresa, optimizada para cargar rápido y mantener la conversación en tiempo real vía WebSocket. Diseño minimal, sin frames de terceros, sin trackers externos.
-2. **Manejo seguro de anexos.** Las imágenes y archivos que el cliente sube por el chat viajan a S3 con URLs firmadas, desvinculando la base de datos del peso de los archivos. La BD solo guarda el puntero y la metadata.
-3. **Priorización por metadatos.** Asignación automática de severidad (Alta / Media / Baja) según palabras clave del primer mensaje (*"no funciona", "pago", "urgente"*) o según la categoría que el cliente elige antes de iniciar el chat. El agente puede ajustarla.
+1. **Widget de chat en vivo propio.** Pieza embebible en el portal interno de la empresa cliente, optimizada para cargar rápido y mantener la conversación en tiempo real vía WebSocket. Diseño minimal, sin frames de terceros, sin trackers externos.
+2. **Manejo seguro de anexos.** Las imágenes y archivos que el colaborador sube desde el formulario o el chat viajan a S3 con URLs firmadas, desvinculando la base de datos del peso de los archivos. La BD solo guarda el puntero y la metadata.
+3. **Priorización por metadatos.** Asignación automática de severidad (Alta / Media / Baja) según palabras clave del primer mensaje (*"bloqueado", "no funciona", "urgente"*) o según la categoría que el colaborador elige antes de crear el ticket o iniciar el chat. El agente puede ajustarla.
 4. **Temporizadores de inactividad (watchdogs).** Jobs de fondo que revisan constantemente si un agente dejó un ticket desatendido más allá del SLA. Afectan métricas individuales del agente y disparan alertas al gerente.
 
 ---
@@ -121,61 +122,61 @@ Lo que diferencia a Ticke-T de un email genérico o un chat embebido de terceros
 
 ### 6.1 · Login
 
-<img src="mockups/recordings/01-login.webp" width="100%" alt="Pantalla de login común para agentes y administradores">
+<img src="mockups/recordings/01-login.webp" width="100%" alt="Pantalla de login del portal interno">
 
-Acceso al panel para agentes y administradores. Los clientes finales no necesitan login — interactúan vía el widget directamente desde la página de la empresa.
-**Cubre:** entrada al sistema del lado del equipo de soporte.
+Acceso al portal para todos los roles del sistema: colaboradores (que crean tickets y conversan con soporte) y agentes/administradores (que atienden la cola). La autenticación es vía cuenta corporativa de la empresa cliente.
+**Cubre:** entrada al sistema; prerrequisito para todas las demás US.
 
 ### 6.2 · Cola de tickets (vista agente)
 
-<img src="mockups/recordings/02-cola-agente.webp" width="100%" alt="Cola de tickets del equipo de soporte">
+<img src="mockups/recordings/02-cola-agente.webp" width="100%" alt="Cola de tickets del equipo de soporte interno">
 
-Pantalla principal del agente al iniciar sesión: tabla tipo bandeja de entrada con ID, cliente, asunto (último mensaje), tiempo transcurrido, estado y prioridad con código de colores. Card de atención arriba con el ticket por vencer SLA. Filtros por estado, categoría, prioridad y agente.
-**Cubre:** US-04 (visualización de tickets vencidos) y soporta a todas las demás US como pantalla de entrada.
+Pantalla principal del agente al iniciar sesión: tabla tipo bandeja de entrada con ID, colaborador, asunto (último mensaje), tiempo transcurrido, estado y prioridad con código de colores. Card de atención arriba con el ticket por vencer SLA. Filtros por estado, categoría, prioridad y agente.
+**Cubre:** US-05 (visualización de tickets vencidos) y soporta a todas las demás US del agente como pantalla de entrada.
 
 ### 6.3 · Detalle del ticket (vista agente, split-view)
 
 <img src="mockups/recordings/03-detalle-agente.webp" width="100%" alt="Detalle del ticket con conversación a la izquierda y panel de acciones a la derecha">
 
-Vista split del ticket: a la izquierda, el historial completo de la conversación con el cliente en formato timeline; a la derecha, panel de metadatos (cliente, asignado a, categoría, prioridad, SLA restante) y botones de acción (responder, reasignar, escalar a N2, cerrar).
-**Cubre:** US-02 (respuesta desde el panel).
+Vista split del ticket: a la izquierda, el historial completo de la conversación con el colaborador en formato timeline; a la derecha, panel de metadatos (colaborador, asignado a, categoría, prioridad, SLA restante) y botones de acción (responder, reasignar, escalar a N2, cerrar).
+**Cubre:** US-03 (respuesta desde el panel).
 
 ### 6.4 · Modal de escalamiento
 
 <img src="mockups/recordings/04-modal-escalamiento.webp" width="100%" alt="Modal para escalar un ticket a Nivel 2">
 
-Ventana modal que aparece sobre la vista de detalle al hacer click en *Escalar a N2*. Pide al agente elegir el equipo destino (Aplicaciones core, Infraestructura, Bases de datos, Seguridad, Cumplimiento) y agregar una nota técnica obligatoria. Al confirmar, el ticket pasa a la cola del equipo destino y se publica un mensaje en SNS.
-**Cubre:** US-05.
+Ventana modal que aparece sobre la vista de detalle al hacer click en *Escalar a N2*. Pide al agente elegir el equipo destino (Aplicaciones core, Infraestructura, Bases de datos, Seguridad, Cumplimiento) y agregar una nota técnica obligatoria. Al confirmar, el ticket pasa a la cola del equipo destino y se publica una notificación al canal de alertas correspondiente.
+**Cubre:** US-07.
 
-### 6.5 · Widget de chat (vista cliente)
+### 6.5 · Widget de chat (vista colaborador)
 
-<img src="mockups/recordings/05-widget-cliente.webp" width="100%" alt="Widget de chat flotante en la página web de la empresa">
+<img src="mockups/recordings/05-widget-cliente.webp" width="100%" alt="Widget de chat flotante en el portal interno de la empresa cliente">
 
-Pieza embebible que vive en cualquier página de la empresa que contrata Ticke-T. El cliente la abre desde la esquina inferior, escribe su mensaje y mantiene la conversación con el agente en tiempo real. Acepta texto y adjuntos (imagen, PDF). Muestra el estado *"María está escribiendo…"* mientras el agente compone su respuesta.
-**Cubre:** US-01 (creación del ticket) y US-03 (adjuntar evidencias).
+Pieza embebible que vive en el portal interno de la empresa cliente que contrata Ticke-T. El colaborador la abre desde la esquina inferior, escribe su mensaje y mantiene la conversación con el agente en tiempo real. Acepta texto y adjuntos (imagen, PDF). Muestra el estado *"María está escribiendo…"* mientras el agente compone su respuesta.
+**Cubre:** US-02 (iniciar conversación desde el chat) y US-04 (adjuntar archivos).
 
 ### 6.6 · Dashboard de métricas (gerente)
 
-<img src="mockups/recordings/06-metricas-gerente.webp" width="100%" alt="Dashboard de métricas del equipo de soporte">
+<img src="mockups/recordings/06-metricas-gerente.webp" width="100%" alt="Dashboard de métricas del equipo de soporte interno">
 
 Vista ejecutiva con KPIs del período (tickets recibidos, resueltos, tiempo promedio de resolución, SLA cumplido), gráfico de pendientes vs resueltos para detectar picos, y desgloses por categoría y por agente. Filtros por categoría y agente cambian todos los gráficos a la vez.
-**Cubre:** gestión operativa del equipo (no es un user story explícito pero apoya US-04 y la detección de cuellos de botella).
+**Cubre:** US-06 (visualización de métricas y estado general).
 
 ---
 
 ## 7. Mapeo funcionalidad → componente del curso
 
-Cómo cada funcionalidad de Ticke-T ejercita los siete componentes que el curso evalúa en las entregas siguientes.
+Cómo cada funcionalidad de Ticke-T ejercita los siete componentes que el curso evalúa en las entregas siguientes. La columna *Cómo lo ejercita este proyecto* describe el comportamiento funcional, no la elección de servicio cloud — esa decisión llega en las entregas técnicas (E2 en adelante).
 
-| Componente del curso | Cómo lo ejercita este proyecto (funcionalidad) |
+| Componente del curso | Cómo lo ejercita este proyecto (ejemplos) |
 |---|---|
-| **Cómputo (API)** | Funciones serverless (AWS Lambda) detrás de API Gateway (REST + WebSocket). Los endpoints REST manejan login, lista de tickets, cambios de estado y carga de adjuntos. El WebSocket maneja el chat en tiempo real entre el widget y el panel del agente. Workers Lambda separados para el watchdog de SLA y los envíos a SNS. |
-| **Base de datos** | Instancia administrada (RDS Postgres o DynamoDB) que guarda el esquema con `tickets`, `mensajes`, `clientes`, `agentes`, `historial_de_estados` y `categorías`. Las relaciones son frecuentes (ticket → mensajes, ticket → cliente) lo que favorece relacional; la decisión final queda flaggeada en §9. |
-| **Almacenamiento de archivos** | Las capturas y archivos que el cliente sube por el chat se guardan como objetos en Amazon S3 con URLs firmadas y expiración corta. La BD solo guarda el key del objeto y su metadata. |
-| **Red** | VPC con subredes públicas para exponer la API/Frontend y subredes privadas para resguardar la base de datos sin acceso a internet directo. El bucket S3 se accede vía VPC endpoint para evitar tráfico inter-AZ por internet pública. |
-| **Procesamiento asíncrono** | Amazon SQS para la cola de tareas diferidas (envío de notificaciones, watchdog de SLA); Amazon SNS para el fan-out de alertas prioritarias al equipo N2 cuando se escala un ticket, sin bloquear el frontend. |
-| **Seguridad** | Políticas de IAM con roles estrictos que separan permisos de lectura y escritura entre clientes, agentes y administradores. URLs firmadas para los adjuntos con expiración corta. Encryption at rest en RDS y S3. Audit log de todos los cambios de estado de tickets. |
-| **Observabilidad** | Amazon CloudWatch para recolectar métricas RED por endpoint (Requests, Errors, Duration). Alarmas configuradas: si la tasa de errores del WebSocket supera 1%, si la cola de notificaciones SQS crece más allá de un umbral, si hay más de 10 tickets vencidos sin atender. |
+| **Cómputo (API)** | El endpoint que recibe los mensajes del widget de chat crea el ticket en la base de datos y lo empuja al panel del agente en tiempo real. |
+| **Base de datos** | Tickets con estado, prioridad, agente asignado y categoría; mensajes ligados al ticket en orden cronológico; queries por cola del agente, historial del colaborador y métricas agregadas del gerente. |
+| **Almacenamiento de archivos** | Imágenes y PDFs que el colaborador o el agente sube desde el formulario o el chat, separados de la metadata del ticket. |
+| **Red** | Capa pública (con autenticación) para el portal interno del colaborador y el panel del agente; capa privada para la base de datos y los workers de notificación. |
+| **Procesamiento asíncrono** | Watchdog que revisa cada pocos minutos los tickets sin respuesta y marca como *Vencido* los que excedieron su SLA; notificación al equipo N2 cuando un agente N1 escala un ticket. |
+| **Seguridad** | Solo el agente asignado (o uno con rol superior) puede ver y responder el ticket; auditoría de quién cambió el estado de qué ticket y cuándo. |
+| **Observabilidad** | Métrica: cantidad de tickets vencidos por SLA y tiempo promedio de primera respuesta por categoría. Alarma: si la tasa de errores del chat supera un umbral o si la cola de tickets sin asignar crece sostenidamente. |
 
 ---
 
@@ -183,20 +184,20 @@ Cómo cada funcionalidad de Ticke-T ejercita los siete componentes que el curso 
 
 ### IN — lo que el sistema SÍ hace
 
-- API REST + WebSocket para la recepción y envío de mensajes en tiempo real.
-- Widget de chat web propio embebible en la página de la empresa.
+- API REST + WebSocket para la creación de tickets vía formulario y la comunicación en tiempo real vía chat.
+- Formulario web y widget de chat en vivo propio embebidos en el portal interno de la empresa cliente.
 - Panel de agentes con cola filtrable, detalle split-view y conversación tipo timeline.
 - Almacenamiento seguro de imágenes y archivos adjuntos en S3.
 - Escalamiento asíncrono de casos de N1 a N2 con notificación prioritaria al equipo destino.
 - SLAs por nivel de prioridad con watchdog automático que marca tickets vencidos.
-- Roles diferenciados: cliente final (sin login), agente N1, agente N2, gerente/administrador.
+- Roles diferenciados: colaborador (con cuenta corporativa), agente N1, agente N2, gerente/administrador.
 - Métricas básicas del equipo y alarmas de infraestructura.
 
 ### OUT — lo que el sistema NO hace
 
-- **Integración con WhatsApp, redes sociales u otros canales de mensajería externa.** El canal único es el widget propio en la web de la empresa.
-- **Chatbot de IA conversacional complejo.** El sistema puede inferir categoría/prioridad por palabras clave, pero no responde automáticamente al cliente — siempre lo hace un agente humano.
-- **Integraciones de facturación.** Cobrar al cliente por usar el chat o cobrar a la empresa que contrata Ticke-T queda fuera del scope del MVP.
+- **Integración con WhatsApp, redes sociales u otros canales de mensajería externa.** Los canales únicos son el formulario y el widget de chat del portal interno.
+- **Chatbot de IA conversacional complejo.** El sistema puede inferir categoría/prioridad por palabras clave, pero no responde automáticamente al colaborador — siempre lo hace un agente humano.
+- **Integraciones de facturación.** Cobrar a la empresa cliente que contrata Ticke-T queda fuera del scope del MVP.
 
 ---
 
@@ -204,9 +205,9 @@ Cómo cada funcionalidad de Ticke-T ejercita los siete componentes que el curso 
 
 Decisiones técnicas que aún no tomamos. Conscientes y honestas — se cierran en las entregas correspondientes:
 
-- **Base de datos:** ¿RDS Postgres o DynamoDB? El esquema de mensajes de chat puede variar en estructura (algunos mensajes tienen adjuntos, otros no; algunos tienen metadata de geolocalización del cliente, otros no), lo que favorece DynamoDB. Pero los joins entre `tickets`, `clientes` y `agentes` para armar la cola del panel son naturales en SQL y costosos de simular en DynamoDB. Decisión en E2.
-- **Conexión persistente:** ¿WebSockets (vía API Gateway WebSocket API) o Server-Sent Events (SSE)? WebSocket es bidireccional y permite features como *"agente está escribiendo…"*; SSE es más simple y suficiente si solo el servidor empuja al cliente. Decisión en E3 cuando definamos la red.
-- **Identificación de invitados:** ¿cómo identificamos de manera única al cliente final si abre el chat como invitado (sin cuenta)? Opciones: cookie con UUID, fingerprint de navegador, email opcional al iniciar la conversación, o todas combinadas. Afecta cómo retomamos una conversación si el cliente cierra y vuelve a abrir la página.
+- **Base de datos:** ¿RDS Postgres o DynamoDB? El esquema de mensajes de chat puede variar en estructura (algunos mensajes tienen adjuntos, otros no; algunos tienen metadata del navegador del colaborador, otros no), lo que favorece DynamoDB. Pero los joins entre `tickets`, `colaboradores` y `agentes` para armar la cola del panel son naturales en SQL y costosos de simular en DynamoDB. Decisión en E2.
+- **Conexión persistente:** ¿WebSockets (vía API Gateway WebSocket API) o Server-Sent Events (SSE)? WebSocket es bidireccional y permite features como *"agente está escribiendo…"*; SSE es más simple y suficiente si solo el servidor empuja al navegador. Decisión en E3 cuando definamos la red.
+- **Autenticación de colaboradores:** ¿integramos Single Sign-On (SSO) con el directorio corporativo de cada empresa cliente (Active Directory, Okta, Google Workspace) o gestionamos cuentas propias dentro de Ticke-T? SSO reduce fricción para el colaborador y centraliza el offboarding cuando alguien deja la empresa, pero acopla nuestra implementación al modelo de identidad de cada cliente. Cuentas propias son más simples pero requieren onboarding manual y duplican la fuente de verdad de identidad.
 
 ---
 
@@ -220,7 +221,7 @@ Trabajamos con **Claude Code (Opus 4.7)** durante una sesión iterativa de defin
 2. **Segunda dirección — helpdesk empresarial enterprise.** La IA propuso un helpdesk corporativo con integraciones a AD/Okta, AI para auto-categorización, SSO complejo. Lo descartamos por estar sobreingenierado para un proyecto académico.
 3. **Tercera dirección — WhatsApp como canal de ingesta.** Diseñamos una versión que ingiere mensajes desde la API de WhatsApp Business de Meta vía webhooks. La descartamos por feasibility: la WhatsApp Cloud API requiere Business Verification, número WhatsApp Business y onboarding con Meta que no es viable con cuenta personal de AWS.
 4. **Cuarta dirección — formulario web + email.** Diseñamos una versión donde el solicitante creaba tickets desde un formulario web y la conversación viajaba por email. La descartamos porque perdía el atractivo de "experiencia controlada por la empresa" — el email es un canal genérico y rompe la sensación de soporte interactivo.
-5. **Versión final — Ticke-T con widget de chat en vivo propio.** Convergimos en un sistema autocontenido: una pieza embebible en la página de la empresa, comunicación en tiempo real vía WebSocket, sin canales externos, sin AI generativa, sin dependencias de terceros. Mantiene la simplicidad pedagógica del MVP y le da un argumento de venta concreto: "controlás el canal, controlás la experiencia".
+5. **Versión final — Ticke-T como SaaS interno con formulario + chat.** Convergimos en un sistema autocontenido: una plataforma de tickets internos con formulario y widget de chat embebidos en el portal corporativo de la empresa cliente, comunicación en tiempo real vía WebSocket, sin canales externos, sin AI generativa, sin dependencias de terceros. Mantiene la simplicidad pedagógica del MVP y le da un argumento de venta concreto: "centralizá las solicitudes internas, controlá la trazabilidad y los tiempos de respuesta del soporte".
 
 ### Qué descartamos y por qué
 
@@ -232,9 +233,8 @@ Trabajamos con **Claude Code (Opus 4.7)** durante una sesión iterativa de defin
 
 ### Qué aceptamos sin cambios sustanciales
 
-- **Estructura del documento.** Las 11 secciones (Resumen, Actores, Prioridades, US, Funcionalidades, Mockups, Mapeo, Scope, Preguntas abiertas, Anexo IA, Coordinación D1) las sugirió la IA y las mantuvimos.
-- **Mapeo a los componentes del curso.** Las elecciones de servicios AWS (Lambda + API Gateway con WebSocket, RDS o DynamoDB, S3, VPC, SQS+SNS, IAM, CloudWatch) las propuso la IA y las validamos como apropiadas para Ticke-T.
-- **Sistema de diseño Apple-language de los mockups.** El `styles.css` y la dirección visual (esquinas suaves, hairlines, paleta neutral con un único acento azul) se mantuvo de la iteración anterior.
+- **Estructura del documento.** Las 10 secciones (Resumen, Actores, Prioridades, US, Funcionalidades, Mockups, Mapeo, Scope, Preguntas abiertas, Anexo IA) las sugirió la IA y las mantuvimos.
+- **Sistema de diseño Apple-language de los mockups.** La paleta y la dirección visual (esquinas suaves, hairlines, paleta neutral con un único acento azul) la propuso la IA siguiendo un `design.md` como guía y la adoptamos como lenguaje único del proyecto.
 
 ### Cómo verificamos cada parte
 

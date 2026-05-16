@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Ticke-T · Widget de chat (vista cliente)</title>
+<title>Ticke-T · Widget de chat (vista colaborador)</title>
 <link rel="stylesheet" href="styles.css">
 <style>
-  /* Webpage simulada de la empresa cliente */
+  /* Portal interno simulado de la empresa cliente */
   .demo-site-header {
     background: var(--ink);
     color: var(--on-dark);
@@ -16,39 +16,61 @@
   }
   .demo-site-header .logo { font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
   .demo-site-header nav a { color: var(--body-muted); font-size: 14px; margin-left: 28px; }
+  .demo-site-header .who { display: inline-flex; align-items: center; gap: 10px; color: var(--body-muted); font-size: 14px; }
+  .demo-site-header .who .av { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.15); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--on-dark); }
+
   .demo-site-hero {
-    padding: 80px 48px;
-    text-align: center;
+    padding: 64px 48px 40px;
     background: linear-gradient(180deg, var(--parchment) 0%, var(--canvas) 100%);
-  }
-  .demo-site-hero h1 {
-    font-size: 56px;
-    line-height: 1.05;
-    letter-spacing: -0.025em;
-    margin-bottom: 16px;
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .demo-site-hero p {
-    font-size: 19px;
-    color: var(--ink-muted-48);
-    max-width: 560px;
+    max-width: 1180px;
     margin: 0 auto;
   }
+  .demo-site-hero h1 {
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin-bottom: 10px;
+  }
+  .demo-site-hero p {
+    font-size: 17px;
+    color: var(--ink-muted-48);
+    max-width: 640px;
+  }
+
   .demo-site-cards {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    gap: 20px;
+    padding: 0 48px 56px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .demo-site-cards .card { padding: 24px; }
+  .demo-site-cards .card h3 { font-size: 17px; margin-bottom: 6px; }
+  .demo-site-cards .card p { font-size: 13.5px; color: var(--ink-muted-48); line-height: 1.5; }
+  .demo-site-cards .card .lnk { display: inline-block; margin-top: 12px; font-size: 13px; color: var(--primary); font-weight: 500; }
+
+  .demo-site-news {
     padding: 0 48px 96px;
     max-width: 1180px;
     margin: 0 auto;
   }
-  .demo-site-cards .card {
-    padding: 28px;
+  .demo-site-news h2 {
+    font-size: 22px;
+    letter-spacing: -0.015em;
+    margin-bottom: 16px;
   }
-  .demo-site-cards .card h3 { font-size: 17px; margin-bottom: 8px; }
-  .demo-site-cards .card p { font-size: 14px; color: var(--ink-muted-48); line-height: 1.5; }
+  .demo-site-news ul { list-style: none; }
+  .demo-site-news li {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 14.5px;
+  }
+  .demo-site-news li:last-child { border-bottom: none; }
+  .demo-site-news .date { color: var(--ink-muted-48); font-size: 13px; min-width: 92px; }
 
   /* Widget flotante */
   .widget {
@@ -166,43 +188,60 @@
 </head>
 <body style="background: var(--canvas);">
 
-<!-- Página simulada de la empresa que tiene el widget instalado -->
+<!-- Portal interno simulado de la empresa que contrata Ticke-T -->
 <div class="demo-site-header">
-  <span class="logo">Acme Pagos</span>
+  <span class="logo">Acme Corp · Portal interno</span>
   <nav>
-    <a href="#">Productos</a>
-    <a href="#">Precios</a>
-    <a href="#">Documentación</a>
-    <a href="#">Ingresar</a>
+    <a href="#">Inicio</a>
+    <a href="#">Sistemas</a>
+    <a href="#">RRHH</a>
+    <a href="#">Beneficios</a>
+    <a href="#">Soporte</a>
   </nav>
+  <div class="who">
+    <span>Sebastián A. · Finanzas</span>
+    <span class="av">SA</span>
+  </div>
 </div>
 
 <section class="demo-site-hero">
-  <h1>Cobrá con tarjeta sin papelerío.</h1>
-  <p>Aceptá pagos online en minutos. Sin terminal POS, sin contrato, sin sorpresas en la liquidación.</p>
+  <h1>Buenos días, Sebastián.</h1>
+  <p>Tu equipo (Finanzas) tiene <strong>3 tickets activos</strong>. Tu último ticket se actualizó hace 14 minutos.</p>
 </section>
 
 <div class="demo-site-cards">
   <article class="card">
-    <h3>Liquidación al día siguiente</h3>
-    <p>Recibís el dinero en tu cuenta el día hábil siguiente al cobro, sin costos ocultos.</p>
+    <h3>Crear ticket</h3>
+    <p>Reportá un problema técnico, pedí un acceso o consultá a otra área.</p>
+    <a href="#" class="lnk">Abrir formulario →</a>
   </article>
   <article class="card">
-    <h3>Sin comisión por chargeback</h3>
-    <p>Si un cliente revierte un cargo, no pagás comisión adicional.</p>
+    <h3>Mis tickets</h3>
+    <p>3 activos · 8 resueltos en el último mes.</p>
+    <a href="#" class="lnk">Ver historial →</a>
   </article>
   <article class="card">
-    <h3>Soporte humano</h3>
-    <p>Hablás con una persona, no con un bot. 24×7 desde nuestro chat o por email.</p>
+    <h3>Sistemas y accesos</h3>
+    <p>Mirá las aplicaciones y permisos que tenés asignados.</p>
+    <a href="#" class="lnk">Ver mis accesos →</a>
   </article>
 </div>
 
-<!-- Chat widget flotante -->
+<section class="demo-site-news">
+  <h2>Novedades de la empresa</h2>
+  <ul>
+    <li><span class="date">jue 15 may</span> Nueva política de teletrabajo vigente desde el 1 de junio. <a href="#" style="color: var(--primary); margin-left: 6px;">Leer más</a></li>
+    <li><span class="date">mié 14 may</span> Mantenimiento programado del sistema de RRHH el sábado 20 de mayo de 02:00 a 05:00. <a href="#" style="color: var(--primary); margin-left: 6px;">Detalle</a></li>
+    <li><span class="date">lun 12 may</span> Capacitación obligatoria de Seguridad de la información — fecha límite 30 may. <a href="#" style="color: var(--primary); margin-left: 6px;">Inscribirme</a></li>
+  </ul>
+</section>
+
+<!-- Chat widget flotante (Ticke-T embebido) -->
 <div class="widget">
   <div class="widget-header">
     <div class="avatar">ML</div>
     <div>
-      <div class="title">Acme Pagos · Soporte</div>
+      <div class="title">Soporte TI · Acme Corp</div>
       <div class="status">María L. está en línea</div>
     </div>
     <div class="close">×</div>
@@ -210,24 +249,24 @@
 
   <div class="widget-body">
     <div class="msg agent">
-      Hola, soy María del equipo de soporte de Acme Pagos. ¿En qué te puedo ayudar hoy?
+      Hola Sebastián, soy María del equipo de Soporte TI. ¿En qué te puedo ayudar hoy?
       <span class="ts">09:18</span>
     </div>
     <div class="msg client">
-      Hola, hice una transferencia interbancaria hace 2 horas a una cuenta de otro banco y todavía no aparece como acreditada. ¿Pueden ayudarme?
+      Hola, desde las 09:00 no puedo entrar al sistema de facturación. Me sale un error "401 Unauthorized" después de ingresar usuario y contraseña.
       <span class="ts">09:18</span>
+      <div class="attachment">📎 captura-error-facturacion.png · 214 KB</div>
     </div>
     <div class="msg agent">
-      Gracias por escribir. Las transferencias interbancarias pueden tardar hasta 24 horas hábiles dependiendo del banco destino. ¿Me podés compartir el número de operación y el banco de destino?
+      Recibido, vi tu captura. El error 401 generalmente significa que la sesión expiró. Te voy a resetear el token, dame 5 minutos y volvé a intentar.
       <span class="ts">09:24</span>
     </div>
     <div class="msg client">
-      Número de operación: 88203401. Banco destino: Banco Nación.
+      Probé y ahora me deja entrar pero me redirige a cambio de contraseña, ¿es esperado?
       <span class="ts">09:31</span>
-      <div class="attachment">📎 comprobante-transferencia.png · 84 KB</div>
     </div>
     <div class="msg agent">
-      Recibido. Estoy revisando el estado en nuestro sistema, te aviso en unos minutos.
+      Sí, es esperado. Cambiala y avisame si seguís pudiendo entrar después.
       <span class="ts">09:33</span>
     </div>
   </div>
@@ -241,9 +280,9 @@
   </div>
 </div>
 
-<p class="mockup-caption" style="margin-top: 96px; padding: 0 48px 60px;">
-  <strong>5 · Widget de chat (vista cliente).</strong> Pieza embebible que vive en la página web de la empresa que contrata Ticke-T. El cliente lo abre desde la esquina inferior de cualquier página, inicia la conversación y la mantiene en tiempo real con el agente vía WebSocket. Acepta texto y adjuntos.
-  <br>Cubre <strong>US-01</strong> (creación de ticket desde el chat) y <strong>US-03</strong> (adjuntar evidencias).
+<p class="mockup-caption" style="margin-top: 40px; padding: 0 48px 60px;">
+  <strong>5 · Widget de chat (vista colaborador).</strong> Pieza embebida en el portal interno de la empresa cliente que contrata Ticke-T. El colaborador la abre desde la esquina inferior, escribe su mensaje y mantiene la conversación con el agente en tiempo real. Acepta texto y adjuntos (imagen, PDF). Muestra el estado <em>"María está escribiendo…"</em> mientras el agente compone su respuesta.
+  <br>Cubre <strong>US-02</strong> (iniciar conversación desde el chat) y <strong>US-04</strong> (adjuntar archivos).
 </p>
 
 </body>
