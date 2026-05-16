@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ticke-T · Métricas del equipo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="global-nav">
+  <span class="brand">Ticke-T</span>
+  <nav>
+    <a href="#">Producto</a>
+    <a href="#">Empresas</a>
+    <a href="#">Soporte</a>
+    <a href="#">Recursos</a>
+  </nav>
+  <div class="right">
+    <a href="#">Buscar</a>
+    <span class="icon-btn">FR</span>
+  </div>
+</header>
+
+<header class="sub-nav">
+  <span class="product">Soporte</span>
+  <nav>
+    <a href="#">Cola</a>
+    <a href="#">Mis tickets</a>
+    <a href="#" class="active">Métricas</a>
+    <a href="#">Configuración</a>
+  </nav>
+  <div class="who">
+    <span>Federico R. · gerente</span>
+    <span class="avatar">FR</span>
+  </div>
+</header>
+
+<main class="page">
+
+  <section class="page-hero">
+    <h1>Métricas del equipo.</h1>
+    <p class="lead">Vista ejecutiva de los últimos 30 días. Tickets de los 6 agentes activos del equipo de soporte.</p>
+    <div class="meta-row">
+      <div><span class="meta-k">Período</span><span class="meta-v">15 abr — 15 may 2026</span></div>
+      <div><span class="meta-k">Filtros</span><span class="meta-v">Todas las categorías · todos los agentes</span></div>
+    </div>
+  </section>
+
+  <!-- KPIs principales -->
+  <section class="kpi-row" style="margin-top: 40px;">
+    <article class="kpi">
+      <div class="label">Tickets recibidos</div>
+      <div class="value">412</div>
+      <div class="trend">+8% vs período anterior</div>
+    </article>
+    <article class="kpi">
+      <div class="label">Resueltos</div>
+      <div class="value">389</div>
+      <div class="trend">+11% vs período anterior</div>
+    </article>
+    <article class="kpi">
+      <div class="label">Activos ahora</div>
+      <div class="value">32</div>
+      <div class="trend dim">de los cuales 7 sin asignar</div>
+    </article>
+    <article class="kpi">
+      <div class="label">Tiempo promedio de resolución</div>
+      <div class="value">3h 42m</div>
+      <div class="trend">−14% vs período anterior</div>
+    </article>
+    <article class="kpi">
+      <div class="label">SLA cumplido</div>
+      <div class="value">94.2%</div>
+      <div class="trend warn">objetivo: 96%</div>
+    </article>
+    <article class="kpi">
+      <div class="label">Tickets vencidos</div>
+      <div class="value">9</div>
+      <div class="trend bad">+3 vs período anterior</div>
+    </article>
+  </section>
+
+  <!-- Bar chart: Pendientes vs Resueltos por día -->
+  <article class="card" style="margin-top: 40px; padding: 32px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px;">
+      <h2 style="font-size: 22px; letter-spacing: -0.015em;">Pendientes vs resueltos · últimos 14 días</h2>
+      <span style="font-size: 13px; color: var(--ink-muted-48);">Promedio diario: 28 abiertos / 26 resueltos</span>
+    </div>
+    <div class="bar-chart" style="height: 220px; display: grid; grid-template-columns: repeat(14, 1fr); gap: 12px; align-items: end;">
+      <div class="bar"><div class="b" style="height: 60%;"></div><div class="lab">02</div></div>
+      <div class="bar"><div class="b" style="height: 72%;"></div><div class="lab">03</div></div>
+      <div class="bar warn"><div class="b" style="height: 88%;"></div><div class="lab">04</div></div>
+      <div class="bar"><div class="b" style="height: 54%;"></div><div class="lab">05</div></div>
+      <div class="bar"><div class="b" style="height: 48%;"></div><div class="lab">06</div></div>
+      <div class="bar"><div class="b" style="height: 32%;"></div><div class="lab">07</div></div>
+      <div class="bar"><div class="b" style="height: 28%;"></div><div class="lab">08</div></div>
+      <div class="bar"><div class="b" style="height: 64%;"></div><div class="lab">09</div></div>
+      <div class="bar"><div class="b" style="height: 78%;"></div><div class="lab">10</div></div>
+      <div class="bar alarm"><div class="b" style="height: 96%;"></div><div class="lab">11</div></div>
+      <div class="bar"><div class="b" style="height: 70%;"></div><div class="lab">12</div></div>
+      <div class="bar"><div class="b" style="height: 66%;"></div><div class="lab">13</div></div>
+      <div class="bar"><div class="b" style="height: 58%;"></div><div class="lab">14</div></div>
+      <div class="bar"><div class="b" style="height: 52%;"></div><div class="lab">15</div></div>
+    </div>
+    <p style="font-size: 13px; color: var(--ink-muted-48); margin-top: 16px;">Los días en ámbar y rojo indican picos donde la entrada de tickets superó la capacidad del equipo (11 may por mantenimiento de pagos, 4 may por feriado).</p>
+  </article>
+
+  <!-- Two-col: Distribución por categoría + Top agentes -->
+  <div class="two-col" style="margin-top: 40px;">
+    <article class="card card-flush">
+      <div class="card-header">
+        <span class="title">Tickets por categoría</span>
+        <span class="meta">últimos 30 días</span>
+      </div>
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Categoría</th>
+            <th class="right">Recibidos</th>
+            <th class="right">Resueltos</th>
+            <th class="right">Tiempo promedio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="title">Fallos de pago</td>
+            <td class="right">124</td>
+            <td class="right">118</td>
+            <td class="right">2h 04m</td>
+          </tr>
+          <tr>
+            <td class="title">Cuentas y accesos</td>
+            <td class="right">98</td>
+            <td class="right">96</td>
+            <td class="right">1h 12m</td>
+          </tr>
+          <tr>
+            <td class="title">Operaciones</td>
+            <td class="right">87</td>
+            <td class="right">81</td>
+            <td class="right">4h 28m</td>
+          </tr>
+          <tr>
+            <td class="title">Información general</td>
+            <td class="right">63</td>
+            <td class="right">62</td>
+            <td class="right">0h 38m</td>
+          </tr>
+          <tr>
+            <td class="title">Otros</td>
+            <td class="right">40</td>
+            <td class="right">32</td>
+            <td class="right">5h 02m</td>
+          </tr>
+        </tbody>
+      </table>
+    </article>
+
+    <article class="card card-flush">
+      <div class="card-header">
+        <span class="title">Desempeño por agente</span>
+        <span class="meta">últimos 30 días</span>
+      </div>
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th class="right">Resueltos</th>
+            <th class="right">Promedio</th>
+            <th class="right">SLA</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="title">María L. <small>N1 · Soporte</small></td>
+            <td class="right">94</td>
+            <td class="right">2h 14m</td>
+            <td class="right" style="color: var(--ok); font-weight: 500;">98%</td>
+          </tr>
+          <tr>
+            <td class="title">Federico L. <small>N1 · Soporte</small></td>
+            <td class="right">81</td>
+            <td class="right">3h 02m</td>
+            <td class="right" style="color: var(--ok); font-weight: 500;">95%</td>
+          </tr>
+          <tr>
+            <td class="title">Carolina S. <small>N1 · Soporte</small></td>
+            <td class="right">76</td>
+            <td class="right">3h 38m</td>
+            <td class="right">93%</td>
+          </tr>
+          <tr>
+            <td class="title">Lucas P. <small>N2 · Aplicaciones</small></td>
+            <td class="right">52</td>
+            <td class="right">6h 41m</td>
+            <td class="right">91%</td>
+          </tr>
+          <tr>
+            <td class="title">Andrea V. <small>N2 · Infraestructura</small></td>
+            <td class="right">48</td>
+            <td class="right">5h 22m</td>
+            <td class="right" style="color: var(--sev2); font-weight: 500;">87%</td>
+          </tr>
+          <tr>
+            <td class="title">Joaquín M. <small>N1 · Soporte</small></td>
+            <td class="right">38</td>
+            <td class="right">4h 16m</td>
+            <td class="right" style="color: var(--sev1); font-weight: 500;">79%</td>
+          </tr>
+        </tbody>
+      </table>
+    </article>
+  </div>
+
+  <p class="mockup-caption" style="margin-top: 48px;">
+    <strong>6 · Dashboard de métricas (gerente).</strong> Vista ejecutiva con los KPIs principales del equipo en el período, gráfico de pendientes vs resueltos para detectar picos, y desgloses por categoría y por agente. Filtros por categoría y agente cambian todos los gráficos a la vez.
+    <br>Apoya la gestión operativa del gerente y la detección de cuellos de botella.
+  </p>
+
+</main>
+
+</body>
+</html>

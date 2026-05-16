@@ -24,4 +24,4 @@ cloud/
 
 ## Sub-dominio del proyecto
 
-Sistema de **gestión de incidentes de producción** para equipos SRE/DevOps. Ver `docs/project.md` §1.
+**Ticke-T** — Plataforma de gestión de tickets con widget de chat en vivo propio embebido en la página web de la empresa. Convierte cada conversación en un ticket auditable y permite al equipo de soporte trabajar en una bandeja compartida con SLAs por prioridad y escalamiento de N1 a N2. Ver `docs/project.md` §1.

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ticke-T · Detalle del ticket</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="global-nav">
+  <span class="brand">Ticke-T</span>
+  <nav>
+    <a href="#">Producto</a>
+    <a href="#">Empresas</a>
+    <a href="#">Soporte</a>
+    <a href="#">Recursos</a>
+  </nav>
+  <div class="right">
+    <a href="#">Buscar</a>
+    <span class="icon-btn">ML</span>
+  </div>
+</header>
+
+<header class="sub-nav">
+  <span class="product">Soporte</span>
+  <nav>
+    <a href="#">Cola</a>
+    <a href="#" class="active">Mis tickets</a>
+    <a href="#">Métricas</a>
+    <a href="#">Configuración</a>
+  </nav>
+  <div class="who">
+    <span>María L. · agente N1</span>
+    <span class="avatar live">ML</span>
+  </div>
+</header>
+
+<main class="page">
+
+  <section class="page-hero">
+    <h1 class="tight">TKT-1042 · Mi transferencia interbancaria no aparece.</h1>
+    <div style="display: flex; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap;">
+      <span class="tag tag-state identified"><span class="dot"></span>En progreso</span>
+      <span class="tag tag-sev2"><span class="dot"></span>Media</span>
+      <span class="tag tag-plain">Operaciones</span>
+      <span style="color: var(--ink-muted-48); font-size: 14px;">iniciado lun 15 may · 09:18 · age 1h 47m · canal: chat web</span>
+    </div>
+  </section>
+
+  <div class="two-col" style="margin-top: 40px;">
+
+    <article class="card" style="padding: 32px;">
+      <ul class="activity">
+        <li class="comm">
+          <span class="ts">09:18</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev"><span class="by">Sebastián A.</span> (cliente) abrió chat con prioridad Media auto-asignada por palabras clave:
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Hola, hice una transferencia interbancaria hace 2 horas a una cuenta de otro banco y todavía no aparece como acreditada. ¿Pueden ayudarme?</div>
+          </div>
+        </li>
+        <li class="status">
+          <span class="ts">09:21</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev">Sistema asignó el ticket a <span class="by">María L.</span> y cambió el estado a <strong>En progreso</strong>.</div>
+        </li>
+        <li class="comm">
+          <span class="ts">09:24</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev"><span class="by">María L.</span> (vos) respondiste:
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Hola Sebastián, gracias por escribir. Las transferencias interbancarias pueden tardar hasta 24 horas hábiles dependiendo del banco destino. ¿Me podés compartir el número de operación y el banco de destino?</div>
+          </div>
+        </li>
+        <li class="comm">
+          <span class="ts">09:31</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev"><span class="by">Sebastián A.</span> respondió:
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Número de operación: 88203401. Banco destino: Banco Nación. Adjunté el comprobante.</div>
+            <div style="margin-top: 8px; padding: 8px 12px; background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-sm); font-size: 13px; color: var(--ink-muted-48); display: inline-block;">📎 comprobante-transferencia.png · 84 KB</div>
+          </div>
+        </li>
+        <li class="comm">
+          <span class="ts">09:33</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev"><span class="by">María L.</span> (vos) comentaste:
+            <div style="margin-top: 10px; padding: 12px 14px; background: var(--pearl); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-muted-80);">Gracias. Estoy revisando el estado de la transferencia en nuestro sistema interno. Te aviso en unos minutos.</div>
+          </div>
+        </li>
+        <li class="status">
+          <span class="ts">09:34</span>
+          <span class="kind"><span class="dot"></span></span>
+          <div class="ev"><span class="by">María L.</span> cambió el estado a <strong>Esperando cliente</strong>.</div>
+        </li>
+      </ul>
+
+      <div style="margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--hairline);">
+        <label class="field-label" style="margin-bottom: 8px;">Agregar comentario</label>
+        <textarea class="textarea" rows="3" placeholder="Escribí tu respuesta al cliente..."></textarea>
+        <div class="btn-row" style="justify-content: space-between; margin-top: 14px;">
+          <div class="btn-row">
+            <button class="pill-ghost">Adjuntar</button>
+            <button class="pill-ghost">Nota interna</button>
+          </div>
+          <button class="pill-primary">Enviar</button>
+        </div>
+      </div>
+    </article>
+
+    <aside>
+      <article class="card side-card">
+        <h3>Detalles del ticket</h3>
+        <div class="kv-stack">
+          <div class="row"><span class="k">Cliente</span><span class="v">Sebastián A.</span></div>
+          <div class="row"><span class="k">Canal</span><span class="v">Chat web · Sesión w8f3</span></div>
+          <div class="row"><span class="k">Asignado a</span><span class="v">María L. (vos)</span></div>
+          <div class="row"><span class="k">Categoría</span><span class="v">Operaciones</span></div>
+          <div class="row"><span class="k">Prioridad</span><span class="v">Media</span></div>
+          <div class="row"><span class="k">SLA restante</span><span class="v" style="color: var(--ok); font-weight: 600;">3h 12m</span></div>
+          <div class="row"><span class="k">Iniciado</span><span class="v">lun 15 may · 09:18</span></div>
+          <div class="row"><span class="k">Última actividad</span><span class="v">hace 14m</span></div>
+        </div>
+      </article>
+
+      <article class="card side-card" style="margin-top: 16px;">
+        <h3>Acciones</h3>
+        <p>Cambiá el estado del ticket, reasignalo o escalalo a N2 si requiere conocimiento más profundo.</p>
+        <div class="btn-row" style="margin-top: 14px; flex-direction: column; align-items: stretch;">
+          <button class="pill-primary">Marcar como resuelto</button>
+          <button class="pill-ghost">Reasignar a otro agente</button>
+          <button class="pill-ghost">Escalar a N2</button>
+          <button class="pill-ghost">Cerrar sin resolución</button>
+        </div>
+      </article>
+
+      <article class="card side-card" style="margin-top: 16px;">
+        <h3>Adjuntos</h3>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="padding: 10px 12px; background: var(--pearl); border-radius: var(--r-sm); display: flex; align-items: center; gap: 10px; font-size: 13px;">
+            <span style="font-size: 14px;">📎</span>
+            <span style="color: var(--ink); flex: 1;">comprobante-transferencia.png</span>
+            <span style="color: var(--ink-muted-48);">84 KB</span>
+          </div>
+        </div>
+      </article>
+    </aside>
+
+  </div>
+
+  <p class="mockup-caption" style="margin-top: 48px;">
+    <strong>3 · Detalle del ticket (vista agente, split-view).</strong> Conversación completa con el cliente en la columna principal; panel lateral con metadata y botones de acción (responder, reasignar, escalar, cerrar). El modal de escalamiento (mockup 4) aparece al hacer click en <em>Escalar a N2</em>.
+    <br>Cubre <strong>US-02</strong> (respuesta desde el panel).
+  </p>
+
+</main>
+
+</body>
+</html>

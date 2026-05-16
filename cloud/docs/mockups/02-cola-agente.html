@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ticke-T · Cola de soporte</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="global-nav">
+  <span class="brand">Ticke-T</span>
+  <nav>
+    <a href="#">Producto</a>
+    <a href="#">Empresas</a>
+    <a href="#">Soporte</a>
+    <a href="#">Recursos</a>
+  </nav>
+  <div class="right">
+    <a href="#">Buscar</a>
+    <span class="icon-btn">ML</span>
+  </div>
+</header>
+
+<header class="sub-nav">
+  <span class="product">Soporte</span>
+  <nav>
+    <a href="#" class="active">Cola</a>
+    <a href="#">Mis tickets</a>
+    <a href="#">Métricas</a>
+    <a href="#">Configuración</a>
+  </nav>
+  <div class="who">
+    <span>María L. · agente N1</span>
+    <span class="avatar live">ML</span>
+  </div>
+</header>
+
+<main class="page">
+
+  <section class="page-hero">
+    <h1>Cola de soporte.</h1>
+    <p class="lead">Hay <strong>32 tickets activos</strong> en el equipo. Tenés <strong>7 asignados a vos</strong> y uno está por vencer su SLA en menos de quince minutos.</p>
+    <div class="meta-row">
+      <div><span class="meta-k">Asignados a vos</span><span class="meta-v">7</span></div>
+      <div><span class="meta-k">Sin asignar</span><span class="meta-v">4</span></div>
+      <div><span class="meta-k">Vencidos SLA</span><span class="meta-v">2</span></div>
+      <div><span class="meta-k">Resueltos hoy</span><span class="meta-v">11</span></div>
+    </div>
+  </section>
+
+  <article class="attention">
+    <span class="label"><span class="dot"></span>Por vencer SLA</span>
+    <div class="grid">
+      <div>
+        <h2>No se puede procesar pagos con tarjeta desde hace 45 minutos.</h2>
+        <p class="case-meta"><strong>TKT-1045</strong> · <span class="tag tag-sev1" style="vertical-align: 1px;"><span class="dot"></span>Alta</span> · Carlos R. (cliente) · age 47m</p>
+      </div>
+      <div class="countdown">
+        <div class="lab">SLA en</div>
+        <div class="clock">13:24</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="pill-primary">Tomar ticket</button>
+      <button class="pill-ghost">Reasignar</button>
+      <button class="pill-ghost">Abrir detalle</button>
+    </div>
+  </article>
+
+  <article class="card card-flush" style="margin-top: 32px;">
+    <div class="card-header">
+      <span class="title">Tickets activos</span>
+      <span class="meta">32 totales · filtros aplicados: estado activo · todos los agentes</span>
+    </div>
+
+    <div style="padding: 0 32px 18px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <span style="font-size: 13px; color: var(--ink-muted-48); margin-right: 6px;">Filtrar:</span>
+      <button class="pill-link" style="background: var(--ink); color: var(--on-dark); border-color: var(--ink);">Estado: activo</button>
+      <button class="pill-link">Categoría: todas</button>
+      <button class="pill-link">Prioridad: todas</button>
+      <button class="pill-link">Agente: todos</button>
+      <button class="pill-link">+ Filtro</button>
+    </div>
+
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th style="width: 100px;">ID</th>
+          <th>Asunto</th>
+          <th style="width: 140px;">Cliente</th>
+          <th style="width: 100px;">Prioridad</th>
+          <th style="width: 160px;">Estado</th>
+          <th style="width: 120px;">Asignado a</th>
+          <th style="width: 110px;" class="right">SLA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="id">TKT-1045</td>
+          <td class="title">No se puede procesar pagos con tarjeta desde hace 45 minutos <small>Categoría: Fallos de pago</small></td>
+          <td class="muted">Carlos R.</td>
+          <td><span class="tag tag-sev1"><span class="dot"></span>Alta</span></td>
+          <td><span class="tag tag-state identified"><span class="dot"></span>En progreso</span></td>
+          <td class="muted">Sin asignar</td>
+          <td class="right" style="color: var(--sev2); font-weight: 500;">13m</td>
+        </tr>
+        <tr>
+          <td class="id">TKT-1044</td>
+          <td class="title">Reseteo de contraseña del portal de clientes <small>Categoría: Cuentas</small></td>
+          <td class="muted">Lucía F.</td>
+          <td><span class="tag tag-sev2"><span class="dot"></span>Media</span></td>
+          <td><span class="tag tag-state identified"><span class="dot"></span>En progreso</span></td>
+          <td class="muted">María L.</td>
+          <td class="right">2h 41m</td>
+        </tr>
+        <tr>
+          <td class="id">TKT-1042</td>
+          <td class="title">Mi transferencia interbancaria no aparece en mi cuenta <small>Categoría: Operaciones</small></td>
+          <td class="muted">Sebastián A.</td>
+          <td><span class="tag tag-sev2"><span class="dot"></span>Media</span></td>
+          <td><span class="tag tag-state monitoring"><span class="dot"></span>Esperando cliente</span></td>
+          <td class="muted">María L.</td>
+          <td class="right">3h 12m</td>
+        </tr>
+        <tr style="background: rgba(217, 48, 37, 0.04);">
+          <td class="id">TKT-1038</td>
+          <td class="title">Solicitud de cierre de cuenta desde hace 4 días sin respuesta <small>Categoría: Cuentas</small></td>
+          <td class="muted">Andrés P.</td>
+          <td><span class="tag tag-sev2"><span class="dot"></span>Media</span></td>
+          <td><span class="tag tag-state outage"><span class="dot"></span>Vencido</span></td>
+          <td class="muted">Pendiente</td>
+          <td class="right" style="color: var(--sev1); font-weight: 600;">+1h 22m</td>
+        </tr>
+        <tr>
+          <td class="id">TKT-1036</td>
+          <td class="title">Consulta sobre comisiones de transferencias internacionales <small>Categoría: Información</small></td>
+          <td class="muted">Pablo G.</td>
+          <td><span class="tag tag-sev4"><span class="dot"></span>Baja</span></td>
+          <td><span class="tag tag-state identified"><span class="dot"></span>En progreso</span></td>
+          <td class="muted">Federico L.</td>
+          <td class="right">14h 06m</td>
+        </tr>
+        <tr>
+          <td class="id">TKT-1031</td>
+          <td class="title">¿Cómo activo la autenticación de dos factores en mi cuenta? <small>Categoría: Información</small></td>
+          <td class="muted">Sebastián A.</td>
+          <td><span class="tag tag-sev4"><span class="dot"></span>Baja</span></td>
+          <td><span class="tag tag-state monitoring"><span class="dot"></span>Esperando cliente</span></td>
+          <td class="muted">María L.</td>
+          <td class="right">22h 18m</td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+
+  <p class="mockup-caption" style="margin-top: 48px;">
+    <strong>2 · Cola del agente.</strong> Vista principal del agente al iniciar sesión: card de atención con el ticket por vencer SLA arriba, tabla filtrable con todos los tickets activos abajo. Las filas vencidas se destacan visualmente.
+    <br>Cubre <strong>US-02</strong> y parte de <strong>US-04</strong> (visualización de tickets vencidos en la cola).
+  </p>
+
+</main>
+
+</body>
+</html>
