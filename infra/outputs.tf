@@ -18,18 +18,12 @@ output "attachments_bucket_arn" {
   value       = module.storage.bucket_arn
 }
 
-output "db_endpoint" {
-  description = "Connection endpoint of the RDS instance in the form \"host:port\"."
-  value       = module.database.db_endpoint
-  sensitive   = true
+output "tickets_table_name" {
+  description = "Name of the DynamoDB tickets table."
+  value       = module.database.table_name
 }
 
-output "db_arn" {
-  description = "ARN of the RDS instance."
-  value       = module.database.db_arn
-}
-
-output "app_tier_security_group_id" {
-  description = "ID of the placeholder app tier security group. Future Lambda VPC configurations attach to this SG to reach the database."
-  value       = aws_security_group.app_tier.id
+output "tickets_table_arn" {
+  description = "ARN of the DynamoDB tickets table. Consumed by IAM policies that scope Lambda access in later deliveries."
+  value       = module.database.table_arn
 }

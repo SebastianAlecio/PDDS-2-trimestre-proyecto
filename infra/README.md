@@ -27,7 +27,7 @@ infra/
 ├── provider.tf            # Provider AWS + pinning de versiones (terraform, aws, random, archive)
 ├── variables.tf           # Variables de entrada con description, type y validation
 ├── outputs.tf             # Outputs cableados desde los outputs de los módulos
-├── main.tf                # Data sources VPC default, SG app_tier y llamadas a los tres módulos
+├── main.tf                # Llamadas a los tres módulos (compute, storage, database)
 ├── bootstrap/             # Workspace independiente: bucket S3 + tabla DynamoDB del state backend
 │   ├── provider.tf        # SIN backend block — bootstrap usa state local committeado
 │   ├── main.tf            # S3 bucket y DynamoDB table con prevent_destroy=true
@@ -37,7 +37,7 @@ infra/
 ├── modules/
 │   ├── compute/           # Lambda function + IAM execution role + CloudWatch log group
 │   ├── storage/           # S3 bucket con versioning, SSE, lifecycle scoped y bucket policy SSL-only
-│   └── database/          # RDS Postgres + subnet group + parameter group + security group
+│   └── database/          # DynamoDB table con SSE, PITR, GSI por status y TTL
 ├── envs/
 │   ├── dev/dev.tfvars     # Valores no-sensibles del ambiente dev (versionado)
 │   └── prod/              # Reservado para overrides de prod en deliveries posteriores
@@ -51,13 +51,13 @@ La separación en archivos (`provider.tf`, `variables.tf`, `outputs.tf`, `main.t
 
 ## Recursos provisionados
 
-A partir de Delivery 2 el workspace raíz instancia tres módulos reutilizables — `compute`, `storage` y `database` — más un security group de la *application tier* y los data sources de VPC default que alimentan al subnet group del RDS. La infraestructura sostiene el sistema **Ticke-T** descrito en `cloud/` (rama `cloud-delivery-1`): plataforma de tickets con widget de chat en vivo embebido en la página web de la empresa.
+A partir de Delivery 2 el workspace raíz instancia tres módulos reutilizables — `compute`, `storage` y `database`. La infraestructura sostiene el sistema **Ticke-T** descrito en `cloud/` (rama `cloud-delivery-1`): plataforma de tickets con widget de chat en vivo embebido en la página web de la empresa.
 
 | Módulo | Recurso principal | Hardening |
 |--------|-------------------|-----------|
 | `modules/compute` | `aws_lambda_function` `chat-message-handler-${env}` (Node.js 22.x, 128 MB) | IAM role con policy scoped al ARN exacto del CloudWatch log group (sin wildcards en `Resource`); log group precreado con retención configurable |
 | `modules/storage` | `aws_s3_bucket` `pdds-oyd-attachments-${env}-${random_hex}` | Versioning, SSE-S3, public access block (4 switches), bucket policy con Deny sobre `aws:SecureTransport=false`, lifecycle rule scoped al prefijo `attachments/` (adjuntos del chat) |
-| `modules/database` | `aws_db_instance` `pdds-oyd-db-${env}` (Postgres 17, `db.t4g.micro`, schema inicial `tickets`) | `storage_encrypted=true`, `publicly_accessible=false`, password vía variable sensitive sin default, SG dedicado con ingress restringido al SG de la application tier (no `0.0.0.0/0`) |
+| `modules/database` | `aws_dynamodb_table` `tickets-${env}` (single-table, PK `ticket_id` + SK `sk`) | `server_side_encryption.enabled=true` (AWS-owned KMS), `point_in_time_recovery.enabled=true`, `billing_mode=PAY_PER_REQUEST`, GSI `status-updated-at-index`, bloque `ttl` sobre el atributo `ttl`; sin endpoint público (acceso IAM-only) |
 
 El workspace separado `infra/bootstrap/` provisiona los recursos del state backend con `prevent_destroy=true`:
 
@@ -80,13 +80,10 @@ El bucket S3 de bootstrap de Delivery 1 fue reemplazado por estos recursos; el s
 | `attachments_bucket_name_prefix` | `string` | `"pdds-oyd-attachments"` | Prefijo del bucket S3 creado por el módulo storage |
 | `compute_function_name` | `string` | `"chat-message-handler"` | Base name del Lambda; el sufijo de environment lo agrega el módulo |
 | `compute_memory_size` | `number` | `128` | Memoria asignada al Lambda function |
-| `db_instance_class` | `string` | `"db.t4g.micro"` | Clase del RDS DB instance |
-| `db_multi_az` | `bool` | `false` | Standby sincrónico en segunda AZ; recomendable `true` en prod |
-| `db_backup_retention_period` | `number` | `1` | Días de retención de backups automáticos; el default honra el techo de AWS Free Tier |
-| `db_username` | `string` | `"tickets_admin"` | Usuario maestro del RDS (no es secreto) |
-| `db_password` | `string` (sensitive) | (sin default) | Password del usuario maestro; se inyecta vía `TF_VAR_db_password` |
+| `tickets_table_name` | `string` | `"tickets"` | Base name de la tabla DynamoDB; el sufijo de environment lo agrega el módulo |
+| `db_billing_mode` | `string` | `"PAY_PER_REQUEST"` | Modo de cobro de DynamoDB; on-demand para tráfico bursty, `PROVISIONED` cuando la capacity esté caracterizada |
 
-Los valores no-sensibles concretos por ambiente viven en `envs/<env>/<env>.tfvars`. El pipeline de CI consume `envs/dev/dev.tfvars`. La carpeta `envs/prod/` se mantiene vacía hasta que prod tenga sus propios overrides en deliveries posteriores.
+Los valores concretos por ambiente viven en `envs/<env>/<env>.tfvars`. El pipeline de CI consume `envs/dev/dev.tfvars`. La carpeta `envs/prod/` se mantiene vacía hasta que prod tenga sus propios overrides en deliveries posteriores.
 
 ## Outputs
 
@@ -98,9 +95,8 @@ Los valores no-sensibles concretos por ambiente viven en `envs/<env>/<env>.tfvar
 | `compute_function_name` | `string` | `module.compute` | `aws lambda invoke` y subscription filters |
 | `attachments_bucket_arn` | `string` | `module.storage` | IAM policies sobre el bucket de adjuntos |
 | `attachments_bucket_name` | `string` | `module.storage` | Application layer, verificaciones por CLI |
-| `db_arn` | `string` | `module.database` | IAM policies sobre el RDS |
-| `db_endpoint` | `string` (sensitive) | `module.database` | Connection string de la app layer |
-| `app_tier_security_group_id` | `string` | root | Lambdas en VPC en D3+ se unen a este SG para alcanzar el RDS |
+| `tickets_table_arn` | `string` | `module.database` | IAM policies scoped al ARN de la tabla (y `${arn}/index/*`) en deliveries posteriores |
+| `tickets_table_name` | `string` | `module.database` | Application layer, verificaciones por CLI |
 
 ## Estrategia de credenciales
 
@@ -116,7 +112,7 @@ En Delivery 5 las llaves de larga vida se reemplazan por federación OIDC (asunc
 - Las versiones de Terraform y providers están pinadas (`required_version = "~> 1.8"`, `aws ~> 5.0`, `random ~> 3.6`, `archive ~> 2.4`). El archivo `.terraform.lock.hcl` está versionado para reproducibilidad determinística.
 - A partir de Delivery 2 el state del workspace principal vive en un backend S3 (`pdds-oyd-tfstate-d0d13937`) con locking distribuido en DynamoDB (`pdds-oyd-tflock`). El bloque `backend "s3"` en `infra/backend.tf` usa valores hardcoded porque Terraform no permite variables ni locals dentro de un backend block.
 - El workspace `infra/bootstrap/` es el único que mantiene state local: gestiona el bucket y la tabla de lock que sostienen el state remoto del workspace principal, por lo que no puede vivir dentro de ese mismo state. Su `terraform.tfstate` está committeado al repo vía whitelist explícita en `.gitignore`.
-- Los archivos `*.tfvars` están gitignored por defecto (pueden contener secretos), con `dev.tfvars` whitelisted explícitamente porque CI y los graders dependen de él. La contraseña del RDS nunca aparece en archivos committeados — fluye por `TF_VAR_db_password` (env var local o GitHub Actions secret en CI).
+- Los archivos `*.tfvars` están gitignored por defecto (pueden contener secretos), con `dev.tfvars` whitelisted explícitamente porque CI y los graders dependen de él. Hoy `dev.tfvars` no contiene secretos — la única credencial sensible que fluía por el workspace era la contraseña del RDS, y con la migración a DynamoDB el acceso a la base de datos pasó a ser IAM-only (sin master credentials).
 
 ## Setup inicial (one-time)
 
@@ -156,17 +152,16 @@ gh api -X PUT repos/<org-or-user>/<repo-name>/collaborators/abner-perez -f permi
 
 ### 3. Cargar los secrets de GitHub Actions
 
-El workflow de CI consume cuatro secrets cifrados. Sin ellos, los steps `Configure AWS credentials` y `Terraform plan` fallan. Cargarlos una sola vez:
+El workflow de CI consume tres secrets cifrados. Sin ellos, el step `Configure AWS credentials` falla. Cargarlos una sola vez:
 
 ```bash
 gh secret set AWS_ACCESS_KEY_ID     --body "$(aws configure get aws_access_key_id)"
 gh secret set AWS_SECRET_ACCESS_KEY --body "$(aws configure get aws_secret_access_key)"
 gh secret set AWS_REGION            --body "us-east-1"
-gh secret set TF_VAR_DB_PASSWORD    --body "<password de dev del RDS>"
-gh secret list   # confirmar que aparecen los cuatro
+gh secret list   # confirmar que aparecen los tres
 ```
 
-Estos valores nunca se versionan ni se imprimen en logs — `aws-actions/configure-aws-credentials@v4` maskea las credenciales y `TF_VAR_db_password` viaja como env var a `terraform plan` sin aparecer en YAML, salida ni `terraform.tfstate` (almacenado encriptado en S3).
+Estos valores nunca se versionan ni se imprimen en logs — `aws-actions/configure-aws-credentials@v4` maskea las credenciales antes de exponerlas como variables de ambiente del runner.
 
 ### 4. Validar el pipeline con un PR
 
@@ -189,7 +184,7 @@ El pipeline de CI es la vía oficial de ejecución, pero el workspace soporta ej
 - `terraform fmt -check -recursive` — verifica el estilo HCL (mismo comando que ejecuta CI).
 - `terraform init` — configura el backend remoto S3 y descarga providers usando el lock file.
 - `terraform validate` — análisis estático del grafo, sin llamadas a la API.
-- `terraform plan -var-file=envs/dev/dev.tfvars` — plan completo contra AWS (requiere credenciales y `TF_VAR_db_password` en el ambiente).
+- `terraform plan -var-file=envs/dev/dev.tfvars` — plan completo contra AWS (requiere credenciales AWS en el ambiente).
 - `terraform apply -var-file=envs/dev/dev.tfvars` — aplica los cambios; el lock distribuido en DynamoDB evita corridas concurrentes.
 
 El workspace de bootstrap (`infra/bootstrap/`) tiene su propio flujo manual one-time documentado en `docs/delivery-2-summary.md` §3.
@@ -203,10 +198,10 @@ El workspace de bootstrap (`infra/bootstrap/`) tiene su propio flujo manual one-
 | 1 | `terraform fmt -check -recursive` | Sí |
 | 2 | `terraform init -input=false` (con backend S3) | Sí |
 | 3 | `terraform validate` | Sí |
-| 4 | `terraform plan -var-file=envs/dev/dev.tfvars` (con `TF_VAR_db_password` inyectada desde GitHub Actions secret) | Sí |
+| 4 | `terraform plan -var-file=envs/dev/dev.tfvars` | Sí |
 | 5 | Comentario en el PR con el output del plan colapsable | No |
 
-Permisos del workflow: `contents: read`, `pull-requests: write`. El último permiso es necesario únicamente para el step que postea el comentario. El secret `TF_VAR_DB_PASSWORD` debe estar cargado en GitHub Actions antes de abrir un PR; el plan falla en su ausencia.
+Permisos del workflow: `contents: read`, `pull-requests: write`. El último permiso es necesario únicamente para el step que postea el comentario.
 
 ## Evidence
 

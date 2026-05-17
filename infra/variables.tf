@@ -38,32 +38,14 @@ variable "compute_memory_size" {
   default     = 128
 }
 
-variable "db_instance_class" {
-  description = "RDS DB instance class for the database module."
+variable "tickets_table_name" {
+  description = "Base name of the DynamoDB tickets table. The environment suffix is appended inside the module."
   type        = string
-  default     = "db.t4g.micro"
+  default     = "tickets"
 }
 
-variable "db_multi_az" {
-  description = "Whether the RDS instance has a synchronous standby in a second AZ. False in dev to halve cost; true is recommended for prod."
-  type        = bool
-  default     = false
-}
-
-variable "db_backup_retention_period" {
-  description = "Days the RDS instance retains automated backups. Default 1 honors the AWS free-tier ceiling for dev accounts; raise to 7+ in prod."
-  type        = number
-  default     = 1
-}
-
-variable "db_username" {
-  description = "Master username for the RDS instance. Not a secret; lives in tfvars."
+variable "db_billing_mode" {
+  description = "Billing mode passed through to the database module. PAY_PER_REQUEST is the default; flip to PROVISIONED only after capacity is well understood."
   type        = string
-  default     = "tickets_admin"
-}
-
-variable "db_password" {
-  description = "Master password for the RDS instance. Sourced via TF_VAR_db_password (env var locally, GitHub Actions secret in CI). Must not appear in any committed file."
-  type        = string
-  sensitive   = true
+  default     = "PAY_PER_REQUEST"
 }
