@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ticke-T · Escalar a N2</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Background page (atenuada para destacar el modal) -->
+<div style="filter: blur(2px); opacity: 0.4; pointer-events: none;">
+  <header class="global-nav">
+    <span class="brand">Ticke-T</span>
+    <nav>
+      <a href="#">Producto</a>
+      <a href="#">Empresas</a>
+      <a href="#">Soporte</a>
+      <a href="#">Recursos</a>
+    </nav>
+    <div class="right">
+      <a href="#">Buscar</a>
+      <span class="icon-btn">ML</span>
+    </div>
+  </header>
+
+  <header class="sub-nav">
+    <span class="product">Soporte</span>
+    <nav>
+      <a href="#">Cola</a>
+      <a href="#" class="active">Mis tickets</a>
+      <a href="#">Métricas</a>
+      <a href="#">Configuración</a>
+    </nav>
+    <div class="who">
+      <span>María L. · agente N1</span>
+      <span class="avatar">ML</span>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="page-hero">
+      <h1 class="tight">TKT-1042 · No puedo acceder al sistema de facturación.</h1>
+      <div style="display: flex; align-items: center; gap: 14px; margin-top: 14px;">
+        <span class="tag tag-state identified"><span class="dot"></span>En progreso</span>
+        <span class="tag tag-sev2"><span class="dot"></span>Media</span>
+        <span class="tag tag-plain">Soporte técnico</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Modal overlay -->
+<div style="position: fixed; inset: 0; background: rgba(29, 29, 31, 0.5); display: grid; place-items: center; z-index: 100;">
+  <article class="card" style="max-width: 520px; width: calc(100% - 40px); padding: 36px 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+    <h2 style="font-size: 24px; letter-spacing: -0.015em; margin-bottom: 8px;">Escalar a N2</h2>
+    <p style="color: var(--ink-muted-48); font-size: 14px; margin-bottom: 28px; line-height: 1.5;">El ticket pasará a la cola del equipo elegido. Quedará evento en el timeline y el equipo destino recibirá una notificación prioritaria.</p>
+
+    <div class="field">
+      <label class="field-label">Equipo destino<span class="req">*</span></label>
+      <select class="select">
+        <option>— Elegí un equipo —</option>
+        <option>Infraestructura</option>
+        <option>Aplicaciones core</option>
+        <option selected>Identidad y accesos</option>
+        <option>Bases de datos</option>
+        <option>Seguridad de la información</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Nota técnica para el equipo<span class="req">*</span></label>
+      <textarea class="textarea" rows="4" placeholder="Explicá brevemente qué intentaste y por qué requiere N2...">El reset de token soluciona el síntoma para Sebastián A. (Finanzas), pero estoy recibiendo varios reportes similares de otros colaboradores del piso 3 esta mañana. Necesito que el equipo de Identidad revise si hubo un cambio reciente en el provider de auth corporativo (Okta/AD) o si los tokens de sesión están expirando antes de lo configurado.</textarea>
+    </div>
+
+    <div class="btn-row" style="justify-content: flex-end; margin-top: 8px;">
+      <button class="pill-ghost">Cancelar</button>
+      <button class="pill-primary">Escalar ticket</button>
+    </div>
+  </article>
+</div>
+
+<p class="mockup-caption" style="position: fixed; bottom: 20px; left: 20px; right: 20px; max-width: 900px; margin: 0 auto; background: var(--canvas); padding: 12px 18px; border-radius: var(--r-sm); border: 1px solid var(--hairline); z-index: 200;">
+  <strong>4 · Modal de escalamiento.</strong> Aparece sobre la vista de detalle del ticket cuando el agente N1 hace click en <em>Escalar a N2</em>. Equipo destino y nota técnica son obligatorios; al confirmar se notifica al equipo destino y queda registrado en el timeline.
+  Cubre <strong>US-07</strong>.
+</p>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ticke-T · Iniciar sesión</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="global-nav">
+  <span class="brand">Ticke-T</span>
+  <nav>
+    <a href="#">Producto</a>
+    <a href="#">Empresas</a>
+    <a href="#">Soporte</a>
+    <a href="#">Recursos</a>
+  </nav>
+  <div class="right">
+    <a href="#">Ayuda</a>
+  </div>
+</header>
+
+<main class="page" style="display: grid; place-items: center; padding-top: 80px; padding-bottom: 80px;">
+  <article class="card" style="max-width: 440px; width: 100%; padding: 48px 40px;">
+    <h1 style="font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 10px;">Iniciá sesión.</h1>
+    <p style="color: var(--ink-muted-48); font-size: 15px; line-height: 1.5; margin-bottom: 36px;">Entrá con tu cuenta corporativa para crear tickets o atender la cola del equipo de soporte.</p>
+
+    <form>
+      <div class="field">
+        <label class="field-label">Correo corporativo</label>
+        <input type="email" class="input" value="sebastian.alecio@empresa.com">
+      </div>
+
+      <div class="field">
+        <label class="field-label">Contraseña</label>
+        <input type="password" class="input" value="••••••••••">
+      </div>
+
+      <button type="submit" class="pill-primary lg" style="width: 100%; margin-top: 8px;">Continuar</button>
+    </form>
+
+    <div style="margin-top: 28px; text-align: center;">
+      <a href="#" class="text-link" style="font-size: 14px;">¿Olvidaste tu contraseña?</a>
+    </div>
+  </article>
+
+  <p class="mockup-caption">
+    <strong>1 · Login.</strong> Acceso común para solicitantes y agentes. El sistema infiere el rol desde la cuenta corporativa y redirige a la vista correspondiente.
+  </p>
+</main>
+
+</body>
+</html>
