@@ -231,14 +231,6 @@ Trabajamos con **Claude Code (Opus 4.7)** durante una sesión iterativa de defin
 - **Estructura del documento.** Las 10 secciones (Resumen, Actores, Prioridades, US, Funcionalidades, Mockups, Mapeo, Scope, Preguntas abiertas, Anexo IA) las sugirió la IA y las mantuvimos.
 - **Sistema de diseño Apple-language de los mockups.** La paleta y la dirección visual (esquinas suaves, hairlines, paleta neutral con un único acento azul) la propuso la IA siguiendo un `design.md` como guía y la adoptamos como lenguaje único del proyecto.
 
-### Cómo verificamos cada parte
-
-Política del curso: **cada miembro del equipo puede explicar cualquier parte del documento sin la IA presente.** Para asegurarlo:
-
-- Revisamos cada user story preguntándonos *"¿qué métrica concreta usamos para verificar que se cumplió?"* — vaguedades reescritas.
-- Cada mockup tiene una caption con qué cubre y por qué se ve así; si no podemos defenderla, rehacemos el mockup.
-- El glosario rápido de §1 cubre todos los términos técnicos que aparecen en el resto del documento.
-
 ### Aprendizaje sobre colaboración con IA
 
 La IA tuvo el reflejo correcto de aceptar pivotes cuando un dominio no funcionaba, en lugar de doblar la apuesta a la dirección original. Cada iteración cerró posibilidades que sabíamos no servían y nos acercó al diseño final. **La fricción útil de la IA es cuando te ofrece alternativas concretas en vez de insistir con la dirección inicial.** El descarte explícito de las versiones intermedias también nos enseñó qué evitar en el siguiente intento.
