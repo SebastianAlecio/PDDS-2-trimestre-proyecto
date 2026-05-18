@@ -68,11 +68,6 @@ Términos que aparecen a lo largo del documento. Sirve como referencia.
 - **Agente N2 / Especialista** *(actor secundario)* — recibe tickets escalados por N1 cuando requieren conocimiento más profundo (problemas de infraestructura, casos legales, excepciones financieras).
 - **Administrador / Gerente** *(actor secundario)* — supervisa al equipo. Ve métricas agregadas (tickets abiertos, tiempo promedio de resolución, distribución por categoría), gestiona accesos del equipo y audita los tickets vencidos.
 
-### Sistemas externos
-
-- **Almacenamiento de objetos** — guarda los adjuntos del chat (imágenes, PDFs) separados de la base de datos. Implementación: Amazon S3.
-- **Servicio de notificaciones** — empuja alertas prioritarias al equipo cuando se escala un ticket o cuando se vence un SLA. Implementación: Amazon SNS hacia email/Slack del equipo.
-
 ---
 
 ## 3. Niveles de prioridad
