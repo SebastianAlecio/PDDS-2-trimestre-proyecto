@@ -10,11 +10,12 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.4"
-    }
   }
+
+  # No backend block: this workspace manages the resources that host the remote
+  # state for the main workspace, so it must rely on local state. The
+  # terraform.tfstate file in this directory is committed to the repository
+  # alongside the Terraform code.
 }
 
 provider "aws" {
@@ -25,6 +26,7 @@ provider "aws" {
       Project     = var.project_name
       Environment = var.environment
       ManagedBy   = "Terraform"
+      Workspace   = "bootstrap"
     }
   }
 }

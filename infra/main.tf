@@ -1,34 +1,22 @@
-resource "random_id" "bucket_suffix" {
-  byte_length = 4
+module "compute" {
+  source = "./modules/compute"
+
+  environment = var.environment
+  name        = var.compute_function_name
+  memory_size = var.compute_memory_size
 }
 
-resource "aws_s3_bucket" "bootstrap" {
-  bucket = "${var.bucket_name_prefix}-${var.environment}-${random_id.bucket_suffix.hex}"
+module "storage" {
+  source = "./modules/storage"
+
+  environment        = var.environment
+  bucket_name_prefix = var.attachments_bucket_name_prefix
 }
 
-resource "aws_s3_bucket_versioning" "bootstrap" {
-  bucket = aws_s3_bucket.bootstrap.id
+module "database" {
+  source = "./modules/database"
 
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "bootstrap" {
-  bucket = aws_s3_bucket.bootstrap.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "bootstrap" {
-  bucket = aws_s3_bucket.bootstrap.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  environment  = var.environment
+  name         = var.tickets_table_name
+  billing_mode = var.db_billing_mode
 }

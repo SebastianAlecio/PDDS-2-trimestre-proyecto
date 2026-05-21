@@ -20,13 +20,32 @@ variable "region" {
   default     = "us-east-1"
 }
 
-variable "bucket_name_prefix" {
-  description = "Prefix for the bootstrap S3 bucket. A random suffix is appended to guarantee global uniqueness."
+variable "attachments_bucket_name_prefix" {
+  description = "Prefix for the attachments bucket created by the storage module. A random suffix is appended for global uniqueness."
   type        = string
-  default     = "pdds-oyd-bootstrap"
+  default     = "pdds-oyd-attachments"
+}
 
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$", var.bucket_name_prefix))
-    error_message = "bucket_name_prefix must be 3-42 lowercase chars: letters, digits, or hyphens; cannot start or end with a hyphen."
-  }
+variable "compute_function_name" {
+  description = "Base name of the Lambda function deployed by the compute module. The environment suffix is appended inside the module. In Ticke-T this function will sit behind API Gateway as the chat message handler (D3+)."
+  type        = string
+  default     = "chat-message-handler"
+}
+
+variable "compute_memory_size" {
+  description = "Memory allocation in MB for the Lambda function."
+  type        = number
+  default     = 128
+}
+
+variable "tickets_table_name" {
+  description = "Base name of the DynamoDB tickets table. The environment suffix is appended inside the module."
+  type        = string
+  default     = "tickets"
+}
+
+variable "db_billing_mode" {
+  description = "Billing mode passed through to the database module. PAY_PER_REQUEST is the default; flip to PROVISIONED only after capacity is well understood."
+  type        = string
+  default     = "PAY_PER_REQUEST"
 }
