@@ -13,8 +13,11 @@ El objetivo final del proyecto es un pipeline idempotente que, partiendo de cero
 |------|-------|-----------|
 | `infra/` | OYD | Workspace raíz de Terraform, módulos, ambientes y documentación técnica |
 | `.github/workflows/` | OYD | Definiciones de pipelines de CI/CD |
+| `cloud/` | IELN | Workspace raíz con la documentación sobre el proyecto que se desplagará en la infraestructura en la nube |
 
-La documentación técnica del workspace y el pipeline está en [`infra/README.md`](infra/README.md). Los resúmenes por entrega están en `infra/docs/`. La evidencia de ejecución del CI por entrega vive en cada `infra/docs/delivery-N-summary.md`.
+**Optimización y Desempeño**: La documentación técnica del workspace y el pipeline está en [`infra/README.md`](infra/README.md). Los resúmenes por entrega están en `infra/docs/`. La evidencia de ejecución del CI por entrega vive en cada `infra/docs/delivery-N-summary.md`.
+
+**Infraestructura en la Nube**: La documentación técnica del proyecto se encuentra en [`cloud/README.md`](cloud/README.md). Los resumenes por entrega están en `cloud/docs/`.
 
 ## Equipo — Grupo 3
 
