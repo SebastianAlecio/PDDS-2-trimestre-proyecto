@@ -64,3 +64,21 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "environment_variables" {
+  description = "Map of environment variables exposed to the Lambda function at runtime. Empty map means no environment block is emitted."
+  type        = map(string)
+  default     = {}
+}
+
+variable "dynamodb_table_arn" {
+  description = "ARN of a DynamoDB table that the Lambda role should be granted PutItem access on. Read by the policy when attach_dynamodb_policy = true. Includes the table's GSI ARNs (\"$${arn}/index/*\") so future Query calls don't require a Terraform change."
+  type        = string
+  default     = ""
+}
+
+variable "attach_dynamodb_policy" {
+  description = "Whether to attach the DynamoDB access policy to the Lambda role. Must be a static value so Terraform can plan when dynamodb_table_arn references a resource that may be replaced."
+  type        = bool
+  default     = false
+}

@@ -1,0 +1,163 @@
+{
+    "Items": [
+        {
+            "updated_at": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "categoria": {
+                "S": "incidente"
+            },
+            "PK": {
+                "S": "TICKET#3527cf28-9901-4191-a105-23a037a0b7b4"
+            },
+            "prioridad": {
+                "S": "alta"
+            },
+            "ticket_id": {
+                "S": "3527cf28-9901-4191-a105-23a037a0b7b4"
+            },
+            "GSI1-PK": {
+                "S": "USER#USR-001"
+            },
+            "descripcion": {
+                "S": "No puedo entrar al portal interno, sale error 401 desde las 09:00"
+            },
+            "area": {
+                "S": "IT"
+            },
+            "GSI4-PK": {
+                "S": "STATUS#Abierto"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "created_at": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "solicitante": {
+                "M": {
+                    "area": {
+                        "S": "Finanzas"
+                    },
+                    "nombre": {
+                        "S": "Sebastian A."
+                    },
+                    "user_id": {
+                        "S": "USR-001"
+                    },
+                    "correo": {
+                        "S": "sebastian@empresa.com"
+                    }
+                }
+            },
+            "fecha_limite": {
+                "S": "2026-05-23T06:39:46.844Z"
+            },
+            "adjuntos": {
+                "L": []
+            },
+            "responsable": {
+                "S": "Sin asignar"
+            },
+            "titulo": {
+                "S": "Acceso bloqueado al portal"
+            },
+            "GSI4-SK": {
+                "S": "PRIO#alta#2026-05-23T05:39:46.844Z"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "sla_etiqueta": {
+                "S": "1 hora hábil"
+            }
+        },
+        {
+            "solicitante": {
+                "M": {
+                    "area": {
+                        "S": "Legal"
+                    },
+                    "nombre": {
+                        "S": "Maria L."
+                    },
+                    "user_id": {
+                        "S": "USR-002"
+                    },
+                    "correo": {
+                        "S": "maria@empresa.com"
+                    }
+                }
+            },
+            "area": {
+                "S": "Finanzas"
+            },
+            "categoria": {
+                "S": "incidente"
+            },
+            "descripcion": {
+                "S": "El sistema de facturacion no responde desde hace 30 minutos"
+            },
+            "prioridad": {
+                "S": "alta"
+            },
+            "updated_at": {
+                "S": "2026-05-23T05:40:08.963Z"
+            },
+            "titulo": {
+                "S": "Caida del sistema de facturacion"
+            },
+            "fecha_limite": {
+                "S": "2026-05-23T06:40:08.963Z"
+            },
+            "GSI4-PK": {
+                "S": "STATUS#Abierto"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:40:08.963Z"
+            },
+            "adjuntos": {
+                "L": []
+            },
+            "GSI4-SK": {
+                "S": "PRIO#alta#2026-05-23T05:40:08.963Z"
+            },
+            "responsable": {
+                "S": "Sin asignar"
+            },
+            "PK": {
+                "S": "TICKET#6eb68887-07fc-4142-ae71-1bc33884b53b"
+            },
+            "GSI1-PK": {
+                "S": "USER#USR-002"
+            },
+            "ticket_id": {
+                "S": "6eb68887-07fc-4142-ae71-1bc33884b53b"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            },
+            "created_at": {
+                "S": "2026-05-23T05:40:08.963Z"
+            },
+            "sla_etiqueta": {
+                "S": "1 hora hábil"
+            }
+        }
+    ],
+    "Count": 2,
+    "ScannedCount": 2,
+    "ConsumedCapacity": null
+}

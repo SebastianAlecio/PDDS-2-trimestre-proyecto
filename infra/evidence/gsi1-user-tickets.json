@@ -1,0 +1,163 @@
+{
+    "Items": [
+        {
+            "area": {
+                "S": "IT"
+            },
+            "responsable": {
+                "S": "Sin asignar"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "titulo": {
+                "S": "Acceso bloqueado al portal"
+            },
+            "GSI4-SK": {
+                "S": "PRIO#alta#2026-05-23T05:39:46.844Z"
+            },
+            "created_at": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "PK": {
+                "S": "TICKET#3527cf28-9901-4191-a105-23a037a0b7b4"
+            },
+            "GSI1-PK": {
+                "S": "USER#USR-001"
+            },
+            "ticket_id": {
+                "S": "3527cf28-9901-4191-a105-23a037a0b7b4"
+            },
+            "solicitante": {
+                "M": {
+                    "area": {
+                        "S": "Finanzas"
+                    },
+                    "nombre": {
+                        "S": "Sebastian A."
+                    },
+                    "user_id": {
+                        "S": "USR-001"
+                    },
+                    "correo": {
+                        "S": "sebastian@empresa.com"
+                    }
+                }
+            },
+            "prioridad": {
+                "S": "alta"
+            },
+            "sla_etiqueta": {
+                "S": "1 hora hábil"
+            },
+            "updated_at": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "GSI4-PK": {
+                "S": "STATUS#Abierto"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "adjuntos": {
+                "L": []
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            },
+            "categoria": {
+                "S": "incidente"
+            },
+            "descripcion": {
+                "S": "No puedo entrar al portal interno, sale error 401 desde las 09:00"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "fecha_limite": {
+                "S": "2026-05-23T06:39:46.844Z"
+            }
+        },
+        {
+            "created_at": {
+                "S": "2026-05-23T05:40:04.282Z"
+            },
+            "area": {
+                "S": "IT"
+            },
+            "responsable": {
+                "S": "Sin asignar"
+            },
+            "fecha_limite": {
+                "S": "2026-05-23T09:40:04.282Z"
+            },
+            "categoria": {
+                "S": "solicitud"
+            },
+            "descripcion": {
+                "S": "Mi contraseña corporativa vence manana, necesito renovarla por anticipado"
+            },
+            "PK": {
+                "S": "TICKET#67eecd71-dd36-4f0a-ba82-76e434d069b1"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:40:04.282Z"
+            },
+            "GSI1-PK": {
+                "S": "USER#USR-001"
+            },
+            "updated_at": {
+                "S": "2026-05-23T05:40:04.282Z"
+            },
+            "solicitante": {
+                "M": {
+                    "area": {
+                        "S": "Finanzas"
+                    },
+                    "nombre": {
+                        "S": "Sebastian A."
+                    },
+                    "user_id": {
+                        "S": "USR-001"
+                    },
+                    "correo": {
+                        "S": "sebastian@empresa.com"
+                    }
+                }
+            },
+            "titulo": {
+                "S": "Cambio de contraseña vence"
+            },
+            "prioridad": {
+                "S": "media"
+            },
+            "sla_etiqueta": {
+                "S": "4 horas hábiles"
+            },
+            "GSI4-PK": {
+                "S": "STATUS#Abierto"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "adjuntos": {
+                "L": []
+            },
+            "GSI4-SK": {
+                "S": "PRIO#media#2026-05-23T05:40:04.282Z"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "ticket_id": {
+                "S": "67eecd71-dd36-4f0a-ba82-76e434d069b1"
+            }
+        }
+    ],
+    "Count": 2,
+    "ScannedCount": 2,
+    "ConsumedCapacity": null
+}

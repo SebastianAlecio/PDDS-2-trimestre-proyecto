@@ -1,0 +1,67 @@
+{
+    "Items": [
+        {
+            "ticket_id": {
+                "S": "45914f92-f284-42b0-8284-98e09a068fe6"
+            },
+            "sla_label": {
+                "S": "1 hora hábil"
+            },
+            "created_at": {
+                "S": "2026-05-23T04:53:09.693Z"
+            },
+            "responsible": {
+                "S": "Sin asignar"
+            },
+            "status": {
+                "S": "Abierto"
+            },
+            "priority": {
+                "S": "alta"
+            },
+            "attachments": {
+                "L": []
+            },
+            "updated_at": {
+                "S": "2026-05-23T04:53:09.693Z"
+            },
+            "area": {
+                "S": "IT"
+            },
+            "due_at": {
+                "S": "2026-05-23T05:53:09.693Z"
+            },
+            "category": {
+                "S": "incidente"
+            },
+            "sk": {
+                "S": "METADATA"
+            },
+            "description": {
+                "S": "Probando que el ticket se guarde en la tabla tickets-dev desde la Lambda."
+            },
+            "requester": {
+                "M": {
+                    "name": {
+                        "S": "Sebastian A."
+                    },
+                    "area": {
+                        "S": "Finanzas"
+                    },
+                    "user_id": {
+                        "S": "USR-001"
+                    },
+                    "email": {
+                        "S": "sebastian@empresa.com"
+                    }
+                }
+            },
+            "title": {
+                "S": "Prueba de integracion con DynamoDB"
+            }
+        }
+    ],
+    "Count": 1,
+    "ScannedCount": 1,
+    "ConsumedCapacity": null
+}
