@@ -56,8 +56,36 @@ resource "aws_lambda_function" "this" {
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
 
+  dynamic "environment" {
+    for_each = length(var.environment_variables) > 0 ? [1] : []
+    content {
+      variables = var.environment_variables
+    }
+  }
+
   depends_on = [
     aws_cloudwatch_log_group.lambda,
     aws_iam_role_policy.lambda_logs,
   ]
+}
+
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  count = var.attach_dynamodb_policy ? 1 : 0
+
+  name = "${local.function_name}-dynamodb"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:PutItem",
+      ]
+      Resource = [
+        var.dynamodb_table_arn,
+        "${var.dynamodb_table_arn}/index/*",
+      ]
+    }]
+  })
 }

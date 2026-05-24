@@ -1,0 +1,67 @@
+{
+    "Items": [
+        {
+            "PK": {
+                "S": "TICKET#3527cf28-9901-4191-a105-23a037a0b7b4"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:39:46.844Z"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            },
+            "titulo": {
+                "S": "Acceso bloqueado al portal"
+            }
+        },
+        {
+            "PK": {
+                "S": "TICKET#67eecd71-dd36-4f0a-ba82-76e434d069b1"
+            },
+            "SK": {
+                "S": "METADATA"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "titulo": {
+                "S": "Cambio de contraseña vence"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:40:04.282Z"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            }
+        },
+        {
+            "SK": {
+                "S": "METADATA"
+            },
+            "estado": {
+                "S": "Abierto"
+            },
+            "fecha_inicio": {
+                "S": "2026-05-23T05:40:08.963Z"
+            },
+            "titulo": {
+                "S": "Caida del sistema de facturacion"
+            },
+            "PK": {
+                "S": "TICKET#6eb68887-07fc-4142-ae71-1bc33884b53b"
+            },
+            "GSI3-PK": {
+                "S": "TICKETS"
+            }
+        }
+    ],
+    "Count": 3,
+    "ScannedCount": 3,
+    "ConsumedCapacity": null
+}

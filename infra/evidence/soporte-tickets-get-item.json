@@ -1,0 +1,80 @@
+{
+    "Item": {
+        "ticket_id": {
+            "S": "3527cf28-9901-4191-a105-23a037a0b7b4"
+        },
+        "created_at": {
+            "S": "2026-05-23T05:39:46.844Z"
+        },
+        "sla_etiqueta": {
+            "S": "1 hora hábil"
+        },
+        "prioridad": {
+            "S": "alta"
+        },
+        "GSI4-PK": {
+            "S": "STATUS#Abierto"
+        },
+        "GSI1-PK": {
+            "S": "USER#USR-001"
+        },
+        "GSI3-PK": {
+            "S": "TICKETS"
+        },
+        "categoria": {
+            "S": "incidente"
+        },
+        "titulo": {
+            "S": "Acceso bloqueado al portal"
+        },
+        "fecha_limite": {
+            "S": "2026-05-23T06:39:46.844Z"
+        },
+        "estado": {
+            "S": "Abierto"
+        },
+        "fecha_inicio": {
+            "S": "2026-05-23T05:39:46.844Z"
+        },
+        "updated_at": {
+            "S": "2026-05-23T05:39:46.844Z"
+        },
+        "responsable": {
+            "S": "Sin asignar"
+        },
+        "adjuntos": {
+            "L": []
+        },
+        "descripcion": {
+            "S": "No puedo entrar al portal interno, sale error 401 desde las 09:00"
+        },
+        "solicitante": {
+            "M": {
+                "area": {
+                    "S": "Finanzas"
+                },
+                "nombre": {
+                    "S": "Sebastian A."
+                },
+                "user_id": {
+                    "S": "USR-001"
+                },
+                "correo": {
+                    "S": "sebastian@empresa.com"
+                }
+            }
+        },
+        "area": {
+            "S": "IT"
+        },
+        "GSI4-SK": {
+            "S": "PRIO#alta#2026-05-23T05:39:46.844Z"
+        },
+        "PK": {
+            "S": "TICKET#3527cf28-9901-4191-a105-23a037a0b7b4"
+        },
+        "SK": {
+            "S": "METADATA"
+        }
+    }
+}
