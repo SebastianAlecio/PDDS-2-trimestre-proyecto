@@ -20,3 +20,10 @@ module "database" {
   name         = var.tickets_table_name
   billing_mode = var.db_billing_mode
 }
+
+module "security" {
+  source = "./modules/security"
+
+  environment = var.environment
+  name        = var.cognito_name
+}

@@ -49,3 +49,9 @@ variable "db_billing_mode" {
   type        = string
   default     = "PAY_PER_REQUEST"
 }
+
+variable "cognito_name" {
+  description = "Base name of the Cognito user pool. The final name is \"$${name}-$${environment}\"."
+  type        = string
+  default     = "ticke-t-users"
+}
