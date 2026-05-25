@@ -4,6 +4,12 @@ module "compute" {
   environment = var.environment
   name        = var.compute_function_name
   memory_size = var.compute_memory_size
+
+  attach_dynamodb_policy = true
+  dynamodb_table_arn     = module.database.table_arn
+  environment_variables = {
+    TICKETS_TABLE_NAME = module.database.table_name
+  }
 }
 
 module "storage" {
