@@ -1,0 +1,111 @@
+.bar {
+  background: var(--surface-black);
+  color: var(--on-dark);
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-lg);
+  padding: 0 var(--s-xl);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.12px;
+}
+
+.brand {
+  font-family: var(--type-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+
+.nav {
+  display: flex;
+  gap: var(--s-lg);
+  flex: 1;
+}
+
+.link {
+  color: var(--on-dark);
+  text-decoration: none;
+  opacity: 0.85;
+  position: relative;
+  transition: opacity 120ms ease;
+}
+
+.link:hover {
+  opacity: 1;
+}
+
+.linkActive {
+  opacity: 1;
+}
+
+.linkActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -14px;
+  height: 2px;
+  background: var(--primary-on-dark);
+}
+
+.disabled {
+  color: var(--body-muted, #cccccc);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+}
+
+.userLabel {
+  color: #cccccc;
+  font-size: 12px;
+}
+
+.userRole {
+  color: var(--primary-on-dark);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.logout {
+  background: var(--ink);
+  color: var(--on-dark);
+  border: 1px solid #2a2a2c;
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  font-family: var(--type-text);
+  font-size: 13px;
+  letter-spacing: -0.224px;
+  cursor: pointer;
+  transition: transform 80ms ease, background 120ms ease;
+}
+
+.logout:hover {
+  background: #2a2a2c;
+}
+
+.logout:active {
+  transform: scale(0.96);
+}
+
+.logout:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .bar {
+    padding: 0 var(--s-md);
+    gap: var(--s-md);
+  }
+  .userLabel {
+    display: none;
+  }
+}

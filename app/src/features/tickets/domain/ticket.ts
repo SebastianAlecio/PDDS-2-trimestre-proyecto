@@ -42,13 +42,16 @@ export type Ticket = {
   attachments: AttachmentMetadata[];
 };
 
+// Input que el frontend envía al backend al crear un ticket. La identidad
+// del solicitante (nombre, correo, user_id) la pone el backend desde el
+// JWT — solo viaja el área porque Cognito no la conoce.
 export type CreateTicketInput = {
   title: string;
   category: TicketCategory;
   area: TicketArea;
   priority: TicketPriority;
   description: string;
-  requester: Requester;
+  requesterArea: string;
   attachments: AttachmentMetadata[];
 };
 

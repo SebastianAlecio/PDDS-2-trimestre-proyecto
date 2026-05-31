@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Field } from "../../../shared/ui/Field";
 import { Select } from "../../../shared/ui/Select";
+import { AppHeader } from "../../../shared/ui/AppHeader";
+import { HttpError } from "../../../shared/api/http-client";
 import {
   TICKET_AREAS,
   TICKET_CATEGORIES,
@@ -49,16 +51,15 @@ export function CreateTicketPage() {
       area: "" as unknown as CreateTicketFormValues["area"],
       priority: "" as unknown as CreateTicketFormValues["priority"],
       description: "",
-      requester: { name: "", email: "", area: "", userId: "" },
+      requesterArea: "",
     },
   });
 
   const { create } = useCreateTicket();
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | undefined>(undefined);
-  const [toast, setToast] = useState<{ display: string; sla: string } | null>(
-    null,
-  );
+  const [toast, setToast] = useState<{ display: string; sla: string } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const priority = watch("priority");
 
@@ -69,11 +70,16 @@ export function CreateTicketPage() {
   }, [toast]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const ticket = await create(values, files);
-    setToast({ display: shortId(ticket.id), sla: ticket.slaLabel });
-    reset();
-    setFiles([]);
-    setFileError(undefined);
+    setSubmitError(null);
+    try {
+      const ticket = await create(values, files);
+      setToast({ display: shortId(ticket.id), sla: ticket.slaLabel });
+      reset();
+      setFiles([]);
+      setFileError(undefined);
+    } catch (err) {
+      setSubmitError(humanizeApiError(err));
+    }
   });
 
   const handleFilesChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -99,23 +105,14 @@ export function CreateTicketPage() {
     reset();
     setFiles([]);
     setFileError(undefined);
+    setSubmitError(null);
   };
 
   const slaHint = slaHintFor(priority);
 
   return (
     <div className={styles.shell}>
-      <header className={styles.globalNav}>
-        <span className={styles.brand}>Ticke-T</span>
-        <nav className={styles.navLinks} aria-label="Primary">
-          <a href="#" aria-current="page">
-            Crear ticket
-          </a>
-          <span className={styles.navDisabled}>Mis tickets</span>
-          <span className={styles.navDisabled}>Cola</span>
-        </nav>
-        <span className={styles.navTag}>portal interno · beta</span>
-      </header>
+      <AppHeader />
 
       <main className={styles.main}>
         <section className={styles.hero}>
@@ -167,7 +164,13 @@ export function CreateTicketPage() {
                 {...register("priority")}
                 error={errors.priority?.message}
               />
-              <div />
+              <Field
+                label="Área del solicitante"
+                placeholder="Ej. Finanzas"
+                hint="Tu nombre, correo y usuario se completan desde tu cuenta."
+                {...register("requesterArea")}
+                error={errors.requesterArea?.message}
+              />
               <div className={styles.full}>
                 <Field
                   multiline
@@ -185,46 +188,6 @@ export function CreateTicketPage() {
 
           <section className={styles.section}>
             <header className={styles.sectionHead}>
-              <h2 className={styles.sectionTitle}>Solicitante</h2>
-              <p className={styles.sectionLead}>
-                Por ahora cargas tus datos manualmente. Cuando exista login, se
-                completan automáticamente desde tu cuenta corporativa.
-              </p>
-            </header>
-
-            <div className={styles.grid}>
-              <Field
-                label="Nombre"
-                placeholder="Nombre y apellido"
-                autoComplete="name"
-                {...register("requester.name")}
-                error={errors.requester?.name?.message}
-              />
-              <Field
-                label="Correo"
-                type="email"
-                autoComplete="email"
-                placeholder="usuario@empresa.com"
-                {...register("requester.email")}
-                error={errors.requester?.email?.message}
-              />
-              <Field
-                label="Área del solicitante"
-                placeholder="Ej. Finanzas"
-                {...register("requester.area")}
-                error={errors.requester?.area?.message}
-              />
-              <Field
-                label="Id del usuario"
-                placeholder="USR-001"
-                {...register("requester.userId")}
-                error={errors.requester?.userId?.message}
-              />
-            </div>
-          </section>
-
-          <section className={styles.section}>
-            <header className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Adjuntos</h2>
               <p className={styles.sectionLead}>
                 Máximo {MAX_ATTACHMENTS} archivos ·{" "}
@@ -233,9 +196,9 @@ export function CreateTicketPage() {
             </header>
 
             <div className={styles.banner} role="status">
-              Los archivos se subirán a S3 cuando el backend esté disponible.
               Por ahora solo se registra la metadata (nombre, tamaño, tipo)
-              junto con el ticket.
+              junto con el ticket. La subida real a S3 con URLs firmadas se
+              cablea en la siguiente entrega.
             </div>
 
             <label className={styles.fileDrop}>
@@ -267,9 +230,7 @@ export function CreateTicketPage() {
                       📎
                     </span>
                     <span className={styles.fileName}>{f.name}</span>
-                    <span className={styles.fileSize}>
-                      {formatBytes(f.size)}
-                    </span>
+                    <span className={styles.fileSize}>{formatBytes(f.size)}</span>
                     <button
                       type="button"
                       className={styles.fileRemove}
@@ -283,6 +244,12 @@ export function CreateTicketPage() {
               </ul>
             )}
           </section>
+
+          {submitError && (
+            <p className={styles.fileError} role="alert">
+              {submitError}
+            </p>
+          )}
 
           <footer className={styles.footer}>
             <button type="button" className="btn-ghost" onClick={onCancel}>
@@ -386,4 +353,18 @@ function formatDateTime(d: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function humanizeApiError(err: unknown): string {
+  if (err instanceof HttpError) {
+    if (err.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
+    if (err.status === 403) return "Tu rol no permite crear tickets.";
+    if (err.status === 400) {
+      const details = Array.isArray(err.details) ? err.details.join(" · ") : null;
+      return details ? `${err.message}: ${details}` : err.message;
+    }
+    return `Error del servidor (${err.status}): ${err.message}`;
+  }
+  if (err instanceof Error) return err.message;
+  return "Error inesperado al crear el ticket.";
 }

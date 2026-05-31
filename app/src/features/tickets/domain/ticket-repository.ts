@@ -1,6 +1,13 @@
-import type { Ticket } from "./ticket";
+import type { CreateTicketInput, Ticket } from "./ticket";
+
+export type QueueData = {
+  unassigned: Ticket[];
+  mine: Ticket[];
+};
 
 export interface TicketRepository {
-  save(ticket: Ticket): Promise<void>;
-  list(): Promise<Ticket[]>;
+  create(input: CreateTicketInput): Promise<Ticket>;
+  listMyTickets(limit?: number): Promise<Ticket[]>;
+  listQueue(): Promise<QueueData>;
+  assignToMe(ticketId: string): Promise<Ticket>;
 }
