@@ -329,7 +329,7 @@ El frontend (`app/src/features/tickets/presentation/schema.ts`) valida hasta **1
 
 ## 11. Diagrama de contenedores (v1)
 
-Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, servicio gestionado) y las flechas son llamadas reales entre ellos. Se omiten queues y workers asíncronos — se agregan en E4.
+Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, servicio gestionado) y las flechas son llamadas reales entre ellos.
 
 ```mermaid
 flowchart TB
@@ -359,19 +359,16 @@ flowchart TB
   lambda --> cw
 ```
 
-**Lectura del diagrama.** Hay tres planos:
+Hay tres planos:
 
-- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para todas las llamadas de negocio). Cuando se despliegue a producción vivirá en S3 servido por CloudFront, pero hoy corre local.
-- **Ingreso a AWS.** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese (defensa en profundidad, § 13).
+- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para todas las llamadas de negocio). Cuando se despliegue a producción vivirá en S3 servido por CloudFront.
+- **Ingreso a AWS.** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese.
 - **Datos.** La Lambda persiste el ticket en DynamoDB y la metadata del adjunto en S3 en la misma invocación. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
-
-**Queues y workers** (watchdog del SLA, notificación a N2, fan-out de eventos) **se agregan en E4** y modifican el diagrama con un bloque adicional entre la Lambda y los consumidores asíncronos.
 
 ---
 
-## 12. Diseño del plano de comunicación
+## 12. Diseño de red (plano de comunicación)
 
-> **Por qué esta sección no se llama "Diseño de red".** El rubric de E3 pide "VPC con CIDR, subnets, NAT". Ticke-T no tiene VPC. Esta sección documenta el equivalente conceptual — cómo se comunican los componentes — bajo el nombre que refleja la realidad de un stack serverless. La hipótesis de "qué VPC haríamos si la necesitáramos" está en § 14.
 
 ### 12.1 Decisión: no se provisiona VPC
 
@@ -384,20 +381,20 @@ Cuatro razones, ordenadas por peso:
 3. **Cold start ~30% menor.** Lambda dentro de VPC inicializa una ENI por concurrencia inicial — agrega entre 100 ms y 300 ms al primer request por concurrencia (Hyperplane mitiga pero no elimina). Sin VPC, este overhead desaparece.
 4. **Superficie operacional mínima.** Sin VPC no hay tablas de ruteo que mantener, ni VPC peering, ni endpoints que rotar, ni NACLs que debuggear. Menos piezas que pueden romperse.
 
-**Lo que perdemos:** si en algún momento el sistema necesita RDS, ElastiCache, EC2, o cualquier recurso con interfaz de red privada, hay que replantear y meter VPC. La § 14 documenta el diseño contingente.
+**Lo que perdemos:** si en algún momento el sistema necesita RDS, ElastiCache, EC2, o cualquier recurso con interfaz de red privada, hay que replantear y meter VPC.
 
 ### 12.2 Cómo se comunican los componentes
 
-Tabla de pares origen → destino, con protocolo, autenticación y cifrado:
+Tabla de origen → destino, con protocolo, autenticación y cifrado:
 
 | Origen → Destino | Protocolo | Autenticación | Cifrado | Notas |
 |---|---|---|---|---|
 | Navegador → Cognito | HTTPS | Email + password → JWT | TLS 1.2+ | Vía Amplify Auth SDK (`USER_PASSWORD_AUTH` o `USER_SRP_AUTH`). Cognito devuelve `idToken` (1h), `accessToken` (1h), `refreshToken` (30d). |
 | Navegador → API Gateway | HTTPS | JWT (`idToken` Cognito) en header `Authorization: Bearer …` | TLS 1.2+ | Preflight CORS resuelto por OPTIONS con MOCK integration en cada path público. |
 | API Gateway → Lambda | AWS internal | Resource-based policy en la Lambda (`aws_lambda_permission` scoped a `source_arn`) | TLS interno AWS | El authorizer Cognito valida el JWT *antes* de invocar la Lambda; tokens inválidos devuelven 401 sin gastar invocación. |
-| Lambda → DynamoDB | HTTPS | SigV4 con execution role de la Lambda | TLS 1.2+ | Policy IAM scoped al ARN de la tabla `tickets-dev` y sus 4 GSIs (`/index/*`). Sin wildcards. |
+| Lambda → DynamoDB | HTTPS | SigV4 con execution role de la Lambda | TLS 1.2+ | Policy IAM scoped al ARN de la tabla `tickets-dev` y sus 4 GSIs (`/index/*`). |
 | Lambda → S3 | HTTPS | SigV4 con execution role de la Lambda | TLS 1.2+ | Policy IAM scoped a `arn:aws:s3:::pdds-oyd-attachments-dev-*/attachments/*`. Bucket policy adicional rechaza cualquier request con `aws:SecureTransport = false`. |
-| Lambda → CloudWatch Logs | HTTPS | SigV4 con execution role | TLS 1.2+ | Log group dedicado `/aws/lambda/chat-message-handler-dev`, retención 14 días. |
+| Lambda → CloudWatch Logs | HTTPS | SigV4 con execution role | TLS 1.2+ | Log group dedicado `/aws/lambda/chat-message-handler-dev`, retención 30 días. |
 
 ### 12.3 IAM y separación de responsabilidades
 
@@ -428,8 +425,6 @@ Cada request al sistema atraviesa cuatro capas de control antes de tocar la lóg
 ### Capa 2 — API Gateway (protocolo HTTP)
 
 **Qué hace.** Valida el método HTTP, la existencia de la ruta, headers básicos. Responde con 404 a rutas no definidas, 405 a métodos no permitidos en una ruta válida, y 415 a content-types no aceptados. Maneja CORS preflight por su cuenta (vía OPTIONS con MOCK integration por cada ruta pública) sin invocar Lambda.
-
-**Sub-decisión: REST API en vez de HTTP API.** Documentada como decisión cerrada en E3 (ver § 16). Razones: AWS WAF v2 no se asocia directamente a stages de HTTP API (limitación documentada), y REST API soporta resource policies nativamente. La diferencia de costo (~3.5×) es despreciable al volumen del MVP.
 
 ### Capa 3 — Cognito Authorizer (identidad)
 
