@@ -82,3 +82,15 @@ variable "attach_dynamodb_policy" {
   type        = bool
   default     = false
 }
+
+variable "attachments_bucket_arn" {
+  description = "ARN of the S3 bucket where the Lambda will write attachment metadata objects. Read by the policy when attach_attachments_bucket_policy = true. The policy is scoped to the attachments/* prefix only."
+  type        = string
+  default     = ""
+}
+
+variable "attach_attachments_bucket_policy" {
+  description = "Whether to attach the S3 PutObject policy (scoped to attachments/*) to the Lambda role. Must be a static value so Terraform can plan when attachments_bucket_arn references a resource that may be replaced."
+  type        = bool
+  default     = false
+}

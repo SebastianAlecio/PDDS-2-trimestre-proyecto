@@ -79,13 +79,41 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
+      # PutItem para crear tickets (POST /tickets). Query para "mis tickets"
+      # del colaborador (GET /tickets/me) y para la cola del agente (GET
+      # /tickets/queue, contra GSI4 y GSI2). UpdateItem para que el agente
+      # tome el ticket (PUT /tickets/{id}/assign). GetItem queda listo para
+      # el endpoint de detalle.
       Action = [
         "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
       ]
       Resource = [
         var.dynamodb_table_arn,
         "${var.dynamodb_table_arn}/index/*",
       ]
+    }]
+  })
+}
+
+# Permite a la Lambda escribir objetos al bucket de adjuntos, scoped al
+# prefix attachments/* (no a la raíz del bucket). En esta tanda escribimos
+# solo metadata JSON; cuando agreguemos presigned URLs el contenido cambia
+# pero el scope IAM permanece igual.
+resource "aws_iam_role_policy" "lambda_attachments_bucket" {
+  count = var.attach_attachments_bucket_policy ? 1 : 0
+
+  name = "${local.function_name}-attachments-bucket"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject"]
+      Resource = ["${var.attachments_bucket_arn}/attachments/*"]
     }]
   })
 }

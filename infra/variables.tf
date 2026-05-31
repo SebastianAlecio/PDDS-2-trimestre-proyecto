@@ -55,3 +55,34 @@ variable "cognito_name" {
   type        = string
   default     = "ticke-t-users"
 }
+
+variable "api_name" {
+  description = "Base name of the HTTP API gateway. The final name is \"$${name}-$${environment}\"."
+  type        = string
+  default     = "ticke-t-api"
+}
+
+variable "api_cors_allow_origins" {
+  description = "Orígenes permitidos para CORS en el REST API. En dev [\"*\"] cubre Vite local y previews; en prod restringir al dominio del frontend."
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "api_stage_name" {
+  description = "Nombre del stage del REST API (aparece como segmento de path en la URL). Cuando se monta un custom domain, este segmento queda oculto detrás del dominio."
+  type        = string
+  default     = "api"
+}
+
+variable "waf_name" {
+  description = "Base name of the WAF Web ACL. The final name is \"$${name}-$${environment}\"."
+  type        = string
+  default     = "ticke-t-waf"
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "Cantidad máxima de requests permitidas por IP en una ventana móvil de 5 minutos antes del BLOCK. 2000 es razonable para un MVP con tráfico humano."
+  type        = number
+  default     = 2000
+}
+
