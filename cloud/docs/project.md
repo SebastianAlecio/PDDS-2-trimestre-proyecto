@@ -451,7 +451,7 @@ Matriz actual de autorización:
 | `GET /tickets/queue` | `agente-n1`, `agente-n2`, `gerente` |
 | `PUT /tickets/{id}/assign` | `agente-n1`, `agente-n2` |
 
-### Por qué esta arquitectura es defendible
+### Por qué esta arquitectura
 
 - **Cada capa filtra antes de que la siguiente gaste recursos.** WAF rechaza por IP gratis. API Gateway rechaza por protocolo sin invocar Lambda. Cognito rechaza por identidad sin invocar Lambda. Solo las requests con token válido pagan invocación; solo las del rol correcto leen DynamoDB.
 - **El blast radius está acotado a IAM.** Si un atacante consigue un `idToken` válido (ej. phishing), solo puede hacer lo que la combinación grupo+endpoint le permite — no puede borrar tickets ni leer la BD completa.
@@ -461,16 +461,14 @@ Matriz actual de autorización:
 
 ## 14. VPC contingente
 
-> Sección hipotética. Documenta el diseño de red que el equipo provisionaría si mañana apareciera un componente que requiere networking privado (RDS, ElastiCache, EC2). Ningún recurso de esta sección está provisionado hoy.
-
 ### 14.1 Trigger para meter VPC
 
-La decisión de § 12.1 (no usar VPC) se revierte solo si aparece **al menos uno** de estos componentes:
+La decisión de no usar VPC se revierte solo si aparece **al menos uno** de estos componentes:
 
 - **RDS o Aurora** para analítica o reportes que no escalan bien en DynamoDB.
 - **ElastiCache (Redis)** para presencia/typing del chat o caché del dashboard del gerente (alternativa a DAX si necesitamos estructuras más ricas que key-value).
 - **EC2 o ECS Fargate** para un workload con perfil sostenido que ya no encaja en Lambda.
-- **Requisito regulatorio** que prohíba que el tráfico backend salga al internet público — caso teórico, no en el roadmap.
+- **Requisito regulatorio** que prohíba que el tráfico backend salga al internet público — caso teórico.
 
 ### 14.2 Diseño propuesto
 
@@ -479,10 +477,10 @@ La decisión de § 12.1 (no usar VPC) se revierte solo si aparece **al menos uno
 | CIDR de la VPC | `10.0.0.0/16` (65k IPs disponibles, espacio cómodo para varias capas) |
 | Availability Zones | 2 (`us-east-1a`, `us-east-1b`) — equilibrio entre HA y costo |
 | Subnets por AZ | Pública (`/24`) — NAT y eventual ALB · Privada-app (`/24`) — Lambdas en VPC · Privada-data (`/24`) — RDS / ElastiCache |
-| Internet Gateway | 1, attached a la VPC, con ruta `0.0.0.0/0` desde las subnets públicas |
+| Internet Gateway | 1, enlazada a la VPC, con ruta `0.0.0.0/0` desde las subnets públicas |
 | Conectividad saliente desde subnets privadas | **VPC Endpoints Gateway** para DynamoDB y S3 (no NAT) |
 
-### 14.3 Trade-off NAT Gateway vs VPC Endpoints
+### 14.3 NAT Gateway vs VPC Endpoints
 
 La decisión central es cómo las subnets privadas alcanzan AWS APIs (DynamoDB, S3) y APIs externas.
 
@@ -531,19 +529,17 @@ Decisiones técnicas que aún no tomamos.
 > **Cerrado en E2:** la pregunta de Base de datos (RDS Postgres vs DynamoDB) quedó resuelta en favor de **DynamoDB single-table**.
 >
 > **Cerrado en E3:**
-> - **API HTTP frente al frontend** → **REST API regional** (HTTP API descartada por incompatibilidad con AWS WAF v2).
 > - **Ubicación de los Lambdas** → **fuera de VPC**, todas las comunicaciones a DynamoDB y S3 son SigV4 sobre HTTPS público.
 > - **Capa perimetral** → **AWS WAF v2** con regla de rate limit (2000 req/5m/IP), asociada al stage del REST API.
-> - **Trade-off NAT vs VPC Endpoints** → no aplica hoy (no hay VPC). El diseño contingente de § 14 propone VPC Endpoints Gateway si en el futuro hace falta VPC.
+> - **Upload real de adjuntos.** → **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
 
 ### Red y entrega (parcialmente abierto)
-- **CDN y dominio custom.** ¿CloudFront delante del bucket que sirva el frontend + delante del API Gateway (con ACM cert + Route 53)? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando exista el dominio.
+- **CDN y dominio custom.** ¿CloudFront delante del bucket que sirva el frontend + delante del API Gateway (Route 53)? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando exista el dominio.
 - **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador. Decisión esperada en E4.
 
 ### Asíncrono (decisión en E4)
 - **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho.
 - **Notificaciones de escalamiento.** ¿Un **SNS topic por área** responsable (suscripciones distintas por equipo N2) o un **único topic con message filtering** por atributos? Trade-off: granularidad operativa vs. costo de mantenimiento.
-- **Upload real de adjuntos.** ¿Lambda recibe el archivo en base64 (limitado por payload de 6 MB) o el frontend pide una **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
 
 ### Seguridad (decisión en E5)
 - **Autenticación de colaboradores.** ¿Seguimos con Cognito propio o se evalúa **SSO** con el directorio corporativo de cada cliente (AD / Okta / Google Workspace)? Cognito propio reduce dependencias y simplifica el MVP; SSO escala mejor a múltiples clientes empresariales.
