@@ -365,6 +365,10 @@ Hay tres planos:
 - **Ingreso a AWS.** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese.
 - **Datos.** La Lambda persiste el ticket en DynamoDB y la metadata del adjunto en S3 en la misma invocación. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
 
+### 11.1 Diagrama de componentes de AWS
+
+![Diagrama de componentes de AWS](images/AWS_icons_diagram.png)
+
 ---
 
 ## 12. Diseño de red (plano de comunicación)
@@ -531,7 +535,6 @@ Decisiones técnicas que aún no tomamos.
 > **Cerrado en E3:**
 > - **Ubicación de los Lambdas** → **fuera de VPC**, todas las comunicaciones a DynamoDB y S3 son SigV4 sobre HTTPS público.
 > - **Capa perimetral** → **AWS WAF v2** con regla de rate limit (2000 req/5m/IP), asociada al stage del REST API.
-> - **Upload real de adjuntos.** → **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
 
 ### Red y entrega (parcialmente abierto)
 - **CDN y dominio custom.** ¿CloudFront delante del bucket que sirva el frontend + delante del API Gateway (Route 53)? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando exista el dominio.
@@ -540,9 +543,9 @@ Decisiones técnicas que aún no tomamos.
 ### Asíncrono (decisión en E4)
 - **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho.
 - **Notificaciones de escalamiento.** ¿Un **SNS topic por área** responsable (suscripciones distintas por equipo N2) o un **único topic con message filtering** por atributos? Trade-off: granularidad operativa vs. costo de mantenimiento.
+- **Upload real de adjuntos.** ¿Lambda recibe el archivo en base64 (limitado por payload de 6 MB) o el frontend pide una **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
 
 ### Seguridad (decisión en E5)
-- **Autenticación de colaboradores.** ¿Seguimos con Cognito propio o se evalúa **SSO** con el directorio corporativo de cada cliente (AD / Okta / Google Workspace)? Cognito propio reduce dependencias y simplifica el MVP; SSO escala mejor a múltiples clientes empresariales.
 - **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — hoy se aplica con `requireGroup` por endpoint. ¿Se ajusta a verificación de ownership por item (la Lambda lee el ticket y compara `responsable` con el `sub` del token)? Más granular pero más caro por request.
 - **Cifrado en reposo.** Hoy la tabla y el bucket usan claves **AWS-owned** (gratuito, sin features adicionales). ¿Migramos a **AWS-managed KMS** (logs en CloudTrail, rotación automática) o **Customer-managed KMS** (control total de la rotación y el uso, pero costo por mes y por request)? Depende de los requisitos de auditoría del cliente.
 
@@ -580,13 +583,9 @@ La IA tuvo el reflejo correcto de aceptar pivotes cuando un dominio no funcionab
 
 1. **No-VPC para arquitectura serverless.** Discutimos con la IA la justificación de no provisionar VPC con un stack 100% gestionado (Lambda, DynamoDB, S3, Cognito, API Gateway). La IA aportó dos argumentos cuantitativos que terminaron de cerrar la decisión: el costo evitado del NAT Gateway (~$32/mes/AZ + tráfico saliente) y el overhead de cold-start de Lambda dentro de VPC (entre 100 ms y 300 ms por concurrencia inicial). Eso nos permitió encuadrar la decisión como un trade-off objetivo en lugar de defendernos de "no implementamos VPC porque no quisimos".
 
-2. **HTTP API vs REST API — el descubrimiento del WAF.** Empezamos eligiendo **HTTP API** por simplicidad y costo (~$1/M req vs ~$3.50/M req). Cuando intentamos asociar AWS WAF v2 al stage del HTTP API descubrimos — con la ayuda de la IA — que **WAF v2 no soporta HTTP API directamente**, solo REST API, ALB, CloudFront, AppSync y Cognito User Pools. Las opciones que evaluamos con la IA fueron tres: (a) HTTP API + CloudFront + WAF (más piezas), (b) REST API + WAF directo (más verbose pero un componente menos), (c) HTTP API sin WAF (incumplir parte del rubric). La IA nos ayudó a reconocer que el "contra" principal de REST API — URL con segmento de stage visible — desaparece cuando se monta un custom domain (que vamos a hacer de todos modos). Migramos a REST API.
+2. **CORS en REST API con AWS_PROXY integration.** REST API no maneja CORS declarativamente como HTTP API. La IA nos guió a la solución de dos partes: (i) método `OPTIONS` con `MOCK` integration por cada path público que devuelve los headers CORS al preflight, (ii) `aws_api_gateway_gateway_response` de tipo `DEFAULT_4XX` y `DEFAULT_5XX` para que los errores del authorizer (401, 403) también lleven los headers CORS — sin esto el browser bloquea con "Failed to fetch" antes de mostrar el mensaje real.
 
-3. **CORS en REST API con AWS_PROXY integration.** REST API no maneja CORS declarativamente como HTTP API. La IA nos guió a la solución de dos partes: (i) método `OPTIONS` con `MOCK` integration por cada path público que devuelve los headers CORS al preflight, (ii) `aws_api_gateway_gateway_response` de tipo `DEFAULT_4XX` y `DEFAULT_5XX` para que los errores del authorizer (401, 403) también lleven los headers CORS — sin esto el browser bloquea con "Failed to fetch" antes de mostrar el mensaje real.
-
-4. **Modelo de roles en Cognito.** Exploramos con la IA dos formas de representar los 4 roles del dominio: (a) Cognito Groups con `cognito:groups` en el JWT — flexible, un usuario puede pertenecer a varios — o (b) `custom:role` como atributo de string único. La IA nos mostró que Groups es lo estándar para multi-rol y permite usar la `precedence` para resolver el "rol principal" cuando un usuario pertenece a varios. Adoptamos Groups con precedence configurada (gerente=0 > agente-n2=10 > agente-n1=20 > colaborador=40).
-
-5. **Defensa en profundidad como narrativa.** Pedimos a la IA que nos ayudara a articular las 4 capas de control (WAF → API Gateway → Cognito → autorización en Lambda) como un pipeline donde cada capa filtra antes de gastar la siguiente. Ese framing — que está en § 13 — convirtió decisiones aisladas en una arquitectura defendible: la regla mental para sumar capas en el futuro es "¿qué filtra esta capa antes de pagar la siguiente?".
+3. **Modelo de roles en Cognito.** Exploramos con la IA dos formas de representar los 4 roles del dominio: (a) Cognito Groups con `cognito:groups` en el JWT — flexible, un usuario puede pertenecer a varios — o (b) `custom:role` como atributo de string único. La IA nos mostró que Groups es lo estándar para multi-rol y permite usar la `precedence` para resolver el "rol principal" cuando un usuario pertenece a varios. Adoptamos Groups con precedence configurada (gerente=0 > agente-n2=10 > agente-n1=20 > colaborador=40).
 
 *(pendiente: ampliar con observaciones de las próximas entregas)*
 
