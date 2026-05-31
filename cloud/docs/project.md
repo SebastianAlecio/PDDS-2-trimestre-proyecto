@@ -4,8 +4,22 @@
 > **Entregas:**
 > - 1 — Pitch, scope y mockups · dom 17 may 2026
 > - 2 — Cómputo y datos · jue 21 may 2026
+> - 3 — Red, ingreso y seguridad perimetral · dom 31 may 2026
 >
 > **Equipo:** Alessandro Alecio · David Garcia · Joaquin Marroquin
+
+---
+
+## Resumen de cambios E2 → E3
+
+Documento iterado sobre la E2; lo agregado/movido en esta entrega:
+
+- **Decisión central de red.** El sistema **no provisiona VPC**. Cómputo, base de datos, almacenamiento y autenticación viven en el plano gestionado de AWS y se comunican por endpoints públicos firmados con SigV4 o autenticados con JWT. La justificación completa está en § 12.
+- **Secciones nuevas.** § 11 Diagrama de contenedores (v1) · § 12 Diseño del plano de comunicación · § 13 Capas de seguridad en el ingreso · § 14 VPC contingente.
+- **Renumeración.** Scope, Preguntas abiertas y Anexo IA corrieron cuatro posiciones (eran § 11..§ 13 → ahora § 15..§ 17). El cambio respeta el flujo *Negocio → Técnico → Reflexión*.
+- **Implementación que respalda el diseño.** Se cabló el ingreso real: **API Gateway REST API regional** delante de la Lambda, con **authorizer Cognito User Pools** (4 grupos: `colaborador`, `agente-n1`, `agente-n2`, `gerente`), CORS por path (OPTIONS + MOCK integration), gateway responses con headers CORS para que los errores del authorizer no rompan al browser, y **AWS WAF v2** con regla de rate-limit por IP asociado al stage. El frontend React se cableó al API real (sustituyendo el repository de `localStorage`), se agregaron las pantallas de Login, Mis Tickets y Cola del Agente, y la Lambda escribe metadata de adjuntos a S3 al crear el ticket (`s3_key` bajo `attachments/{ticket_id}/{att_id}.json`). El frontend está construido pero **no desplegado a S3 + CloudFront todavía** — corre local en Vite hasta que el dominio custom y el CDN se monten en una entrega siguiente.
+- **Preguntas abiertas (§ 16).** Se **cerraron** las preguntas de Red (API HTTP vs REST → REST · NAT vs VPC Endpoints → no aplica). Se **agregaron** las nuevas decisiones que dejan abiertas WAF, CloudFront y dominio custom para entregas siguientes.
+- **Anexo IA (§ 17).** Bloque nuevo *"E3 — Decisiones técnicas exploradas con IA"* listando los descartes de HTTP API por incompatibilidad con WAF, el trade-off REST API vs CloudFront, y la decisión de no implementar VPC.
 
 ---
 
@@ -313,7 +327,188 @@ El frontend (`app/src/features/tickets/presentation/schema.ts`) valida hasta **1
 
 ---
 
-## 11. Scope (in / out)
+## 11. Diagrama de contenedores (v1)
+
+Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, servicio gestionado) y las flechas son llamadas reales entre ellos. Se omiten queues y workers asíncronos — se agregan en E4.
+
+```mermaid
+flowchart TB
+  user["Colaborador / Agente / Gerente<br/>(navegador)"]
+
+  subgraph fe["Frontend"]
+    spa["SPA Vite + React 19<br/>(corre local en Vite hoy;<br/>S3 + CloudFront en deploy futuro)"]
+  end
+
+  subgraph aws["AWS · plano gestionado (sin VPC)"]
+    waf["AWS WAF v2<br/>rate-limit 2000/5m/IP"]
+    apigw["API Gateway REST<br/>stage 'api', authorizer Cognito"]
+    cognito["Cognito User Pool<br/>4 groups, admin-only"]
+    lambda["Lambda chat-message-handler<br/>Node 22 · arm64 · 128MB<br/>router de 4 endpoints"]
+    ddb[("DynamoDB tickets-dev<br/>single-table + 4 GSIs")]
+    s3[("S3 attachments bucket<br/>versioning + SSE + SSL-only")]
+    cw["CloudWatch Logs"]
+  end
+
+  user --> spa
+  spa -- "login (Amplify Auth)" --> cognito
+  spa -- "HTTPS + JWT" --> waf --> apigw
+  apigw -- "valida JWT" --> cognito
+  apigw -- "AWS_PROXY" --> lambda
+  lambda -- "SigV4" --> ddb
+  lambda -- "SigV4" --> s3
+  lambda --> cw
+```
+
+**Lectura del diagrama.** Hay tres planos:
+
+- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para todas las llamadas de negocio). Cuando se despliegue a producción vivirá en S3 servido por CloudFront, pero hoy corre local.
+- **Ingreso a AWS.** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese (defensa en profundidad, § 13).
+- **Datos.** La Lambda persiste el ticket en DynamoDB y la metadata del adjunto en S3 en la misma invocación. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
+
+**Queues y workers** (watchdog del SLA, notificación a N2, fan-out de eventos) **se agregan en E4** y modifican el diagrama con un bloque adicional entre la Lambda y los consumidores asíncronos.
+
+---
+
+## 12. Diseño del plano de comunicación
+
+> **Por qué esta sección no se llama "Diseño de red".** El rubric de E3 pide "VPC con CIDR, subnets, NAT". Ticke-T no tiene VPC. Esta sección documenta el equivalente conceptual — cómo se comunican los componentes — bajo el nombre que refleja la realidad de un stack serverless. La hipótesis de "qué VPC haríamos si la necesitáramos" está en § 14.
+
+### 12.1 Decisión: no se provisiona VPC
+
+**El stack es 100% serverless gestionado.** Cinco servicios componen el sistema — Lambda, DynamoDB, S3, Cognito, API Gateway — y todos exponen endpoints públicos firmados con IAM o autenticados con JWT. **Ninguno requiere ENIs, security groups, NAT Gateway, ni route tables.**
+
+Cuatro razones, ordenadas por peso:
+
+1. **No hay un servidor con IP que aislar.** La autenticación no es por red (origin IP, security group) sino por identidad (SigV4 / JWT). Una VPC en este stack solo añadiría infraestructura inerte alrededor de servicios que ya se autentican solos.
+2. **Costo evitado.** Un NAT Gateway por AZ cuesta ~$32/mes + $0.045/GB de tráfico saliente. Con 2 AZs son ~$64/mes fijos solo en NAT. Cero en nuestro stack.
+3. **Cold start ~30% menor.** Lambda dentro de VPC inicializa una ENI por concurrencia inicial — agrega entre 100 ms y 300 ms al primer request por concurrencia (Hyperplane mitiga pero no elimina). Sin VPC, este overhead desaparece.
+4. **Superficie operacional mínima.** Sin VPC no hay tablas de ruteo que mantener, ni VPC peering, ni endpoints que rotar, ni NACLs que debuggear. Menos piezas que pueden romperse.
+
+**Lo que perdemos:** si en algún momento el sistema necesita RDS, ElastiCache, EC2, o cualquier recurso con interfaz de red privada, hay que replantear y meter VPC. La § 14 documenta el diseño contingente.
+
+### 12.2 Cómo se comunican los componentes
+
+Tabla de pares origen → destino, con protocolo, autenticación y cifrado:
+
+| Origen → Destino | Protocolo | Autenticación | Cifrado | Notas |
+|---|---|---|---|---|
+| Navegador → Cognito | HTTPS | Email + password → JWT | TLS 1.2+ | Vía Amplify Auth SDK (`USER_PASSWORD_AUTH` o `USER_SRP_AUTH`). Cognito devuelve `idToken` (1h), `accessToken` (1h), `refreshToken` (30d). |
+| Navegador → API Gateway | HTTPS | JWT (`idToken` Cognito) en header `Authorization: Bearer …` | TLS 1.2+ | Preflight CORS resuelto por OPTIONS con MOCK integration en cada path público. |
+| API Gateway → Lambda | AWS internal | Resource-based policy en la Lambda (`aws_lambda_permission` scoped a `source_arn`) | TLS interno AWS | El authorizer Cognito valida el JWT *antes* de invocar la Lambda; tokens inválidos devuelven 401 sin gastar invocación. |
+| Lambda → DynamoDB | HTTPS | SigV4 con execution role de la Lambda | TLS 1.2+ | Policy IAM scoped al ARN de la tabla `tickets-dev` y sus 4 GSIs (`/index/*`). Sin wildcards. |
+| Lambda → S3 | HTTPS | SigV4 con execution role de la Lambda | TLS 1.2+ | Policy IAM scoped a `arn:aws:s3:::pdds-oyd-attachments-dev-*/attachments/*`. Bucket policy adicional rechaza cualquier request con `aws:SecureTransport = false`. |
+| Lambda → CloudWatch Logs | HTTPS | SigV4 con execution role | TLS 1.2+ | Log group dedicado `/aws/lambda/chat-message-handler-dev`, retención 14 días. |
+
+### 12.3 IAM y separación de responsabilidades
+
+El execution role de la Lambda (`chat-message-handler-dev-exec`) tiene tres policies attached, cada una scoped al recurso mínimo necesario:
+
+| Policy | Acciones | Recursos |
+|---|---|---|
+| `…-logs` | `logs:CreateLogStream`, `logs:PutLogEvents` | Su propio log group |
+| `…-dynamodb` | `PutItem`, `Query`, `GetItem`, `UpdateItem` | `arn:aws:dynamodb:…:table/tickets-dev` y `/index/*` |
+| `…-attachments-bucket` | `s3:PutObject` | `arn:aws:s3:…:pdds-oyd-attachments-dev-*/attachments/*` |
+
+Sin `DeleteItem` (los tickets no se borran), sin `Scan` (forzamos a usar las queries del modelo de datos), sin permisos sobre otras tablas o buckets, sin wildcards de recurso. La premisa: la Lambda debe poder hacer exactamente lo que su contrato declara, ni más.
+
+---
+
+## 13. Capas de seguridad en el ingreso
+
+Cada request al sistema atraviesa cuatro capas de control antes de tocar la lógica de negocio. Cada capa rechaza requests inválidas *antes* de pagar el costo de la siguiente.
+
+### Capa 1 — AWS WAF (perimetral)
+
+**Regla activa:** rate limit por IP, configurable vía variable Terraform. Default: 2000 requests por IP en ventana móvil de 5 minutos. Acción al exceder: `BLOCK`. Scope `REGIONAL`, asociado al stage del REST API.
+
+**Qué cubre.** Ataques volumétricos: brute-force al endpoint de login Cognito, scraping del API, intentos automatizados de descubrir endpoints. **No cubre** ataques contra usuarios autenticados (eso requiere rate limit por sub, que se implementa después).
+
+**Por qué solo una regla.** Las managed rules OWASP (SQL injection, XSS, path traversal) agregan capacidad facturable y ruido sin valor concreto en nuestro caso: no servimos HTML, no usamos SQL, y el authorizer JWT filtra el 100% de las invocaciones a rutas protegidas. Si la app crece (chat con upload de imágenes, panel administrativo HTML), se reevalúa.
+
+### Capa 2 — API Gateway (protocolo HTTP)
+
+**Qué hace.** Valida el método HTTP, la existencia de la ruta, headers básicos. Responde con 404 a rutas no definidas, 405 a métodos no permitidos en una ruta válida, y 415 a content-types no aceptados. Maneja CORS preflight por su cuenta (vía OPTIONS con MOCK integration por cada ruta pública) sin invocar Lambda.
+
+**Sub-decisión: REST API en vez de HTTP API.** Documentada como decisión cerrada en E3 (ver § 16). Razones: AWS WAF v2 no se asocia directamente a stages de HTTP API (limitación documentada), y REST API soporta resource policies nativamente. La diferencia de costo (~3.5×) es despreciable al volumen del MVP.
+
+### Capa 3 — Cognito Authorizer (identidad)
+
+**Tipo:** `COGNITO_USER_POOLS` apuntando al User Pool de Ticke-T. Valida en cada request:
+- Firma del JWT (con la clave pública del pool, cacheada por API Gateway).
+- Issuer (`https://cognito-idp.us-east-1.amazonaws.com/<user_pool_id>`).
+- Audience (`token_use = id`, `aud = <user_pool_client_id>`).
+- Vencimiento (`exp`).
+
+Si cualquiera falla, responde con 401 y los headers CORS configurados en el `gateway_response` `DEFAULT_4XX`. **La Lambda no se invoca.**
+
+**Cuentas y grupos.** El User Pool tiene `admin_create_user_config.allow_admin_create_user_only = true`: solo un admin (consola AWS o CLI) crea usuarios. Cada usuario se agrega a uno de los 4 grupos del dominio: `colaborador`, `agente-n1`, `agente-n2`, `gerente`. El claim `cognito:groups` viaja en el `idToken` y se usa en la capa 4 para autorizar.
+
+### Capa 4 — Lambda handler (autorización por rol)
+
+La Lambda lee `event.requestContext.authorizer.claims["cognito:groups"]` y, en cada handler de ruta, llama `requireGroup(claims, [...])` con los grupos permitidos. Si el rol no califica, responde 403 sin tocar la BD.
+
+Matriz actual de autorización:
+
+| Ruta | Grupos permitidos |
+|---|---|
+| `POST /tickets` | `colaborador` |
+| `GET /tickets/me` | `colaborador` |
+| `GET /tickets/queue` | `agente-n1`, `agente-n2`, `gerente` |
+| `PUT /tickets/{id}/assign` | `agente-n1`, `agente-n2` |
+
+### Por qué esta arquitectura es defendible
+
+- **Cada capa filtra antes de que la siguiente gaste recursos.** WAF rechaza por IP gratis. API Gateway rechaza por protocolo sin invocar Lambda. Cognito rechaza por identidad sin invocar Lambda. Solo las requests con token válido pagan invocación; solo las del rol correcto leen DynamoDB.
+- **El blast radius está acotado a IAM.** Si un atacante consigue un `idToken` válido (ej. phishing), solo puede hacer lo que la combinación grupo+endpoint le permite — no puede borrar tickets ni leer la BD completa.
+- **No hay credenciales en código ni en `.env`.** El frontend autentica con email/password; el SDK guarda los tokens. La Lambda usa su execution role; nunca tocamos AWS keys.
+
+---
+
+## 14. VPC contingente
+
+> Sección hipotética. Documenta el diseño de red que el equipo provisionaría si mañana apareciera un componente que requiere networking privado (RDS, ElastiCache, EC2). Ningún recurso de esta sección está provisionado hoy.
+
+### 14.1 Trigger para meter VPC
+
+La decisión de § 12.1 (no usar VPC) se revierte solo si aparece **al menos uno** de estos componentes:
+
+- **RDS o Aurora** para analítica o reportes que no escalan bien en DynamoDB.
+- **ElastiCache (Redis)** para presencia/typing del chat o caché del dashboard del gerente (alternativa a DAX si necesitamos estructuras más ricas que key-value).
+- **EC2 o ECS Fargate** para un workload con perfil sostenido que ya no encaja en Lambda.
+- **Requisito regulatorio** que prohíba que el tráfico backend salga al internet público — caso teórico, no en el roadmap.
+
+### 14.2 Diseño propuesto
+
+| Parámetro | Valor |
+|---|---|
+| CIDR de la VPC | `10.0.0.0/16` (65k IPs disponibles, espacio cómodo para varias capas) |
+| Availability Zones | 2 (`us-east-1a`, `us-east-1b`) — equilibrio entre HA y costo |
+| Subnets por AZ | Pública (`/24`) — NAT y eventual ALB · Privada-app (`/24`) — Lambdas en VPC · Privada-data (`/24`) — RDS / ElastiCache |
+| Internet Gateway | 1, attached a la VPC, con ruta `0.0.0.0/0` desde las subnets públicas |
+| Conectividad saliente desde subnets privadas | **VPC Endpoints Gateway** para DynamoDB y S3 (no NAT) |
+
+### 14.3 Trade-off NAT Gateway vs VPC Endpoints
+
+La decisión central es cómo las subnets privadas alcanzan AWS APIs (DynamoDB, S3) y APIs externas.
+
+| | NAT Gateway | VPC Endpoints (Gateway) |
+|---|---|---|
+| Servicios soportados | Cualquier destino (AWS y externos) | Solo DynamoDB y S3 (en variante Gateway, que es gratuita). El resto usa Interface Endpoints, que cuestan ~$7/mes por endpoint y por AZ. |
+| Costo | ~$32/mes/AZ + $0.045/GB de tráfico saliente | $0/mes para Gateway endpoints, sin cargo por GB |
+| Performance | Tráfico sale a internet, entra de nuevo a AWS | Tráfico privado dentro de AWS (más rápido y predecible) |
+| Cuándo conviene | Cuando hay que llamar APIs externas o muchos servicios AWS distintos | Cuando todo el tráfico saliente va a DynamoDB y S3 |
+
+**Decisión para nuestro caso:** **VPC Endpoints Gateway para DynamoDB y S3**, sin NAT. Razones:
+
+1. Los únicos destinos AWS que la Lambda necesita son DynamoDB y S3 — ambos tienen Gateway endpoints gratuitos.
+2. Cognito, API Gateway y CloudWatch son llamados *hacia* la VPC (no desde), o desde la Lambda al servicio sin requerir conectividad saliente private-subnet.
+3. Si en el futuro aparece una integración con un servicio externo (envío de email vía SES, webhook a Slack), agregamos NAT en ese momento o usamos un Interface Endpoint específico (SES tiene uno).
+
+**Resultado:** la VPC contingente cuesta ~$0 de overhead operativo de red, contra los ~$64/mes de un setup con NAT por AZ. Esa es la decisión que un equipo con experiencia toma.
+
+---
+
+## 15. Scope (in / out)
 
 ### IN — lo que el sistema SÍ hace
 
@@ -334,34 +529,39 @@ El frontend (`app/src/features/tickets/presentation/schema.ts`) valida hasta **1
 
 ---
 
-## 12. Preguntas abiertas
+## 16. Preguntas abiertas
 
 Decisiones técnicas que aún no tomamos.
 
 > **Cerrado en E2:** la pregunta de Base de datos (RDS Postgres vs DynamoDB) quedó resuelta en favor de **DynamoDB single-table**.
+>
+> **Cerrado en E3:**
+> - **API HTTP frente al frontend** → **REST API regional** (HTTP API descartada por incompatibilidad con AWS WAF v2).
+> - **Ubicación de los Lambdas** → **fuera de VPC**, todas las comunicaciones a DynamoDB y S3 son SigV4 sobre HTTPS público.
+> - **Capa perimetral** → **AWS WAF v2** con regla de rate limit (2000 req/5m/IP), asociada al stage del REST API.
+> - **Trade-off NAT vs VPC Endpoints** → no aplica hoy (no hay VPC). El diseño contingente de § 14 propone VPC Endpoints Gateway si en el futuro hace falta VPC.
 
-### Red (decisión en E3)
-- **API HTTP frente al frontend.** ¿API Gateway **HTTP API** (más simple, más barata, suficiente para REST plano) o **REST API** (más features — request validators, modelos, throttling per-route — pero más costosa)? El handler de creación de tickets ya está listo para detrás de cualquiera.
-- **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador.
-- **Ubicación de los Lambdas.** Como DynamoDB y S3 se acceden por API IAM-signed, no requieren VPC. Pero si en el futuro aparece RDS para alguna pieza (analítica, reportes), los Lambdas que lo consuman sí necesitarán VPC y eso cambia el cold-start.
-- **CDN para el frontend.** ¿CloudFront delante del bucket que sirve el panel del agente y el widget? Probablemente sí — definir caché, invalidación y dominio custom.
+### Red y entrega (parcialmente abierto)
+- **CDN y dominio custom.** ¿CloudFront delante del bucket que sirva el frontend + delante del API Gateway (con ACM cert + Route 53)? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando exista el dominio.
+- **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador. Decisión esperada en E4.
 
-### Asíncrono (decisión en E3)
+### Asíncrono (decisión en E4)
 - **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho.
 - **Notificaciones de escalamiento.** ¿Un **SNS topic por área** responsable (suscripciones distintas por equipo N2) o un **único topic con message filtering** por atributos? Trade-off: granularidad operativa vs. costo de mantenimiento.
+- **Upload real de adjuntos.** ¿Lambda recibe el archivo en base64 (limitado por payload de 6 MB) o el frontend pide una **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
 
-### Seguridad (decisión en E4)
-- **Autenticación de colaboradores.** ¿**SSO** con el directorio corporativo de cada cliente (AD / Okta / Google Workspace) o **cuentas propias** dentro de Ticke-T? SSO reduce fricción y centraliza offboarding pero acopla la implementación al modelo de identidad de cada cliente.
-- **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — ¿se aplica con **IAM-based access** (políticas que evalúan attributes del request) o con **claims en JWT custom** verificados en cada handler? Lo segundo es lo más simple para arrancar.
+### Seguridad (decisión en E5)
+- **Autenticación de colaboradores.** ¿Seguimos con Cognito propio o se evalúa **SSO** con el directorio corporativo de cada cliente (AD / Okta / Google Workspace)? Cognito propio reduce dependencias y simplifica el MVP; SSO escala mejor a múltiples clientes empresariales.
+- **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — hoy se aplica con `requireGroup` por endpoint. ¿Se ajusta a verificación de ownership por item (la Lambda lee el ticket y compara `responsable` con el `sub` del token)? Más granular pero más caro por request.
 - **Cifrado en reposo.** Hoy la tabla y el bucket usan claves **AWS-owned** (gratuito, sin features adicionales). ¿Migramos a **AWS-managed KMS** (logs en CloudTrail, rotación automática) o **Customer-managed KMS** (control total de la rotación y el uso, pero costo por mes y por request)? Depende de los requisitos de auditoría del cliente.
 
 ### Observabilidad (decisión en E5)
-- **Stack base.** CloudWatch Logs + Metrics + Alarms estándar cubre el MVP. ¿Sumamos **X-Ray** para trazas distribuidas Lambda → DynamoDB? Útil cuando aparecen cuellos de botella entre múltiples Lambdas.
-- **Alarmas iniciales.** ¿Qué disparos consideramos críticos? Candidatas obvias: tasa de errores del handler de creación > umbral, cola de tickets sin asignar creciendo, latencia P99 del WebSocket en ventana móvil, throttles en DynamoDB.
+- **Stack base.** CloudWatch Logs + Metrics + Alarms estándar cubre el MVP. ¿Sumamos **X-Ray** para trazas distribuidas Lambda → DynamoDB → S3? Útil cuando aparecen cuellos de botella entre múltiples Lambdas.
+- **Alarmas iniciales.** ¿Qué disparos consideramos críticos? Candidatas obvias: tasa de errores del handler > umbral, throttles en DynamoDB, rate limit del WAF disparado sostenidamente, latencia P99 del API gateway en ventana móvil.
 
 ---
 
-## 13. Anexo IA
+## 17. Anexo IA
 
 ### Qué le pedimos a la IA
 
@@ -384,6 +584,18 @@ La IA tuvo el reflejo correcto de aceptar pivotes cuando un dominio no funcionab
 2. **Modelo de datos (single-table vs multi-table en DynamoDB).** Exploramos con la IA el trade-off entre simplicidad de queries (single-table gana en *"traer el ticket + todos sus mensajes con una sola `Query`"*) y limpieza del schema (multi-table es más SQL-like). La IA propuso el patrón concreto `PK = TICKET#<id>` + `SK = METADATA | MSG#<ts>#<msg_id> | EVT#<ts>` que adoptamos sin cambios. El argumento decisivo fue que el access pattern dominante del agente (*"abrime el ticket"*) se resuelve en una sola llamada.
 
 3. **Decisión de caché.** Le pedimos a la IA evaluar si valía la pena meter DAX o ElastiCache en el MVP. Concluimos juntos que no: Lambda + DynamoDB on-demand ya entregan latencia single-digit ms para los access patterns dominantes, y el panel se refresca por WebSocket push (no por polling repetido que sería el caso clásico donde la caché ayuda). Quedaron documentadas como evolución futura las dos opciones concretas — DAX si crece el dashboard de métricas, ElastiCache si aparece estado efímero del chat (presence/typing).
+
+### E3 — Decisiones técnicas exploradas con IA (red, ingreso y seguridad perimetral)
+
+1. **No-VPC para arquitectura serverless.** Discutimos con la IA la justificación de no provisionar VPC con un stack 100% gestionado (Lambda, DynamoDB, S3, Cognito, API Gateway). La IA aportó dos argumentos cuantitativos que terminaron de cerrar la decisión: el costo evitado del NAT Gateway (~$32/mes/AZ + tráfico saliente) y el overhead de cold-start de Lambda dentro de VPC (entre 100 ms y 300 ms por concurrencia inicial). Eso nos permitió encuadrar la decisión como un trade-off objetivo en lugar de defendernos de "no implementamos VPC porque no quisimos".
+
+2. **HTTP API vs REST API — el descubrimiento del WAF.** Empezamos eligiendo **HTTP API** por simplicidad y costo (~$1/M req vs ~$3.50/M req). Cuando intentamos asociar AWS WAF v2 al stage del HTTP API descubrimos — con la ayuda de la IA — que **WAF v2 no soporta HTTP API directamente**, solo REST API, ALB, CloudFront, AppSync y Cognito User Pools. Las opciones que evaluamos con la IA fueron tres: (a) HTTP API + CloudFront + WAF (más piezas), (b) REST API + WAF directo (más verbose pero un componente menos), (c) HTTP API sin WAF (incumplir parte del rubric). La IA nos ayudó a reconocer que el "contra" principal de REST API — URL con segmento de stage visible — desaparece cuando se monta un custom domain (que vamos a hacer de todos modos). Migramos a REST API.
+
+3. **CORS en REST API con AWS_PROXY integration.** REST API no maneja CORS declarativamente como HTTP API. La IA nos guió a la solución de dos partes: (i) método `OPTIONS` con `MOCK` integration por cada path público que devuelve los headers CORS al preflight, (ii) `aws_api_gateway_gateway_response` de tipo `DEFAULT_4XX` y `DEFAULT_5XX` para que los errores del authorizer (401, 403) también lleven los headers CORS — sin esto el browser bloquea con "Failed to fetch" antes de mostrar el mensaje real.
+
+4. **Modelo de roles en Cognito.** Exploramos con la IA dos formas de representar los 4 roles del dominio: (a) Cognito Groups con `cognito:groups` en el JWT — flexible, un usuario puede pertenecer a varios — o (b) `custom:role` como atributo de string único. La IA nos mostró que Groups es lo estándar para multi-rol y permite usar la `precedence` para resolver el "rol principal" cuando un usuario pertenece a varios. Adoptamos Groups con precedence configurada (gerente=0 > agente-n2=10 > agente-n1=20 > colaborador=40).
+
+5. **Defensa en profundidad como narrativa.** Pedimos a la IA que nos ayudara a articular las 4 capas de control (WAF → API Gateway → Cognito → autorización en Lambda) como un pipeline donde cada capa filtra antes de gastar la siguiente. Ese framing — que está en § 13 — convirtió decisiones aisladas en una arquitectura defendible: la regla mental para sumar capas en el futuro es "¿qué filtra esta capa antes de pagar la siguiente?".
 
 *(pendiente: ampliar con observaciones de las próximas entregas)*
 
