@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { v4 as uuid } from "uuid";
-import { buildTicketFromInput } from "../domain/build-ticket-from-input";
 import type {
   AttachmentMetadata,
   Ticket,
@@ -9,35 +8,33 @@ import type {
   TicketPriority,
 } from "../domain/ticket";
 import type { TicketRepository } from "../domain/ticket-repository";
-import { LocalStorageTicketRepository } from "../infrastructure/local-storage-ticket-repository";
+import { HttpTicketRepository } from "../infrastructure/http-ticket-repository";
 import type { CreateTicketFormValues } from "./schema";
 
-const defaultRepo = new LocalStorageTicketRepository();
+const defaultRepo = new HttpTicketRepository();
 
 export function useCreateTicket(repo: TicketRepository = defaultRepo) {
   return useMemo(
     () => ({
-      async create(values: CreateTicketFormValues, files: File[]): Promise<Ticket> {
+      async create(
+        values: CreateTicketFormValues,
+        files: File[],
+      ): Promise<Ticket> {
         const attachments: AttachmentMetadata[] = files.map((f) => ({
           id: uuid(),
           name: f.name,
           size: f.size,
           type: f.type || "application/octet-stream",
         }));
-        const ticket = buildTicketFromInput(
-          {
-            title: values.title,
-            category: values.category as TicketCategory,
-            area: values.area as TicketArea,
-            priority: values.priority as TicketPriority,
-            description: values.description,
-            requester: values.requester,
-            attachments,
-          },
-          new Date(),
-        );
-        await repo.save(ticket);
-        return ticket;
+        return repo.create({
+          title: values.title,
+          category: values.category as TicketCategory,
+          area: values.area as TicketArea,
+          priority: values.priority as TicketPriority,
+          description: values.description,
+          requesterArea: values.requesterArea,
+          attachments,
+        });
       },
     }),
     [repo],

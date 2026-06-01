@@ -21,6 +21,9 @@ export const ALLOWED_MIME = new Set<string>([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
+// La identidad del solicitante (nombre, correo, user_id) la pone el backend
+// desde el JWT — el formulario ya no la pide. Lo único que viaja es el área,
+// porque Cognito no la tiene como atributo del usuario.
 export const createTicketSchema = z.object({
   title: z
     .string()
@@ -41,12 +44,11 @@ export const createTicketSchema = z.object({
     .trim()
     .min(20, "Mínimo 20 caracteres")
     .max(2000, "Máximo 2000 caracteres"),
-  requester: z.object({
-    name: z.string().trim().min(2, "Nombre requerido").max(80),
-    email: z.string().trim().toLowerCase().email("Correo inválido"),
-    area: z.string().trim().min(2, "Área requerida").max(80),
-    userId: z.string().trim().min(1, "Id de usuario requerido").max(40),
-  }),
+  requesterArea: z
+    .string()
+    .trim()
+    .min(2, "Área del solicitante requerida")
+    .max(80),
 });
 
 export type CreateTicketFormValues = z.infer<typeof createTicketSchema>;
