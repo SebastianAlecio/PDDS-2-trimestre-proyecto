@@ -4,6 +4,7 @@ import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
 import { LoginPage } from "./features/auth/presentation/LoginPage";
 import { NewPasswordPage } from "./features/auth/presentation/NewPasswordPage";
+import { CreateUserForm } from "./features/users/presentation/CreateUserForm";
 import { useAuth } from "./shared/auth/use-auth";
 import { RequireAuth, RequireRole } from "./shared/auth/require-auth";
 
@@ -50,6 +51,17 @@ export function App() {
           <RequireAuth>
             <RequireRole allow={["agente-n1", "agente-n2"]}>
               <QueuePage />
+            </RequireRole>
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/crear-usuario"
+        element={
+          <RequireAuth>
+            <RequireRole allow={["gerente"]}>
+              <CreateUserForm />
             </RequireRole>
           </RequireAuth>
         }
