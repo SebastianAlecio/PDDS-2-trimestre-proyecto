@@ -1,56 +1,53 @@
-import { useState, type FormEvent, type ChangeEvent } from "react";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { AppHeader } from "../../../shared/ui/AppHeader";
 import { Field } from "../../../shared/ui/Field";
 import { Select } from "../../../shared/ui/Select";
+import { HttpError } from "../../../shared/api/http-client";
+import { useCreateUser } from "./use-create-user";
 import styles from "./CreateUserForm.module.css";
 
+const createUserSchema = z.object({
+  name: z.string().min(1, "El nombre completo es obligatorio"),
+  email: z.string().email("Debe ser un correo electrónico válido"),
+  role: z.enum(["colaborador", "agente-n1", "agente-n2", "gerente"]),
+});
+
+export type CreateUserFormValues = z.infer<typeof createUserSchema>;
+
 export function CreateUserForm() {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("colaborador");
-  const [loading, setLoading] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
+    mode: "onTouched",
+    defaultValues: {
+      name: "",
+      email: "",
+      role: "colaborador",
+    },
+  });
+
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Asumimos que la API se expone en la misma variable de entorno que usas en los repositorios
-  const API_URL = import.meta.env.VITE_API_URL || "";
+  const { create } = useCreateUser();
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const onSubmit = handleSubmit(async (values) => {
     setMessage(null);
 
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
-
-      if (!token) throw new Error("No hay sesión activa.");
-
-      const res = await fetch(`${API_URL}/users`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ email, name, role })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        throw new Error(errData?.error || "Error al crear el usuario en el backend.");
-      }
-
+      await create(values);
       setMessage({ type: "success", text: "Usuario creado exitosamente. Se le enviará un correo con su contraseña temporal." });
-      setEmail("");
-      setName("");
-      setRole("colaborador");
+      reset();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Error desconocido al crear usuario";
-      setMessage({ type: "error", text: errorMessage });
-    } finally {
-      setLoading(false);
+      setMessage({ type: "error", text: humanizeApiError(error) });
     }
-  };
+  });
 
   const roleOptions = [
     { value: "colaborador", label: "Colaborador" },
@@ -72,7 +69,7 @@ export function CreateUserForm() {
           </p>
         </section>
 
-        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+      <form className={styles.form} onSubmit={onSubmit} noValidate>
           {message && (
             <div
               className={`${styles.message} ${
@@ -88,34 +85,46 @@ export function CreateUserForm() {
             <Field
               label="Nombre Completo"
               type="text"
-              value={name}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-              required
+            {...register("name")}
+            error={errors.name?.message}
             />
 
             <Field
               label="Correo Electrónico"
               type="email"
-              value={email}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-              required
+            {...register("email")}
+            error={errors.email?.message}
             />
 
             <Select
               label="Rol del Sistema"
-              value={role}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setRole(e.target.value)}
               options={roleOptions}
+            {...register("role")}
+            error={errors.role?.message}
             />
           </section>
 
           <footer className={styles.footer}>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? "Creando..." : "Crear Usuario"}
+          <button type="submit" className="btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Creando..." : "Crear Usuario"}
             </button>
           </footer>
         </form>
       </main>
     </div>
   );
+}
+
+function humanizeApiError(err: unknown): string {
+  if (err instanceof HttpError) {
+    if (err.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
+    if (err.status === 403) return "No tienes permisos para crear usuarios.";
+    if (err.status === 400) {
+      const details = Array.isArray(err.details) ? err.details.join(" · ") : null;
+      return details ? `${err.message}: ${details}` : err.message;
+    }
+    return `Error del servidor (${err.status}): ${err.message}`;
+  }
+  if (err instanceof Error) return err.message;
+  return "Error inesperado al crear el usuario.";
 }

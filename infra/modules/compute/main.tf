@@ -117,3 +117,28 @@ resource "aws_iam_role_policy" "lambda_attachments_bucket" {
     }]
   })
 }
+
+# Permite a la Lambda administrar usuarios y grupos en Cognito
+resource "aws_iam_role_policy" "lambda_cognito" {
+  count = var.attach_cognito_policy ? 1 : 0
+
+  name = "${local.function_name}-cognito"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminUpdateUserAttributes",
+        "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminEnableUser",
+        "cognito-idp:AdminAddUserToGroup",
+        "cognito-idp:AdminRemoveUserFromGroup"
+      ]
+      Resource = [var.cognito_user_pool_arn]
+    }]
+  })
+}

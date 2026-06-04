@@ -94,3 +94,15 @@ variable "attach_attachments_bucket_policy" {
   type        = bool
   default     = false
 }
+
+variable "cognito_user_pool_arn" {
+  description = "ARN of the Cognito User Pool. Read by the policy when attach_cognito_policy = true."
+  type        = string
+  default     = ""
+}
+
+variable "attach_cognito_policy" {
+  description = "Whether to attach the Cognito User Pool admin access policy to the Lambda role."
+  type        = bool
+  default     = false
+}

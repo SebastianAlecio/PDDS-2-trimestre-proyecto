@@ -34,6 +34,12 @@ const {
 } = require("@aws-sdk/lib-dynamodb");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const crypto = require("node:crypto");
+const { 
+  CognitoIdentityProviderClient, 
+  AdminCreateUserCommand, 
+  AdminAddUserToGroupCommand 
+} = require("@aws-sdk/client-cognito-identity-provider");
+
 
 const ALLOWED_CATEGORIES = new Set(["incidente", "solicitud", "mejora"]);
 const ALLOWED_AREAS = new Set(["RRHH", "IT", "Legal", "Finanzas"]);
@@ -51,6 +57,7 @@ const TABLE_NAME = process.env.TICKETS_TABLE_NAME;
 const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET_NAME;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
+const cognitoClient = new CognitoIdentityProviderClient({});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers de respuesta HTTP (formato payload v2)
@@ -546,6 +553,84 @@ async function handleAssignTicket(event, claims) {
   }
 }
 
+async function handleCreateUser(event, claims) {
+  if (!requireGroup(claims, ["gerente"])) {
+    return forbidden("No tienes permisos para crear usuarios. Solo los gerentes pueden hacerlo.");
+  }
+
+  try {
+    const body = JSON.parse(event.body);
+    const { email, name, role } = body;
+
+    // Validación básica de parámetros
+    if (!email || !name || !role) {
+      return badRequest("Faltan campos obligatorios: email, name, role.");
+    }
+    
+    // Asegúrate de inyectar el ID de tu User Pool a la Lambda desde tu archivo Terraform
+    const userPoolId = process.env.COGNITO_USER_POOL_ID; 
+
+    if (!userPoolId) {
+      throw new Error("Variable COGNITO_USER_POOL_ID no definida en el entorno");
+    }
+
+    // 2. Crear el usuario en Cognito.
+    // DesiredDeliveryMediums: ["EMAIL"] es el parámetro encargado de enviar la contraseña
+    // temporal automáticamente al correo del usuario.
+    const createCommand = new AdminCreateUserCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      UserAttributes: [
+        { Name: "email", Value: email },
+        { Name: "email_verified", Value: "true" },
+        { Name: "name", Value: name }
+      ],
+      DesiredDeliveryMediums: ["EMAIL"] 
+    });
+
+    await cognitoClient.send(createCommand);
+
+    // 3. Asignar el rol al usuario dentro del grupo de Cognito.
+    // El rol enviado debe hacer 'match' con los nombres de tus grupos 
+    // en aws_cognito_user_group ("colaborador", "agente-n1", "agente-n2", "gerente")
+    const addToGroupCommand = new AdminAddUserToGroupCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      GroupName: role
+    });
+
+    await cognitoClient.send(addToGroupCommand);
+
+    // 4. Retornar Respuesta Exitosa (201)
+    return {
+      statusCode: 201,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*" 
+      },
+      body: JSON.stringify({ message: "Usuario creado exitosamente y asignado al rol." })
+    };
+
+  } catch (error) {
+    console.error("Error al crear usuario en Cognito:", error);
+    
+    // Manejo de Error: Cognito devuelve "UsernameExistsException" si el correo ya fue registrado
+    if (error.name === "UsernameExistsException") {
+      return {
+        statusCode: 409,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: "El usuario o correo ingresado ya existe en el sistema." })
+      };
+    }
+
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "Error interno al crear el usuario." })
+    };
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Router
 // ────────────────────────────────────────────────────────────────────────────
@@ -580,6 +665,9 @@ exports.handler = async (event) => {
 
     case "PUT /tickets/{id}/assign":
       return handleAssignTicket(event, claims);
+
+    case "POST /users":
+      return handleCreateUser(event, claims);
 
     default:
       return notFound(`route ${routeKey} is not handled`);

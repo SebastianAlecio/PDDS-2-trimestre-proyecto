@@ -11,9 +11,13 @@ module "compute" {
   attach_attachments_bucket_policy = true
   attachments_bucket_arn           = module.storage.bucket_arn
 
+  attach_cognito_policy = true
+  cognito_user_pool_arn = module.security.user_pool_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
+    COGNITO_USER_POOL_ID    = module.security.user_pool_id
   }
 }
 
