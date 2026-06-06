@@ -69,17 +69,15 @@ module "waf" {
   rate_limit_per_5min   = var.waf_rate_limit_per_5min
 }
 
-# DNS migrado desde Hostinger. Solo se instancia si var.dns_parent_domain
+# DNS administrado por Terraform. Solo se instancia si var.dns_parent_domain
 # está seteado. Esta versión maneja la HOSTED ZONE COMPLETA del dominio
-# (lumenchat.app), no solo un subdominio delegado, porque Hostinger no
-# soporta records NS en su UI y la única forma de delegar a Route 53 es
-# cambiar los nameservers del dominio entero.
+# (lumenchat.app): los nameservers del registrador apuntan acá y todos los
+# records de la zona se gestionan como código.
 #
-# Los records inline replican uno a uno los que estaban en Hostinger antes
-# del cambio de nameservers (apex A/AAAA, MX para email, TXT para SPF/DMARC,
-# CNAMEs para www/ftp/correo/DKIM). Si en algún momento se agregue un record
-# en Route 53 que no esté acá, hay que sumarlo a esta lista o se perderá en
-# el próximo apply.
+# Los records inline cubren el inventario completo del dominio (apex A/AAAA,
+# MX para email, TXT para SPF/DMARC, CNAMEs para www/ftp/correo/DKIM). Si en
+# algún momento se agregue un record en Route 53 que no esté acá, hay que
+# sumarlo a esta lista o se perderá en el próximo apply.
 module "dns" {
   source = "./modules/dns"
   count  = var.dns_parent_domain != "" ? 1 : 0
@@ -91,7 +89,7 @@ module "dns" {
   api_gateway_id           = module.api.api_id
   api_gateway_stage_name   = var.api_stage_name
 
-  # Records preservados del DNS de Hostinger.
+  # Records DNS de la zona (apex + subdominios).
   apex_a_record    = "82.25.83.178"
   apex_aaaa_record = "2a02:4780:2b:2099:0:1692:2e5b:2"
   apex_mx_records = [

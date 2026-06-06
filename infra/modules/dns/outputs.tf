@@ -20,7 +20,7 @@ output "domain_name" {
 }
 
 output "zone_nameservers" {
-  description = "Los 4 nameservers que AWS asignó a esta hosted zone. PEGARLOS en la sección Nameservers del panel del registrador (Hostinger → Domain → Nameservers → Change Nameservers → Custom). Mientras los nameservers del registrador sigan en dns-parking, esta zone no es alcanzable desde internet."
+  description = "Los 4 nameservers que AWS asignó a esta hosted zone. Configurarlos en el registrador del dominio como Custom Nameservers. Mientras el registrador siga apuntando a los nameservers anteriores, esta zone no es alcanzable desde internet."
   value       = aws_route53_zone.this.name_servers
 }
 
