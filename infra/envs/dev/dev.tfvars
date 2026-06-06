@@ -6,6 +6,7 @@ compute_function_name          = "chat-message-handler"
 compute_memory_size            = 128
 tickets_table_name             = "tickets"
 db_billing_mode                = "PAY_PER_REQUEST"
+api_health_check_path          = "/health"
 
 # DNS migrado de Hostinger a Route 53. Apply 1 crea la hosted zone del dominio
 # entero (lumenchat.app) con todos los records preservados; nos da 4 NS que se

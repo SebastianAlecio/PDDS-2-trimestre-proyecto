@@ -18,6 +18,7 @@ module "compute" {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
     COGNITO_USER_POOL_ID    = module.security.user_pool_id
+    HEALTH_CHECK_PATH       = var.api_health_check_path
   }
 }
 
@@ -56,6 +57,7 @@ module "api" {
   cognito_user_pool_arn = module.security.user_pool_arn
 
   cors_allow_origins = var.api_cors_allow_origins
+  health_check_path  = var.api_health_check_path
 }
 
 module "waf" {
