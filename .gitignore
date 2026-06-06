@@ -56,3 +56,6 @@ terraform.rc
 *.swp
 .claude/
 .antigravitycli/
+
+# Specs / brainstorming intermedios — proceso entre Claude y el equipo, no entregable.
+.specs/
