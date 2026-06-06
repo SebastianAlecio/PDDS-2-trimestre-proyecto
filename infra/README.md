@@ -233,7 +233,7 @@ Captura del error `Error: Error acquiring the state lock` que dispara DynamoDB c
 ### Delivery 3 — Edge & DNS (serverless-only track)
 
 Salida de `dig` contra el dominio custom + `curl -v` contra el endpoint público `/health` (Lambda real, no MOCK), capturadas en `evidence/edge-dns.txt`. Confirma que:
-- `lumenchat.app` resuelve a los 4 nameservers de Route 53 (delegación completa desde Hostinger).
+- `lumenchat.app` resuelve a los 4 nameservers de Route 53 (zona administrada en AWS).
 - `api.ticke-t.lumenchat.app` resuelve a las IPs del custom domain regional del API Gateway.
 - El TLS handshake con el cert wildcard `*.ticke-t.lumenchat.app` (ACM) cierra OK.
 - El `/health` responde 200 con el payload de la Lambda.

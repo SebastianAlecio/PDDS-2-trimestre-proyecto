@@ -15,23 +15,23 @@ Que ambos califiquen como fully serverless es lo que nos habilita a no provision
 
 ## 2. Diseño del módulo `dns/` y arquitectura
 
-El módulo `infra/modules/dns/` se introduce en esta entrega y reemplaza por completo al DNS que hostigaba el dominio `lumenchat.app` en otro proveedor (Hostinger). Sus responsabilidades:
+El módulo `infra/modules/dns/` se introduce en esta entrega y administra completamente la hosted zone de `lumenchat.app` en Route 53. Sus responsabilidades:
 
-1. **Hosted zone primaria.** `aws_route53_zone.this` para el dominio raíz `lumenchat.app`. Los 4 nameservers que AWS asigna se copian manualmente al panel del registrador (single-step, lo hace el equipo una sola vez) — desde ese momento, internet resuelve todo `*.lumenchat.app` vía Route 53.
-2. **Records preservados desde Hostinger.** Las 13 entradas que tenía el DNS de Hostinger (apex A/AAAA, MX a `mx1`/`mx2.hostinger.com`, SPF/DMARC, www, ftp, autoconfig, autodiscover, 3 keys DKIM) se re-declaran como `aws_route53_record` en TF. Se replicaron uno a uno antes del switch de nameservers para no romper email ni la página parqueada del apex durante la migración.
+1. **Hosted zone primaria.** `aws_route53_zone.this` para el dominio raíz `lumenchat.app`. Los 4 nameservers que AWS asigna se configuran una sola vez en el registrador del dominio — desde ese momento, internet resuelve todo `*.lumenchat.app` vía Route 53.
+2. **Records DNS gestionados como código.** El bloque `module "dns"` declara cada record (`apex_a_record`, `apex_aaaa_record`, `apex_mx_records`, `apex_txt_records`, `subdomain_records`) como variable tipada del módulo. Esto incluye los necesarios para la operación del dominio (apex A/AAAA, MX, SPF, DMARC, `www`, `_domainkey` CNAMEs, etc.) — todos los records de la zona viven en Terraform, sin estado paralelo en consola.
 3. **Certificado ACM wildcard.** `aws_acm_certificate.wildcard` cubre `*.ticke-t.lumenchat.app`. Validación por DNS automática: ACM emite un CNAME, Terraform lo escribe en la misma hosted zone, ACM lo lee y valida en minutos.
 4. **Custom domain del API Gateway.** `aws_api_gateway_domain_name.api` con endpoint regional (`REGIONAL`, mismo region que el REST API), TLS 1.2 mínimo, mapeo de `regional_certificate_arn` al cert wildcard, y `aws_api_gateway_base_path_mapping` apuntando al stage `api`. Resultado: `https://api.ticke-t.lumenchat.app` → REST API stage `api`.
 5. **Alias A en Route 53.** `aws_route53_record.api[0]` con bloque `alias` apunta `api.ticke-t.lumenchat.app` al `regional_domain_name` del custom domain — registro tipo A nativo (no CNAME) para que funcione como apex de subdominio.
 
 **Outputs exigidos por el rubric:** `domain_name = "api.ticke-t.lumenchat.app"` y `hosted_zone_id = "Z0749253Z6TOL9I58TBW"` están expuestos tanto en el módulo (`outputs.tf`) como re-exportados a nivel root (`infra/outputs.tf`), nombrados exactamente como pide el spec.
 
-**Estrategia de dos applies para evitar bloqueo durante el switch de nameservers:**
-- Apply 1: solo crea la hosted zone (con `dns_enable_api_custom_domain = false`). Da los 4 NS que se pegan en Hostinger.
+**Estrategia de dos applies para no bloquear el primer apply esperando validación DNS:**
+- Apply 1: solo crea la hosted zone (con `dns_enable_api_custom_domain = false`). Los 4 NS que entrega se configuran en el registrador.
 - Apply 2: con `dns_enable_api_custom_domain = true`, crea el cert + custom domain + alias. Ya con los nameservers propagados, ACM valida automáticamente.
 
 Esto evita el escenario en el que Terraform se queda bloqueado esperando que ACM valide un cert sobre un dominio que todavía no es alcanzable desde internet.
 
-**Consumo del módulo dns desde el root:** el bloque `module "dns"` en `infra/main.tf` toma como inputs `parent_domain`, `api_full_hostname`, `enable_api_custom_domain`, `api_gateway_id` (del módulo api), `api_gateway_stage_name`, y la lista de records preservados como variables tipadas (`apex_a_record`, `apex_aaaa_record`, `apex_mx_records`, `apex_txt_records`, `subdomain_records`). Los outputs `api_gateway_id` y `api_stage_name` los expone el módulo `api` ya existente.
+**Consumo del módulo dns desde el root:** el bloque `module "dns"` en `infra/main.tf` toma como inputs `parent_domain`, `api_full_hostname`, `enable_api_custom_domain`, `api_gateway_id` (del módulo api), `api_gateway_stage_name`, y las variables tipadas que describen los records del dominio (`apex_a_record`, `apex_aaaa_record`, `apex_mx_records`, `apex_txt_records`, `subdomain_records`). Los outputs `api_gateway_id` y `api_stage_name` los expone el módulo `api` ya existente.
 
 ## 3. D2 wiring update (sin refactor)
 

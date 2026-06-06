@@ -93,7 +93,7 @@ variable "waf_rate_limit_per_5min" {
 }
 
 variable "dns_parent_domain" {
-  description = "Dominio raíz cuya hosted zone se va a manejar en Route 53 (ej. \"lumenchat.app\"). Vacío significa: no provisionar el módulo dns. La migración desde Hostinger requiere replicar todos los records existentes del dominio (ver el bloque module \"dns\" en main.tf)."
+  description = "Dominio raíz cuya hosted zone se va a manejar en Route 53 (ej. \"lumenchat.app\"). Vacío significa: no provisionar el módulo dns. Todos los records de la zona se declaran como variables del módulo (ver el bloque module \"dns\" en main.tf)."
   type        = string
   default     = ""
 }
@@ -105,7 +105,7 @@ variable "dns_api_full_hostname" {
 }
 
 variable "dns_enable_api_custom_domain" {
-  description = "Si es true, además de la hosted zone y los records preservados, crea ACM cert + custom domain del API Gateway + A-alias. Dejar en false para el primer apply: así Terraform crea solo el DNS y nos da los nameservers para cambiar en el registrador, sin quedarse esperando validación de cert que todavía no es alcanzable."
+  description = "Si es true, además de la hosted zone y los records de la zona, crea ACM cert + custom domain del API Gateway + A-alias. Dejar en false para el primer apply: así Terraform crea solo el DNS y nos da los nameservers para cambiar en el registrador, sin quedarse esperando validación de cert que todavía no es alcanzable."
   type        = bool
   default     = false
 }

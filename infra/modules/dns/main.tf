@@ -8,21 +8,21 @@ locals {
 
 # ─── Hosted zone del dominio raíz ──────────────────────────────────────────
 #
-# Esta hosted zone reemplaza al DNS del registrador (Hostinger). Cuando los
-# nameservers del dominio se cambien a los 4 que AWS asigna acá (output
+# Esta hosted zone administra el DNS del dominio. Cuando los nameservers del
+# dominio se cambien en el registrador a los 4 que AWS asigna acá (output
 # zone_nameservers), TODO el DNS de lumenchat.app pasa a manejarse desde
-# Route 53 — por eso recreamos abajo los records que ya tenía Hostinger.
+# Route 53 — por eso declaramos abajo todos los records necesarios.
 resource "aws_route53_zone" "this" {
   name = var.parent_domain
 
-  comment = "Ticke-T · zone primaria para ${var.parent_domain} (migrado desde Hostinger)"
+  comment = "Ticke-T · zone primaria para ${var.parent_domain}"
 
   tags = {
     Environment = var.environment
   }
 }
 
-# ─── Records preservados desde el DNS del registrador ──────────────────────
+# ─── Records DNS del dominio ───────────────────────────────────────────────
 
 resource "aws_route53_record" "apex_a" {
   count = var.apex_a_record != "" ? 1 : 0

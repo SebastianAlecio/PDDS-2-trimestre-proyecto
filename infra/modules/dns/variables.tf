@@ -31,11 +31,12 @@ variable "api_gateway_stage_name" {
   default     = ""
 }
 
-# ─── Records existentes a replicar desde el DNS del registrador ──────────────
+# ─── Records DNS administrados por el módulo ────────────────────────────────
 #
-# Para hacer una migración limpia desde Hostinger (u otro DNS provider), los
-# records actuales se modelan abajo como variables. Permite tunearlos sin
-# modificar el módulo. Cada una es un map o list según convenga.
+# Toda la zona se declara como código: cada tipo de record (apex A/AAAA, MX,
+# TXT, subdominios) entra como variable tipada del módulo. Permite tunearlos
+# sin modificar el módulo y mantiene el inventario completo en TF, sin estado
+# paralelo en consola.
 
 variable "apex_a_record" {
   description = "IPv4 al que apunta el apex del dominio. \"\" significa: no crear record A en apex."
