@@ -82,3 +82,14 @@ output "dns_api_url" {
   description = "URL pública del API en el custom domain (ej. https://api.ticke-t.lumenchat.app). Vacío hasta que dns_enable_api_custom_domain = true y el segundo apply pase."
   value       = length(module.dns) > 0 ? module.dns[0].api_url : ""
 }
+
+# Re-exportados del módulo dns con los nombres exigidos por el rubric OYD-D3.
+output "domain_name" {
+  description = "FQDN del custom domain del API (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
+  value       = length(module.dns) > 0 ? module.dns[0].domain_name : ""
+}
+
+output "hosted_zone_id" {
+  description = "ID de la hosted zone Route 53 (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
+  value       = length(module.dns) > 0 ? module.dns[0].hosted_zone_id : ""
+}
