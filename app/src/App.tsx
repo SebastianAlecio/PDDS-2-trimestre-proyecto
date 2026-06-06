@@ -80,6 +80,7 @@ function HomeRedirect() {
   const role = status.user.primaryRole;
   if (role === "colaborador") return <Navigate to="/crear" replace />;
   if (role === "agente-n1" || role === "agente-n2") return <Navigate to="/cola" replace />;
+  if (role === "gerente") return <Navigate to="/crear-usuario" replace />;
   return <ComingSoon title={titleForRole(role)} caption={captionForRole(role)} />;
 }
 
