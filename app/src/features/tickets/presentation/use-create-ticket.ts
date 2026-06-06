@@ -26,15 +26,18 @@ export function useCreateTicket(repo: TicketRepository = defaultRepo) {
           size: f.size,
           type: f.type || "application/octet-stream",
         }));
-        return repo.create({
-          title: values.title,
-          category: values.category as TicketCategory,
-          area: values.area as TicketArea,
-          priority: values.priority as TicketPriority,
-          description: values.description,
-          requesterArea: values.requesterArea,
-          attachments,
-        });
+        return repo.create(
+          {
+            title: values.title,
+            category: values.category as TicketCategory,
+            area: values.area as TicketArea,
+            priority: values.priority as TicketPriority,
+            description: values.description,
+            requesterArea: values.requesterArea,
+            attachments,
+          },
+          files, // los binarios se suben a S3 vía presigned URLs después del POST
+        );
       },
     }),
     [repo],
