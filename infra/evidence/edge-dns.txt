@@ -1,0 +1,93 @@
+=== dig api.ticke-t.lumenchat.app ===
+
+; <<>> DiG 9.10.6 <<>> api.ticke-t.lumenchat.app
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 18803
+;; flags: qr rd ra; QUERY: 1, ANSWER: 3, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1220
+;; QUESTION SECTION:
+;api.ticke-t.lumenchat.app.	IN	A
+
+;; ANSWER SECTION:
+api.ticke-t.lumenchat.app. 60	IN	A	52.5.92.96
+api.ticke-t.lumenchat.app. 60	IN	A	44.196.240.124
+api.ticke-t.lumenchat.app. 60	IN	A	54.196.127.236
+
+;; Query time: 36 msec
+;; SERVER: 2800:98:0:4::4#53(2800:98:0:4::4)
+;; WHEN: Sat Jun 06 13:01:59 CST 2026
+;; MSG SIZE  rcvd: 102
+
+
+=== dig +short NS lumenchat.app (delegation a Route 53) ===
+ns-516.awsdns-00.net.
+ns-383.awsdns-47.com.
+ns-1495.awsdns-58.org.
+ns-1841.awsdns-38.co.uk.
+
+=== curl -v https://api.ticke-t.lumenchat.app/health (custom domain → API Gateway → Lambda) ===
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 44.196.240.124, 54.196.127.236, 52.5.92.96
+*   Trying 44.196.240.124:443...
+* Connected to api.ticke-t.lumenchat.app (44.196.240.124) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/health
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /health]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /health HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< date: Sat, 06 Jun 2026 19:02:00 GMT
+< content-type: application/json
+< content-length: 192
+< x-amzn-requestid: 5e4e16dd-3618-4f8d-84c6-9f9def1370af
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amz-apigw-id: ejY6UGTAoAMElew=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< x-amzn-trace-id: Root=1-6a246ea8-6b4586591eb3e9fc1800ed88;Parent=6a233af990ea83b3;Sampled=0;Lineage=1:72ec4815:0
+< 
+{ [192 bytes data]
+100   192  100   192    0     0    180      0  0:00:01  0:00:01 --:--:--   180100   192  100   192    0     0    180      0  0:00:01  0:00:01 --:--:--   180
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"status":"ok","service":"chat-message-handler-dev","region":"us-east-1","timestamp":"2026-06-06T19:02:00.911Z","dependencies":{"tickets_table":"configured","attachments_bucket":"configured"}}

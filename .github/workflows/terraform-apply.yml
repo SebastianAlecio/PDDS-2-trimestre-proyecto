@@ -1,0 +1,59 @@
+name: Terraform Apply
+
+# Apply automático cuando una PR se mergea a main. Cumple el requisito
+# "Apply on merge" del rubric OYD-D3 Deliverable E. El plan-on-PR vive en
+# terraform-ci.yml — este workflow asume que la PR ya pasó por ese pipeline
+# antes de mergearse, así que acá no re-corremos validate ni fmt.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-apply.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: infra
+
+# Concurrencia: si dos merges entran casi simultáneos, encolamos para que
+# no se peleen por el state lock de DynamoDB.
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Terraform apply (envs/dev/dev.tfvars)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (para npm install de la Lambda src)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform apply -var-file=envs/dev/dev.tfvars -input=false -auto-approve
