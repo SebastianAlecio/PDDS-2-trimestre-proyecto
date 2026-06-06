@@ -74,6 +74,12 @@ variable "api_stage_name" {
   default     = "api"
 }
 
+variable "api_health_check_path" {
+  description = "Path del health check del API. Default \"/\" por compliance con el rubric de OYD-D3 (\"defaulting to '/'\"). En envs/dev/dev.tfvars se sobreescribe a \"/health\" porque \"/\" en API Gateway por default responde \"Forbidden\" y no nos sirve como readiness real."
+  type        = string
+  default     = "/"
+}
+
 variable "waf_name" {
   description = "Base name of the WAF Web ACL. The final name is \"$${name}-$${environment}\"."
   type        = string
