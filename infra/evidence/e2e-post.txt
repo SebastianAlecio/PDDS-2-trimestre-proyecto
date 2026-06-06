@@ -1,0 +1,75 @@
+=== POST evidence: POST /tickets (rubric: POST writes a single object to S3, returns 201 with object key) ===
+Endpoint: https://api.ticke-t.lumenchat.app/tickets
+Auth: Bearer <ID token de oyd-evidence-colab, rol colaborador>
+El response.object_key apunta al manifest.json escrito por la Lambda a S3.
+
+Note: Unnecessary use of -X or --request, POST is already inferred.
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 54.83.137.249, 100.48.166.34, 52.203.0.90
+*   Trying 54.83.137.249:443...
+* Connected to api.ticke-t.lumenchat.app (54.83.137.249) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/tickets
+* [HTTP/2] [1] [:method: POST]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /tickets]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiIwNDc4NjRmOC0yMGYxLTcwMTQtY2Q3NC1jZTUzOTUyNTc0MGEiLCJjb2duaXRvOmdyb3VwcyI6WyJjb2xhYm9yYWRvciJdLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaXNzIjoiaHR0cHM6Ly9jb2duaXRvLWlkcC51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS91cy1lYXN0LTFfMHNnUnAyaUkwIiwiY29nbml0bzp1c2VybmFtZSI6IjA0Nzg2NGY4LTIwZjEtNzAxNC1jZDc0LWNlNTM5NTI1NzQwYSIsIm9yaWdpbl9qdGkiOiJkY2Y1ZjUyMS04NDk1LTRhYjQtYjAzNC1hZDQzYzA1YmY5NmIiLCJhdWQiOiJqNmNjam9wMzdoaDRvaTV0cG42cjU5cGo4IiwiZXZlbnRfaWQiOiJkYjllNzdmMC05ZGI1LTRhYWItYTZkYS05YWZlYjI0N2U0ZTAiLCJ0b2tlbl91c2UiOiJpZCIsImF1dGhfdGltZSI6MTc4MDc3MjY4OSwibmFtZSI6Ik9ZRCBFdmlkZW5jZSBDb2xhYiIsImV4cCI6MTc4MDc3NjI4OSwiaWF0IjoxNzgwNzcyNjg5LCJqdGkiOiJmODM5ZGI4MS0zZjUxLTQzMDUtYjQ4YS1lMDRlMDZkYmZkMjMiLCJlbWFpbCI6Im95ZC1ldmlkZW5jZS1jb2xhYkBveWQubG9jYWwifQ.J96PXKcVoq8Pu0RtKkBPkB7sMePsh0I0-spCIKj2PcXNrfPQ50eE2MS-gRaB_H7xpMS5SMxIYyMPjEfwYzMM9b3Vk56A5qO2uNaaAfsAfsm-MdkBfhVPh95vVwURRjDz1Wa8sJbQKYv-769cVH3pN-6cpL0x1M4I0-v58Uuceud0ZXvrKPw7rkj2M1Cx0eBWH4xf3xno6x-P7k4hXfxp4O99bOVavbjJrBofGpvM0JoPehUse8WGKYPGr-NI8AwOEIlr2lv5H1-1inA-Tk9dbVdbiXB9DqOWK9RdZc5sqSAekyto1iLXcim0y7iwYYQ6l-LvJ_9oodJ30cTV2b1JQw]
+* [HTTP/2] [1] [content-type: application/json]
+* [HTTP/2] [1] [content-length: 313]
+> POST /tickets HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiIwNDc4NjRmOC0yMGYxLTcwMTQtY2Q3NC1jZTUzOTUyNTc0MGEiLCJjb2duaXRvOmdyb3VwcyI6WyJjb2xhYm9yYWRvciJdLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaXNzIjoiaHR0cHM6Ly9jb2duaXRvLWlkcC51cy1lYXN0LTEuYW1hem9uYXdzLmNvbS91cy1lYXN0LTFfMHNnUnAyaUkwIiwiY29nbml0bzp1c2VybmFtZSI6IjA0Nzg2NGY4LTIwZjEtNzAxNC1jZDc0LWNlNTM5NTI1NzQwYSIsIm9yaWdpbl9qdGkiOiJkY2Y1ZjUyMS04NDk1LTRhYjQtYjAzNC1hZDQzYzA1YmY5NmIiLCJhdWQiOiJqNmNjam9wMzdoaDRvaTV0cG42cjU5cGo4IiwiZXZlbnRfaWQiOiJkYjllNzdmMC05ZGI1LTRhYWItYTZkYS05YWZlYjI0N2U0ZTAiLCJ0b2tlbl91c2UiOiJpZCIsImF1dGhfdGltZSI6MTc4MDc3MjY4OSwibmFtZSI6Ik9ZRCBFdmlkZW5jZSBDb2xhYiIsImV4cCI6MTc4MDc3NjI4OSwiaWF0IjoxNzgwNzcyNjg5LCJqdGkiOiJmODM5ZGI4MS0zZjUxLTQzMDUtYjQ4YS1lMDRlMDZkYmZkMjMiLCJlbWFpbCI6Im95ZC1ldmlkZW5jZS1jb2xhYkBveWQubG9jYWwifQ.J96PXKcVoq8Pu0RtKkBPkB7sMePsh0I0-spCIKj2PcXNrfPQ50eE2MS-gRaB_H7xpMS5SMxIYyMPjEfwYzMM9b3Vk56A5qO2uNaaAfsAfsm-MdkBfhVPh95vVwURRjDz1Wa8sJbQKYv-769cVH3pN-6cpL0x1M4I0-v58Uuceud0ZXvrKPw7rkj2M1Cx0eBWH4xf3xno6x-P7k4hXfxp4O99bOVavbjJrBofGpvM0JoPehUse8WGKYPGr-NI8AwOEIlr2lv5H1-1inA-Tk9dbVdbiXB9DqOWK9RdZc5sqSAekyto1iLXcim0y7iwYYQ6l-LvJ_9oodJ30cTV2b1JQw
+> Content-Type: application/json
+> Content-Length: 313
+> 
+} [313 bytes data]
+* upload completely sent off: 313 bytes
+100   313    0     0  100   313      0    264  0:00:01  0:00:01 --:--:--   264< HTTP/2 201 
+< date: Sat, 06 Jun 2026 19:05:13 GMT
+< content-type: application/json
+< content-length: 1086
+< x-amzn-requestid: f8b113de-7d99-4565-9629-2109728f1c83
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amz-apigw-id: ejZYWFFIoAMEHAg=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< x-amzn-trace-id: Root=1-6a246f68-7b13ba7b6cc6209e43c60ff9;Parent=5c51c1da987ceee6;Sampled=0;Lineage=1:72ec4815:0
+< 
+{ [1086 bytes data]
+100  1399  100  1086  100   313    901    259  0:00:01  0:00:01 --:--:--  1161
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"id":"7ebcfdb7-19cc-4228-886c-0a2d4ce310be","item":{"PK":"TICKET#7ebcfdb7-19cc-4228-886c-0a2d4ce310be","SK":"METADATA","GSI1-PK":"USER#047864f8-20f1-7014-cd74-ce539525740a","GSI3-PK":"TICKETS","GSI4-PK":"STATUS#Abierto","GSI4-SK":"PRIO#alta#2026-06-06T19:05:12.374Z","fecha_inicio":"2026-06-06T19:05:12.374Z","ticket_id":"7ebcfdb7-19cc-4228-886c-0a2d4ce310be","titulo":"[EVIDENCE] OYD-D3 e2e POST","categoria":"incidente","area":"IT","prioridad":"alta","descripcion":"Ticket creado por curl desde infra/evidence/e2e-post.txt para satisfacer Deliverable D del rubric. El POST escribe el manifest a S3 y devuelve 201 con object_key.","estado":"Abierto","responsable":"Sin asignar","sla_etiqueta":"1 hora hábil","created_at":"2026-06-06T19:05:12.374Z","updated_at":"2026-06-06T19:05:12.374Z","fecha_limite":"2026-06-06T20:05:12.374Z","solicitante":{"nombre":"OYD Evidence Colab","correo":"oyd-evidence-colab@oyd.local","area":"IT","user_id":"047864f8-20f1-7014-cd74-ce539525740a"},"adjuntos":[]},"object_key":"attachments/7ebcfdb7-19cc-4228-886c-0a2d4ce310be/manifest.json","uploads":[]}

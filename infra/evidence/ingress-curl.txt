@@ -1,0 +1,131 @@
+=== curl -v https://api.ticke-t.lumenchat.app/health ===
+(public endpoint, no auth — health check via Lambda AWS_PROXY integration)
+
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 54.196.127.236, 52.5.92.96, 44.196.240.124
+*   Trying 54.196.127.236:443...
+* Connected to api.ticke-t.lumenchat.app (54.196.127.236) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/health
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /health]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /health HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< date: Sat, 06 Jun 2026 19:02:03 GMT
+< content-type: application/json
+< content-length: 192
+< x-amzn-requestid: da21e3ca-3f52-4cb6-a69a-12a65b806515
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amz-apigw-id: ejY64EwoIAMEk_g=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< x-amzn-trace-id: Root=1-6a246eab-3bb1bdf611f0cd064cb7e827;Parent=1a3b4c35df04bb3d;Sampled=0;Lineage=1:72ec4815:0
+< 
+{ [192 bytes data]
+100   192  100   192    0     0    836      0 --:--:-- --:--:-- --:--:--   838
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"status":"ok","service":"chat-message-handler-dev","region":"us-east-1","timestamp":"2026-06-06T19:02:03.661Z","dependencies":{"tickets_table":"configured","attachments_bucket":"configured"}}
+
+=== curl -v https://api.ticke-t.lumenchat.app/tickets/me (auth-protected route) ===
+(401 esperado: Cognito authorizer rechaza sin token, prueba que el routing funciona)
+
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.5.92.96, 44.196.240.124, 54.196.127.236
+*   Trying 52.5.92.96:443...
+* Connected to api.ticke-t.lumenchat.app (52.5.92.96) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/tickets/me
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /tickets/me]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /tickets/me HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 401 
+< date: Sat, 06 Jun 2026 19:02:03 GMT
+< content-type: application/json
+< content-length: 26
+< x-amzn-requestid: eeb75605-347e-4190-88c4-fe781ddcef11
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amzn-errortype: UnauthorizedException
+< x-amz-apigw-id: ejY66H5tIAMEZQg=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< 
+{ [26 bytes data]
+100    26  100    26    0     0    122      0 --:--:-- --:--:-- --:--:--   123
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"message":"Unauthorized"}

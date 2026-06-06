@@ -1,0 +1,69 @@
+=== GET evidence: GET /tickets/queue (rubric: GET reads from DB, returns at least 1 row) ===
+Endpoint: https://api.ticke-t.lumenchat.app/tickets/queue
+Auth: Bearer <ID token de oyd-evidence-agente, rol agente-n1>
+Seed expected: TICKET#seed-oyd-d3-001 (insertado via aws_dynamodb_table_item)
+
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.203.0.90, 54.83.137.249, 100.48.166.34
+*   Trying 52.203.0.90:443...
+* Connected to api.ticke-t.lumenchat.app (52.203.0.90) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/tickets/queue
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /tickets/queue]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiI0NDg4YzQ5OC03MGUxLTcwNzEtNDVlOC01YWM5ZGExZTEzMDIiLCJjb2duaXRvOmdyb3VwcyI6WyJhZ2VudGUtbjEiXSwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xXzBzZ1JwMmlJMCIsImNvZ25pdG86dXNlcm5hbWUiOiI0NDg4YzQ5OC03MGUxLTcwNzEtNDVlOC01YWM5ZGExZTEzMDIiLCJvcmlnaW5fanRpIjoiYWM0YWY0NDEtZjU2OC00YjBiLWE5MDQtY2NhNWNiODk5NzllIiwiYXVkIjoiajZjY2pvcDM3aGg0b2k1dHBuNnI1OXBqOCIsImV2ZW50X2lkIjoiNWVjZmM4MTMtZmRiNC00NmM0LTkxZDQtOTcwMTdmMGYzYjI4IiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODA3NzI2OTAsIm5hbWUiOiJPWUQgRXZpZGVuY2UgQWdlbnRlIiwiZXhwIjoxNzgwNzc2MjkwLCJpYXQiOjE3ODA3NzI2OTAsImp0aSI6IjUzODc0MDVhLTUxNzgtNDMyYi1hMzBhLTQzOWRjMWQ4NGU2NyIsImVtYWlsIjoib3lkLWV2aWRlbmNlLWFnZW50ZUBveWQubG9jYWwifQ.0OS4mNilhA_ftdDhGx5dWonW-g4ua9xyXFtXxxIcYk7TCNhj-y8kCeAPLlx23kVdODU3npN_TuDkedSuS8b6a7xZWRLqKqp4BBc6nxYX1LR-WY0Ij9sLIyHdMsiGhe3-YCkQTo7nJg96m9nGgIkwqP6peUTdeM8wKtCoHg7s2vju_xQgsa6VQdMXQOj_v7h1x1vYWUTnrPlvotTIcRwOKxZloBlQ64gWi5KaUeOGDNihuHTZs4solE3T2RyeaESpnj-XwoSYc10aSQ1jrLTi68LMZ5PlVNmGqvcMUfQVeSHALVthpXmEokYAoNXU4F_xnpxw3h4LY7xfg7J0SlDx8w]
+> GET /tickets/queue HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiI0NDg4YzQ5OC03MGUxLTcwNzEtNDVlOC01YWM5ZGExZTEzMDIiLCJjb2duaXRvOmdyb3VwcyI6WyJhZ2VudGUtbjEiXSwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xXzBzZ1JwMmlJMCIsImNvZ25pdG86dXNlcm5hbWUiOiI0NDg4YzQ5OC03MGUxLTcwNzEtNDVlOC01YWM5ZGExZTEzMDIiLCJvcmlnaW5fanRpIjoiYWM0YWY0NDEtZjU2OC00YjBiLWE5MDQtY2NhNWNiODk5NzllIiwiYXVkIjoiajZjY2pvcDM3aGg0b2k1dHBuNnI1OXBqOCIsImV2ZW50X2lkIjoiNWVjZmM4MTMtZmRiNC00NmM0LTkxZDQtOTcwMTdmMGYzYjI4IiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODA3NzI2OTAsIm5hbWUiOiJPWUQgRXZpZGVuY2UgQWdlbnRlIiwiZXhwIjoxNzgwNzc2MjkwLCJpYXQiOjE3ODA3NzI2OTAsImp0aSI6IjUzODc0MDVhLTUxNzgtNDMyYi1hMzBhLTQzOWRjMWQ4NGU2NyIsImVtYWlsIjoib3lkLWV2aWRlbmNlLWFnZW50ZUBveWQubG9jYWwifQ.0OS4mNilhA_ftdDhGx5dWonW-g4ua9xyXFtXxxIcYk7TCNhj-y8kCeAPLlx23kVdODU3npN_TuDkedSuS8b6a7xZWRLqKqp4BBc6nxYX1LR-WY0Ij9sLIyHdMsiGhe3-YCkQTo7nJg96m9nGgIkwqP6peUTdeM8wKtCoHg7s2vju_xQgsa6VQdMXQOj_v7h1x1vYWUTnrPlvotTIcRwOKxZloBlQ64gWi5KaUeOGDNihuHTZs4solE3T2RyeaESpnj-XwoSYc10aSQ1jrLTi68LMZ5PlVNmGqvcMUfQVeSHALVthpXmEokYAoNXU4F_xnpxw3h4LY7xfg7J0SlDx8w
+> 
+* Request completely sent off
+  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0< HTTP/2 200 
+< date: Sat, 06 Jun 2026 19:05:12 GMT
+< content-type: application/json
+< content-length: 1926
+< x-amzn-requestid: ac90d274-8997-4598-9d68-7610003b9be3
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amz-apigw-id: ejZYEEwjoAMEG9A=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< x-amzn-trace-id: Root=1-6a246f66-4b3219524cfb6dc275ca4b73;Parent=51c0fc341668d03d;Sampled=0;Lineage=1:72ec4815:0
+< 
+{ [1926 bytes data]
+100  1926  100  1926    0     0   1013      0  0:00:01  0:00:01 --:--:--  1013
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"unassigned":[{"GSI1-PK":"USER#seed-oyd-d3","fecha_limite":"2026-06-06T01:00:00.000Z","descripcion":"Item insertado vía Terraform (aws_dynamodb_table_item) para satisfacer el requisito 'Seed Data' del rubric OYD-D3. No representa un ticket real del sistema.","created_at":"2026-06-06T00:00:00.000Z","categoria":"incidente","prioridad":"alta","responsable":"Sin asignar","ticket_id":"seed-oyd-d3-001","solicitante":{"area":"IT","nombre":"Seed User","user_id":"seed-oyd-d3","correo":"seed@oyd.local"},"fecha_inicio":"2026-06-06T00:00:00.000Z","area":"IT","GSI3-PK":"TICKETS","PK":"TICKET#seed-oyd-d3-001","updated_at":"2026-06-06T00:00:00.000Z","estado":"Abierto","SK":"METADATA","titulo":"[SEED] Ticket de evidencia OYD-D3","GSI4-SK":"PRIO#alta#2026-06-06T00:00:00.000Z","sla_etiqueta":"1 hora hábil","GSI4-PK":"STATUS#Abierto"},{"descripcion":"Ticket rápido creado únicamente para validar la integración con AWS S3.","categoria":"incidente","GSI4-SK":"PRIO#media#2026-06-06T18:55:15.415Z","titulo":"Prueba de carga de archivo adjunto a S3","created_at":"2026-06-06T18:55:15.415Z","ticket_id":"6f635b8b-3505-4f8d-8366-13beb75a0910","GSI1-PK":"USER#347894b8-b091-7036-cad1-dcde03690f2e","prioridad":"media","responsable":"Sin asignar","fecha_inicio":"2026-06-06T18:55:15.415Z","sla_etiqueta":"4 horas hábiles","fecha_limite":"2026-06-06T22:55:15.415Z","area":"IT","GSI3-PK":"TICKETS","PK":"TICKET#6f635b8b-3505-4f8d-8366-13beb75a0910","estado":"Abierto","SK":"METADATA","solicitante":{"area":"IT","nombre":"Alessandro \n  Test","user_id":"347894b8-b091-7036-cad1-dcde03690f2e","correo":"test@ticke-t.local"},"updated_at":"2026-06-06T18:55:15.415Z","adjuntos":[{"name":"laptop.png","s3_key":"attachments/6f635b8b-3505-4f8d-8366-13beb75a0910/04436fde-bcdb-4a76-bb57-84068f876121","id":"04436fde-bcdb-4a76-bb57-84068f876121","size":37522,"type":"image/png","upload_status":"pending"}],"GSI4-PK":"STATUS#Abierto"}],"mine":[]}
