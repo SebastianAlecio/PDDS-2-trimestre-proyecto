@@ -688,7 +688,14 @@ async function handleCloseTicket(event, claims) {
 
   // 2) Publicar evento a SNS — best-effort. Si SNS falla, el ticket ya está
   // cerrado en DDB; logueamos el error y devolvemos 200 igual al cliente.
+  //
+  // El message_id es determinístico (ticket_id + closed_at) para que el
+  // consumer pueda deduplicar entregas repetidas de SQS. Como cerrar dos
+  // veces el mismo ticket está bloqueado por la ConditionExpression del
+  // UpdateItem (estado != Cerrado), el mismo evento siempre genera el
+  // mismo message_id.
   if (SNS_TOPIC_ARN) {
+    const messageId = `${ticketId}#${now}`;
     try {
       await sns.send(
         new PublishCommand({
@@ -696,6 +703,7 @@ async function handleCloseTicket(event, claims) {
           Subject: "ticket.closed",
           Message: JSON.stringify({
             event:        "ticket.closed",
+            message_id:   messageId,
             ticket_id:    ticketId,
             titulo:       item.titulo,
             solicitante:  item.solicitante,
@@ -704,7 +712,7 @@ async function handleCloseTicket(event, claims) {
           }),
         }),
       );
-      console.log("sns_published:", JSON.stringify({ ticket_id: ticketId, topic: SNS_TOPIC_ARN }));
+      console.log("sns_published:", JSON.stringify({ ticket_id: ticketId, message_id: messageId, topic: SNS_TOPIC_ARN }));
     } catch (err) {
       console.error("sns_publish_failed:", {
         ticket_id: ticketId,

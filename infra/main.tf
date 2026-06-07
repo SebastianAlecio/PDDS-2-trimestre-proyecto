@@ -46,8 +46,17 @@ module "notifier" {
   attach_ses_send_policy = true
   ses_from_address       = var.ses_from_address
 
+  # Acceso a DynamoDB para registros de idempotencia (IDEMPOTENCY#<message_id>
+  # en la misma tabla tickets-dev). Necesita GetItem (check pre-send) y
+  # PutItem (mark post-send). La policy del módulo compute incluye también
+  # Query y UpdateItem que no usamos acá — el scope sigue siendo el ARN
+  # exacto de la tabla, así que el blast radius está acotado.
+  attach_dynamodb_policy = true
+  dynamodb_table_arn     = module.database.table_arn
+
   environment_variables = {
-    SES_FROM_ADDRESS = var.ses_from_address
+    SES_FROM_ADDRESS   = var.ses_from_address
+    TICKETS_TABLE_NAME = module.database.table_name
   }
 }
 

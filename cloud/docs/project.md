@@ -19,7 +19,7 @@ Documento iterado sobre la E3; lo agregado/movido en esta entrega:
 - **Secciones nuevas.** § 15 Procesamiento asíncrono (pipeline `ticket.closed`, formato de payload, idempotencia, manejo de fallos con DLQ).
 - **Diagrama de contenedores actualizado a v2.** Incluye ahora el SNS topic `ticket-events`, la cola principal `ticket-notifications`, la DLQ, y el *notifier* Lambda. La separación de la Lambda síncrona (`chat-message-handler-dev`, dominio tickets) y la Lambda asíncrona (`ticket-notifier-dev`, dominio notificaciones) sigue el principio "una Lambda por bounded context".
 - **Renumeración.** Scope, Preguntas abiertas y Anexo IA corrieron una posición (eran § 15..§ 17 → ahora § 16..§ 18). Se mantiene el flujo *Negocio → Técnico → Reflexión*.
-- **Implementación que respalda el diseño.** Se construyó la cadena entera con Terraform: nuevo módulo `infra/modules/notifications/` (SNS topic + SQS queue principal + DLQ + subscription + queue policy), segunda instancia del módulo `compute/` para el *notifier* Lambda con event source mapping desde la SQS, e IAM least-privilege para `sns:Publish` (en la Lambda síncrona) y `ses:SendEmail` con condition `ses:FromAddress = soporte@lumenchat.app` (en el *notifier*). Para el envío real desde el dominio propio, agregamos verificación de dominio SES con DKIM (3 CNAMEs + TXT) al módulo `dns/` existente. Endpoint nuevo `PUT /tickets/{id}/status` con `ConditionExpression` que solo permite cerrar al agente asignado (`GSI2-PK = AGENT#<sub>`). Frontend: botón "Cerrar ticket" en la cola del agente, con modal de confirmación e indicación explícita de que el cierre dispara una notificación irreversible.
+- **Implementación que respalda el diseño.** Se construyó la cadena entera con Terraform: nuevo módulo `infra/modules/notifications/` (SNS topic + SQS queue principal + DLQ + subscription + queue policy), segunda instancia del módulo `compute/` para el *notifier* Lambda con event source mapping desde la SQS, e IAM least-privilege para `sns:Publish` (en la Lambda síncrona) y `ses:SendEmail` con condition `ses:FromAddress = soporte@lumenchat.app` (en el *notifier*). Para el envío real desde el dominio propio, agregamos verificación de dominio SES con DKIM (3 CNAMEs + TXT) al módulo `dns/` existente. Endpoint nuevo `PUT /tickets/{id}/status` con `ConditionExpression` que solo permite cerrar al agente asignado (`GSI2-PK = AGENT#<sub>`). **Idempotencia del consumer**: el *notifier* hace GET-before-send + PUT-after-send sobre `tickets-dev` con namespace `IDEMPOTENCY#<message_id>` y TTL de 7 días — `message_id` es determinístico desde el payload (`ticket_id#closed_at`). Frontend: botón "Cerrar ticket" en la cola del agente, con modal de confirmación e indicación explícita de que el cierre dispara una notificación irreversible.
 - **Preguntas abiertas (§ 17).** Se **cerraron** las preguntas de Asíncrono (notificaciones de escalamiento → un topic único `ticket-events` con shape genérica `{event, payload}` que permite filter policies a futuro · upload real de adjuntos → presigned PUT URLs, cabladas desde E3 ya integradas). Se **mantienen abiertas** Watchdog del SLA (todavía no implementado) y la conexión persistente del chat (WebSocket / SSE — pospuesta).
 - **Anexo IA (§ 18).** Bloque nuevo *"E4 — Decisiones técnicas exploradas con IA"* listando la discusión sobre SNS+SQS vs SQS directa vs EventBridge, el manejo de idempotencia, y la elección de SES sobre proveedores externos.
 
@@ -629,15 +629,25 @@ Campos NO críticos pero incluidos: `solicitante.nombre`, `solicitante.area`, `c
 
 ### 15.4 Idempotencia
 
-**Garantía actual: at-least-once.** SQS puede entregar un mensaje más de una vez (es la garantía estándar de SQS standard queues). Hoy el consumer **no es idempotente**: si SES acepta el primer SendEmail y después el handler tira (por una excepción no relacionada antes de retornar), SQS reentrega y el colaborador recibe **dos emails iguales**.
+**Garantía actual: at-least-once con dedup por idempotency key.** SQS standard entrega un mensaje al menos una vez — puede repetir en redelivery normal o cuando la Lambda se muere después de un `SES SendEmail` exitoso pero antes de devolver. Para evitar mandar dos veces el mismo email, el *notifier* implementa el patrón **GET-before-send + PUT-after-send** contra DynamoDB.
 
-**Por qué es aceptable para esta entrega.** El peor caso es un email duplicado al colaborador notificándole que su ticket se cerró. No causa daño irreversible. La probabilidad real es baja: SES SendEmail es la última operación del handler, y los únicos fallos posibles después son issues de red entre Lambda y el servicio SQS (raros).
+**Mecánica:**
 
-**Mitigación futura (E5 o más adelante):**
-1. **Idempotency key.** El producer genera un `message_id` único por evento (ej. `${ticket_id}#${closed_at}`) y el consumer lo registra en una tabla DDB con TTL corto (24h). Antes de procesar, chequea si ya está registrado. Si sí, skip.
-2. **SQS FIFO con `MessageDeduplicationId`.** Garantiza exactly-once dentro de una ventana de 5 minutos, sin código adicional. Costo: throughput limitado a 3000 msg/s/group.
+1. **Producer (Lambda síncrona).** Al publicar `ticket.closed`, incluye en el payload un campo `message_id` determinístico: `${ticket_id}#${closed_at}`. Como la `ConditionExpression` del `UpdateItem` bloquea cerrar dos veces el mismo ticket (estado != Cerrado), el mismo evento de negocio siempre produce el mismo `message_id`.
 
-Adoptamos (1) cuando los duplicados se vuelvan un problema real (reportes de usuarios, métrica). No antes.
+2. **Consumer (notifier Lambda).** Para cada record SQS:
+   - `GetItem` sobre `tickets-dev` con `PK = IDEMPOTENCY#<message_id>`, `SK = META`, `ConsistentRead = true`.
+   - Si el item existe → log `idempotency_skip` y `continue` (SQS borra el mensaje).
+   - Si no existe → `SES SendEmail` normalmente.
+   - Tras éxito de SES → `PutItem` con `{message_id, ticket_id, recipient, ses_message_id, processed_at, ttl}` con `ttl = now + 7 días`.
+
+3. **Tabla.** Reutilizamos `tickets-dev` con namespace `IDEMPOTENCY#`. El TTL de DynamoDB limpia automáticamente los records después de 7 días (cubre la retención máxima de la cola principal + ventana de margen).
+
+**Permisos IAM agregados al notifier:** `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:Query`, `dynamodb:UpdateItem` scoped al ARN exacto de `tickets-dev` y sus GSIs (el módulo `compute` solo expone un flag binario para DynamoDB; algunas acciones quedan disponibles aunque no se usen — el blast radius sigue acotado al ARN de la tabla).
+
+**Race window residual.** Dos invocaciones concurrentes del mismo `message_id` pueden ambas pasar el `GET` antes de que ninguna haya hecho `PutItem` → ambas mandan email → duplicado. Para SQS standard con throughput muy bajo (un mensaje por close de ticket) la probabilidad es muy baja. La alternativa libre de race es SQS FIFO con `MessageDeduplicationId`, que limita el throughput a 3000 msg/s por grupo — overkill para este caso de uso.
+
+**Qué pasa si el PUT post-send falla:** El email ya está mandado, pero el record de idempotencia no se persistió. Un retry posterior haría el `GetItem` y no encontraría nada → mandaría duplicado. Por eso el `PutItem` se loggea como warning (`idempotency_put_failed_email_already_sent`) sin tirar — preferimos un raro duplicado a perder la notificación entera por re-tirar.
 
 ### 15.5 Idempotencia del producer
 
@@ -696,6 +706,7 @@ Decisiones técnicas que aún no tomamos.
 > - **Notificaciones de escalamiento (topic-per-area vs único)** → **un único topic** `ticket-events` con shape genérica `{event, payload}`. Filter policies por atributo de mensaje quedan disponibles si en el futuro un consumer quiere solo eventos de un área. Trade-off elegido: simplicidad operativa sobre granularidad de suscripción.
 > - **Upload real de adjuntos** → **presigned PUT URLs** desde el `POST /tickets`. La Lambda devuelve un URL firmado por adjunto y el frontend hace `PUT` directo a S3, evitando el límite de 6 MB del payload de API Gateway. Permite archivos de hasta 25 MB sin pasar bytes por Lambda.
 > - **Pipeline asíncrono** → **SNS → SQS → Lambda → SES** con DLQ tras 3 fallos. Documentado en § 15.
+> - **Idempotencia del consumer** → **GET-before-send + PUT-after-send** con `IDEMPOTENCY#<message_id>` en DynamoDB y TTL de 7 días. `message_id` determinístico desde el payload (`ticket_id#closed_at`). Documentado en § 15.4.
 
 ### Red y entrega (parcialmente abierto)
 - **CDN delante del frontend.** ¿CloudFront delante del bucket que sirva el frontend? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando se monte el deploy real del frontend.
@@ -703,7 +714,6 @@ Decisiones técnicas que aún no tomamos.
 
 ### Asíncrono (parcialmente abierto)
 - **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho. No implementado hoy.
-- **Idempotencia del consumer.** Documentada en § 15.4 como abierta. Hoy el *notifier* es at-least-once; un email duplicado al colaborador es aceptable para el MVP. Cuando reportes de usuarios indiquen molestia, se implementa idempotency key (probable solución) o se migra a SQS FIFO con `MessageDeduplicationId`.
 
 ### Seguridad (decisión en E5)
 - **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — hoy se aplica con `requireGroup` por endpoint. ¿Se ajusta a verificación de ownership por item (la Lambda lee el ticket y compara `responsable` con el `sub` del token)? Más granular pero más caro por request.
