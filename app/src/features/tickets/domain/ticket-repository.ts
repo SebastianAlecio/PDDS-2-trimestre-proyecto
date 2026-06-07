@@ -13,4 +13,5 @@ export interface TicketRepository {
   listMyTickets(limit?: number): Promise<Ticket[]>;
   listQueue(): Promise<QueueData>;
   assignToMe(ticketId: string): Promise<Ticket>;
+  closeTicket(ticketId: string): Promise<Ticket>;
 }

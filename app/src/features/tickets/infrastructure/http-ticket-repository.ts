@@ -22,6 +22,7 @@ type CreateResponse = {
 type ListResponse = { items: unknown[]; count: number };
 type QueueResponse = { unassigned: unknown[]; mine: unknown[] };
 type AssignResponse = { id: string; item: unknown };
+type CloseResponse = { id: string; item: unknown };
 
 export class HttpTicketRepository implements TicketRepository {
   async create(input: CreateTicketInput, files: File[] = []): Promise<Ticket> {
@@ -74,6 +75,14 @@ export class HttpTicketRepository implements TicketRepository {
     const response = await apiFetch<AssignResponse>(
       `/tickets/${encodeURIComponent(ticketId)}/assign`,
       { method: "PUT" },
+    );
+    return mapDynamoItemToTicket(response.item);
+  }
+
+  async closeTicket(ticketId: string): Promise<Ticket> {
+    const response = await apiFetch<CloseResponse>(
+      `/tickets/${encodeURIComponent(ticketId)}/status`,
+      { method: "PUT", body: { status: "Cerrado" } },
     );
     return mapDynamoItemToTicket(response.item);
   }

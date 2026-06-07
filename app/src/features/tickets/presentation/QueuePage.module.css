@@ -249,6 +249,35 @@
   cursor: not-allowed;
 }
 
+.closeBtn {
+  background: var(--surface-black, #1a1a1a);
+  color: var(--on-dark, #ffffff);
+  border: 1px solid var(--hairline, rgba(0, 0, 0, 0.1));
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  font-family: var(--type-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.224px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease, opacity 120ms ease;
+}
+
+.closeBtn:hover:not(:disabled) {
+  background: var(--ink, #000000);
+  opacity: 0.9;
+}
+
+.closeBtn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.closeBtn:disabled {
+  background: var(--ink-muted-48);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -353,4 +382,93 @@
     padding-left: var(--s-md);
     padding-right: var(--s-md);
   }
+}
+
+/* Modal de confirmación de cierre de ticket. backdrop semi-transparente que
+   bloquea interacción con el fondo; el contenido vive centrado en pantalla. */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-md);
+  z-index: 1000;
+  animation: fadeIn 120ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: var(--canvas, #ffffff);
+  border: 1px solid var(--hairline, rgba(0, 0, 0, 0.1));
+  border-radius: var(--r-lg, 12px);
+  max-width: 480px;
+  width: 100%;
+  padding: 28px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.modalTitle {
+  font-family: var(--type-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin: 0 0 12px;
+  color: var(--ink, #000000);
+}
+
+.modalBody {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted-72, rgba(0, 0, 0, 0.72));
+  margin: 0 0 24px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.modalCancelBtn,
+.modalConfirmBtn {
+  padding: 9px 18px;
+  border-radius: var(--r-pill);
+  font-family: var(--type-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.224px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.modalCancelBtn {
+  background: transparent;
+  color: var(--ink, #000000);
+  border: 1px solid var(--hairline, rgba(0, 0, 0, 0.15));
+}
+
+.modalCancelBtn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.modalConfirmBtn {
+  background: var(--sev-high, #d93025);
+  color: #ffffff;
+  border: none;
+}
+
+.modalConfirmBtn:hover:not(:disabled) {
+  background: #b8281f;
+}
+
+.modalCancelBtn:disabled,
+.modalConfirmBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
