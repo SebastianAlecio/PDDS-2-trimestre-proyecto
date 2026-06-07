@@ -13,6 +13,13 @@ api_health_check_path          = "/health"
 # se configuran como Custom Nameservers en el registrador del dominio.
 # Apply 2 (después de propagación) sube enable_api_custom_domain a true y
 # crea el cert ACM + custom domain del API + A-alias para api.ticke-t.lumenchat.app.
-dns_parent_domain            = "lumenchat.app"
-dns_api_full_hostname        = "api.ticke-t.lumenchat.app"
-dns_enable_api_custom_domain = true
+dns_parent_domain              = "lumenchat.app"
+dns_api_full_hostname          = "api.ticke-t.lumenchat.app"
+dns_enable_api_custom_domain   = true
+dns_enable_ses_domain_identity = true
+
+# Notificaciones por email vía SES. La From es la dirección remitente; el
+# dominio se verifica via el módulo dns (DKIM + TXT) cuando
+# dns_enable_ses_domain_identity = true. Mientras la cuenta SES esté en
+# sandbox, los recipients tienen que estar verificados individualmente.
+ses_from_address = "soporte@lumenchat.app"

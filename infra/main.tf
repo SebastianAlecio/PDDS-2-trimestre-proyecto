@@ -14,11 +14,40 @@ module "compute" {
   attach_cognito_policy = true
   cognito_user_pool_arn = module.security.user_pool_arn
 
+  # SNS publish para eventos del dominio tickets (ticket.closed). El topic se
+  # crea en el módulo notifications; la Lambda lo consume vía env var.
+  attach_sns_publish_policy = true
+  sns_topic_arn             = module.notifications.sns_topic_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
     COGNITO_USER_POOL_ID    = module.security.user_pool_id
     HEALTH_CHECK_PATH       = var.api_health_check_path
+    SNS_TOPIC_ARN           = module.notifications.sns_topic_arn
+  }
+}
+
+# Notifier Lambda: consumer de la cola SQS que recibe los eventos publicados
+# al SNS topic. Por cada mensaje, manda un email vía SES a solicitante.correo.
+# Es una segunda instancia del módulo compute con source_dir distinto y
+# perms IAM distintos (SQS consume + SES send en vez de DDB + S3).
+module "notifier" {
+  source = "./modules/compute"
+
+  environment     = var.environment
+  name            = "ticket-notifier"
+  source_dir      = "${path.module}/modules/compute/src/notifier"
+  timeout_seconds = 15
+
+  attach_sqs_consume_policy = true
+  sqs_queue_arn             = module.notifications.sqs_queue_arn
+
+  attach_ses_send_policy = true
+  ses_from_address       = var.ses_from_address
+
+  environment_variables = {
+    SES_FROM_ADDRESS = var.ses_from_address
   }
 }
 
@@ -69,6 +98,19 @@ module "waf" {
   rate_limit_per_5min   = var.waf_rate_limit_per_5min
 }
 
+# Pipeline async de notificaciones: SNS topic + SQS queue principal + DLQ.
+# La tickets Lambda publica eventos al topic; el notifier Lambda los consume
+# desde la SQS y manda emails vía SES. Mensajes con 3 fallos consecutivos
+# (recipient inválido, SES sandbox restrictivo, etc.) van a la DLQ para
+# inspección manual.
+module "notifications" {
+  source = "./modules/notifications"
+
+  environment       = var.environment
+  name_prefix       = var.notifications_name_prefix
+  max_receive_count = var.notifications_max_receive_count
+}
+
 # DNS administrado por Terraform. Solo se instancia si var.dns_parent_domain
 # está seteado. Esta versión maneja la HOSTED ZONE COMPLETA del dominio
 # (lumenchat.app): los nameservers del registrador apuntan acá y todos los
@@ -82,12 +124,13 @@ module "dns" {
   source = "./modules/dns"
   count  = var.dns_parent_domain != "" ? 1 : 0
 
-  environment              = var.environment
-  parent_domain            = var.dns_parent_domain
-  api_full_hostname        = var.dns_api_full_hostname
-  enable_api_custom_domain = var.dns_enable_api_custom_domain
-  api_gateway_id           = module.api.api_id
-  api_gateway_stage_name   = var.api_stage_name
+  environment                = var.environment
+  parent_domain              = var.dns_parent_domain
+  api_full_hostname          = var.dns_api_full_hostname
+  enable_api_custom_domain   = var.dns_enable_api_custom_domain
+  enable_ses_domain_identity = var.dns_enable_ses_domain_identity
+  api_gateway_id             = module.api.api_id
+  api_gateway_stage_name     = var.api_stage_name
 
   # Records DNS de la zona (apex + subdominios).
   apex_a_record    = "82.25.83.178"

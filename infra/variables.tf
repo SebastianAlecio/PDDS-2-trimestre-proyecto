@@ -110,3 +110,27 @@ variable "dns_enable_api_custom_domain" {
   default     = false
 }
 
+variable "dns_enable_ses_domain_identity" {
+  description = "Si es true, registra el parent_domain como SES domain identity con DKIM + records de verificación en la hosted zone. Requerido para que el notifier Lambda pueda mandar emails desde *@parent_domain. Dejar en false si no se está usando SES."
+  type        = bool
+  default     = false
+}
+
+variable "ses_from_address" {
+  description = "Dirección remitente que el notifier Lambda usa para mandar emails (ej. \"soporte@lumenchat.app\"). Debe pertenecer a un dominio o address verificado en SES. La IAM policy del notifier condiciona ses:FromAddress a este valor."
+  type        = string
+  default     = ""
+}
+
+variable "notifications_name_prefix" {
+  description = "Prefijo para el SNS topic y la SQS queue de notificaciones. El nombre final es \"$${prefix}-$${environment}\"."
+  type        = string
+  default     = "ticket-notifications"
+}
+
+variable "notifications_max_receive_count" {
+  description = "Cantidad de intentos del notifier Lambda sobre un mensaje SQS antes de moverlo a la DLQ. Default 3 es estándar."
+  type        = number
+  default     = 3
+}
+

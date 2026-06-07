@@ -41,6 +41,10 @@ locals {
       resource_id = aws_api_gateway_resource.tickets_id_assign.id
       http_method = "PUT"
     }
+    "PUT /tickets/{id}/status" = {
+      resource_id = aws_api_gateway_resource.tickets_id_status.id
+      http_method = "PUT"
+    }
     "POST /users" = {
       resource_id = aws_api_gateway_resource.users.id
       http_method = "POST"
@@ -54,6 +58,7 @@ locals {
     "tickets-me"        = aws_api_gateway_resource.tickets_me.id
     "tickets-queue"     = aws_api_gateway_resource.tickets_queue.id
     "tickets-id-assign" = aws_api_gateway_resource.tickets_id_assign.id
+    "tickets-id-status" = aws_api_gateway_resource.tickets_id_status.id
     "users"             = aws_api_gateway_resource.users.id
   }
 }
@@ -116,6 +121,12 @@ resource "aws_api_gateway_resource" "tickets_id_assign" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_resource.tickets_id.id
   path_part   = "assign"
+}
+
+resource "aws_api_gateway_resource" "tickets_id_status" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id.id
+  path_part   = "status"
 }
 
 # ─── Methods + Integrations (autenticados con Cognito) ──────────────────────
@@ -244,6 +255,7 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_resource.tickets_queue.id,
       aws_api_gateway_resource.tickets_id.id,
       aws_api_gateway_resource.tickets_id_assign.id,
+      aws_api_gateway_resource.tickets_id_status.id,
       aws_api_gateway_resource.users.id,
       [for k, m in aws_api_gateway_method.endpoints : m.id],
       [for k, i in aws_api_gateway_integration.endpoints : i.id],

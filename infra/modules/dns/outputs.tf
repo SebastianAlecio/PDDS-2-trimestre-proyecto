@@ -33,3 +33,8 @@ output "api_certificate_arn" {
   description = "ARN del certificado wildcard ACM (vacío hasta que enable_api_custom_domain = true)."
   value       = var.enable_api_custom_domain ? aws_acm_certificate_validation.wildcard[0].certificate_arn : ""
 }
+
+output "ses_domain_identity_arn" {
+  description = "ARN del SES domain identity (formato arn:aws:ses:region:account:identity/domain). Vacío si enable_ses_domain_identity = false."
+  value       = var.enable_ses_domain_identity ? aws_ses_domain_identity.this[0].arn : ""
+}
