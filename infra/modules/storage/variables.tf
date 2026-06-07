@@ -30,3 +30,9 @@ variable "lifecycle_noncurrent_expiration_days" {
   type        = number
   default     = 90
 }
+
+variable "cors_allowed_origins" {
+  description = "Lista de orígenes permitidos para CORS sobre el bucket. Requerido cuando el frontend hace PUT directo a S3 vía presigned URL — sin esto, el browser bloquea el upload con CORS error. En dev incluye localhost (Vite) y el dominio custom; en prod restringir solo al dominio real."
+  type        = list(string)
+  default     = ["*"]
+}

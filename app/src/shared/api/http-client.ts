@@ -21,7 +21,7 @@ export class HttpError extends Error {
   }
 }
 
-type FetchOptions = {
+export type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | undefined>;

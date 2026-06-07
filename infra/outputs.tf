@@ -72,3 +72,24 @@ output "waf_web_acl_arn" {
   description = "ARN del Web ACL de WAF asociado al stage del REST API."
   value       = module.waf.web_acl_arn
 }
+
+output "dns_zone_nameservers" {
+  description = "Los 4 nameservers de la hosted zone delegada en Route 53. PEGAR en el panel de DNS del dominio padre (Hostinger) como records NS para el subdominio. Vacío si dns_subdomain no está configurado."
+  value       = length(module.dns) > 0 ? module.dns[0].zone_nameservers : []
+}
+
+output "dns_api_url" {
+  description = "URL pública del API en el custom domain (ej. https://api.ticke-t.lumenchat.app). Vacío hasta que dns_enable_api_custom_domain = true y el segundo apply pase."
+  value       = length(module.dns) > 0 ? module.dns[0].api_url : ""
+}
+
+# Re-exportados del módulo dns con los nombres exigidos por el rubric OYD-D3.
+output "domain_name" {
+  description = "FQDN del custom domain del API (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
+  value       = length(module.dns) > 0 ? module.dns[0].domain_name : ""
+}
+
+output "hosted_zone_id" {
+  description = "ID de la hosted zone Route 53 (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
+  value       = length(module.dns) > 0 ? module.dns[0].hosted_zone_id : ""
+}

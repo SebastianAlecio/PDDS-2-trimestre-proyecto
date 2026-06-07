@@ -21,6 +21,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Node.js es requerido por null_resource.npm_install (módulo compute)
+      # que corre `npm install --omit=dev` para empaquetar la dep
+      # @aws-sdk/s3-request-presigner que el runtime de Node 22 Lambda no trae.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:

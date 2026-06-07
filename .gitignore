@@ -22,6 +22,10 @@ tfplan
 # Lambda zip artifacts produced by data "archive_file" at plan/apply time
 infra/modules/compute/build/
 
+# node_modules dentro de la Lambda src: se reinstalan en cada apply via
+# null_resource.npm_install. Necesarios en el zip pero no en git.
+infra/modules/compute/src/node_modules/
+
 # Terraform output captures used in CI
 plan.txt
 
@@ -56,3 +60,6 @@ terraform.rc
 *.swp
 .claude/
 .antigravitycli/
+
+# Specs / brainstorming intermedios — proceso entre Claude y el equipo, no entregable.
+.specs/

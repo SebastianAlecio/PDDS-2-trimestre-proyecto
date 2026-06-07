@@ -38,10 +38,33 @@ resource "aws_iam_role_policy" "lambda_logs" {
   })
 }
 
+# Si la Lambda tiene package.json (depende de paquetes npm como
+# @aws-sdk/s3-request-presigner que no vienen en el runtime de Node 22),
+# corremos `npm install` antes del archive_file para que node_modules entre
+# al zip. Trigger por hash de package.json + package-lock.json (si existe)
+# fuerza re-instalación cuando las deps cambian.
+resource "null_resource" "npm_install" {
+  count = fileexists("${local.source_dir}/package.json") ? 1 : 0
+
+  triggers = {
+    package_json = filemd5("${local.source_dir}/package.json")
+    lock_exists  = fileexists("${local.source_dir}/package-lock.json") ? filemd5("${local.source_dir}/package-lock.json") : ""
+  }
+
+  provisioner "local-exec" {
+    working_dir = local.source_dir
+    command     = "npm install --omit=dev --no-audit --no-fund"
+  }
+}
+
 data "archive_file" "lambda" {
   type        = "zip"
   source_dir  = local.source_dir
   output_path = "${path.module}/build/${local.function_name}.zip"
+
+  # Asegura que npm_install corra antes de calcular el hash del zip cuando
+  # hay package.json. Sin esto, el primer plan ve la src sin node_modules.
+  depends_on = [null_resource.npm_install]
 }
 
 resource "aws_lambda_function" "this" {
@@ -114,6 +137,31 @@ resource "aws_iam_role_policy" "lambda_attachments_bucket" {
       Effect   = "Allow"
       Action   = ["s3:PutObject"]
       Resource = ["${var.attachments_bucket_arn}/attachments/*"]
+    }]
+  })
+}
+
+# Permite a la Lambda administrar usuarios y grupos en Cognito
+resource "aws_iam_role_policy" "lambda_cognito" {
+  count = var.attach_cognito_policy ? 1 : 0
+
+  name = "${local.function_name}-cognito"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminUpdateUserAttributes",
+        "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminEnableUser",
+        "cognito-idp:AdminAddUserToGroup",
+        "cognito-idp:AdminRemoveUserFromGroup"
+      ]
+      Resource = [var.cognito_user_pool_arn]
     }]
   })
 }

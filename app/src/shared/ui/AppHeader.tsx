@@ -49,7 +49,17 @@ export function AppHeader() {
           </NavLink>
         )}
         {user.primaryRole === "gerente" && (
-          <span className={styles.disabled}>Vistas próximamente</span>
+          <>
+            <NavLink
+              to="/crear-usuario"
+              className={({ isActive }) =>
+                isActive ? `${styles.link} ${styles.linkActive}` : styles.link
+              }
+            >
+              Crear usuario
+            </NavLink>
+            <span className={styles.disabled}>Dashboard (próximamente)</span>
+          </>
         )}
       </nav>
 

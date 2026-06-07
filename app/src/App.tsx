@@ -4,6 +4,7 @@ import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
 import { LoginPage } from "./features/auth/presentation/LoginPage";
 import { NewPasswordPage } from "./features/auth/presentation/NewPasswordPage";
+import { CreateUserForm } from "./features/users/presentation/CreateUserForm";
 import { useAuth } from "./shared/auth/use-auth";
 import { RequireAuth, RequireRole } from "./shared/auth/require-auth";
 
@@ -55,6 +56,17 @@ export function App() {
         }
       />
 
+      <Route
+        path="/crear-usuario"
+        element={
+          <RequireAuth>
+            <RequireRole allow={["gerente"]}>
+              <CreateUserForm />
+            </RequireRole>
+          </RequireAuth>
+        }
+      />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -68,6 +80,7 @@ function HomeRedirect() {
   const role = status.user.primaryRole;
   if (role === "colaborador") return <Navigate to="/crear" replace />;
   if (role === "agente-n1" || role === "agente-n2") return <Navigate to="/cola" replace />;
+  if (role === "gerente") return <Navigate to="/crear-usuario" replace />;
   return <ComingSoon title={titleForRole(role)} caption={captionForRole(role)} />;
 }
 

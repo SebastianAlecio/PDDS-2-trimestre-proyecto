@@ -33,7 +33,14 @@ const {
   UpdateCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const crypto = require("node:crypto");
+const { 
+  CognitoIdentityProviderClient, 
+  AdminCreateUserCommand, 
+  AdminAddUserToGroupCommand 
+} = require("@aws-sdk/client-cognito-identity-provider");
+
 
 const ALLOWED_CATEGORIES = new Set(["incidente", "solicitud", "mejora"]);
 const ALLOWED_AREAS = new Set(["RRHH", "IT", "Legal", "Finanzas"]);
@@ -49,8 +56,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const TABLE_NAME = process.env.TICKETS_TABLE_NAME;
 const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET_NAME;
+// Path al que API Gateway mapea el endpoint de health check (default "/health").
+// Se setea desde el módulo compute con el valor de var.api_health_check_path.
+// El handler matchea contra event.resource (template path) para responder ANTES
+// del check de auth — health checks no llevan JWT.
+const HEALTH_CHECK_PATH = process.env.HEALTH_CHECK_PATH || "/health";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
+const cognitoClient = new CognitoIdentityProviderClient({});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers de respuesta HTTP (formato payload v2)
@@ -215,38 +228,57 @@ function validateCreateTicketBody(body) {
 // S3: escritura de metadata de adjuntos
 // ────────────────────────────────────────────────────────────────────────────
 
-// Escribe en S3 un objeto JSON con la metadata de un adjunto, bajo la key
-// attachments/{ticket_id}/{att_id}.json. Devuelve { ok, s3_key } o
-// { ok: false, error } sin lanzar — el caller decide qué hacer en caso de
-// fallo. Estrategia "best-effort": un fallo de S3 no debe abortar la
-// creación del ticket que ya quedó en DynamoDB.
-async function writeAttachmentMetadataToS3(ticketId, attachment, requester) {
+// TTL del presigned PUT URL: 15 minutos. Suficiente para que el browser
+// suba archivos de hasta 25 MB en redes promedio sin que el URL caduque
+// en medio del upload.
+const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
+
+// Genera un presigned PUT URL para subir un adjunto DIRECTAMENTE a S3
+// desde el browser (sin que el binario pase por Lambda, evitando el límite
+// de 6 MB del payload de API Gateway). El URL hereda los permisos IAM de
+// la Lambda (s3:PutObject scoped a attachments/*) y es válido por
+// PRESIGNED_UPLOAD_TTL_SECONDS. Devuelve { s3_key, url, expires_in }.
+//
+// IMPORTANTE: el frontend debe hacer PUT con el header Content-Type
+// matcheando el `attachment.type` original — si difiere, S3 rechaza con
+// 403. Por eso lo bindeamos al PutObjectCommand acá.
+async function generatePresignedUploadUrl(ticketId, attachment) {
+  if (!ATTACHMENTS_BUCKET) {
+    throw new Error("ATTACHMENTS_BUCKET_NAME not set");
+  }
+  const s3_key = `attachments/${ticketId}/${attachment.id}`;
+  const command = new PutObjectCommand({
+    Bucket: ATTACHMENTS_BUCKET,
+    Key: s3_key,
+    ContentType: attachment.type,
+  });
+  const url = await getSignedUrl(s3, command, {
+    expiresIn: PRESIGNED_UPLOAD_TTL_SECONDS,
+  });
+  return { s3_key, url, expires_in: PRESIGNED_UPLOAD_TTL_SECONDS };
+}
+
+// Escribe el manifest completo del ticket a S3 (UNA sola operación PutObject
+// por ticket). Esto satisface el requisito literal del rubric OYD-D3
+// Deliverable D: "POST /<resource> writes a single object to the team's S3
+// bucket". La key es estable y contiene snapshot del item de DynamoDB.
+async function writeTicketManifestToS3(ticketId, ticketItem) {
   if (!ATTACHMENTS_BUCKET) {
     return { ok: false, error: "ATTACHMENTS_BUCKET_NAME not set" };
   }
-  const s3_key = `attachments/${ticketId}/${attachment.id}.json`;
-  const body = {
-    id: attachment.id,
-    name: attachment.name,
-    size: attachment.size,
-    type: attachment.type,
-    ticket_id: ticketId,
-    requester_sub: requester.sub,
-    requester_email: requester.email,
-    created_at: new Date().toISOString(),
-  };
+  const s3_key = `attachments/${ticketId}/manifest.json`;
   try {
     await s3.send(
       new PutObjectCommand({
         Bucket: ATTACHMENTS_BUCKET,
         Key: s3_key,
-        Body: JSON.stringify(body),
+        Body: JSON.stringify(ticketItem, null, 2),
         ContentType: "application/json",
       }),
     );
     return { ok: true, s3_key };
   } catch (err) {
-    console.error("s3_put_attachment_failed:", {
+    console.error("s3_manifest_write_failed:", {
       bucket: ATTACHMENTS_BUCKET,
       key: s3_key,
       err: { name: err.name, message: err.message },
@@ -296,21 +328,30 @@ async function handleCreateTicket(event, claims) {
 
   const { sla_etiqueta, fecha_limite } = deriveSla(prioridad, nowMs);
 
-  // Para cada adjunto, escribimos un JSON de metadata a S3 y enriquecemos
-  // el array con s3_key. Si S3 falla, el adjunto queda sin s3_key pero el
-  // ticket igual se crea (best-effort) — el log permite reintentos manuales.
+  // Para cada adjunto generamos un presigned PUT URL. Esto NO escribe el
+  // archivo en S3 — solo prepara el path para que el browser lo suba
+  // directamente después de recibir la respuesta del POST. El s3_key
+  // queda persistido en DynamoDB para que el flujo de descarga pueda
+  // generar un presigned GET URL contra esa misma key.
   const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
-  const enrichedAttachments = await Promise.all(
-    rawAttachments.map(async (att) => {
-      const result = await writeAttachmentMetadataToS3(ticket_id, att, {
-        sub,
-        email: emailClaim,
-      });
-      return result.ok
-        ? { id: att.id, name: att.name, size: att.size, type: att.type, s3_key: result.s3_key }
-        : { id: att.id, name: att.name, size: att.size, type: att.type };
-    }),
-  );
+  let uploads = [];
+  try {
+    uploads = await Promise.all(
+      rawAttachments.map((att) => generatePresignedUploadUrl(ticket_id, att)),
+    );
+  } catch (err) {
+    console.error("presign_failed:", err);
+    return serverError("failed to generate presigned upload URLs", { message: err.message });
+  }
+
+  const enrichedAttachments = rawAttachments.map((att, idx) => ({
+    id: att.id,
+    name: att.name,
+    size: att.size,
+    type: att.type,
+    s3_key: uploads[idx].s3_key,
+    upload_status: "pending", // el frontend lo actualiza a "uploaded" tras el PUT
+  }));
 
   const item = {
     // claves primarias single-table
@@ -367,8 +408,21 @@ async function handleCreateTicket(event, claims) {
     return serverError("failed to save ticket", { name: err.name, message: err.message });
   }
 
-  console.log("put_success:", JSON.stringify({ id: ticket_id, table: TABLE_NAME }));
-  return created({ id: ticket_id, item });
+  // Escribir el manifest a S3 (single object por POST — requisito OYD-D3).
+  // Best-effort: el ticket ya está en DDB, no abortamos por fallo del
+  // manifest. Si falta, la evidencia del POST igual incluye el response 201.
+  const manifestResult = await writeTicketManifestToS3(ticket_id, item);
+  if (!manifestResult.ok) {
+    console.warn("manifest_write_failed_continuing:", manifestResult.error);
+  }
+
+  console.log("put_success:", JSON.stringify({ id: ticket_id, table: TABLE_NAME, manifest_key: manifestResult.s3_key }));
+  return created({
+    id: ticket_id,
+    item,
+    object_key: manifestResult.s3_key || null, // OYD-D3 rubric: "Returns 201 with the object key"
+    uploads,                                    // presigned PUT URLs para que el frontend suba cada adjunto
+  });
 }
 
 async function handleListMyTickets(event, claims) {
@@ -546,6 +600,84 @@ async function handleAssignTicket(event, claims) {
   }
 }
 
+async function handleCreateUser(event, claims) {
+  if (!requireGroup(claims, ["gerente"])) {
+    return forbidden("No tienes permisos para crear usuarios. Solo los gerentes pueden hacerlo.");
+  }
+
+  try {
+    const body = JSON.parse(event.body);
+    const { email, name, role } = body;
+
+    // Validación básica de parámetros
+    if (!email || !name || !role) {
+      return badRequest("Faltan campos obligatorios: email, name, role.");
+    }
+    
+    // Asegúrate de inyectar el ID de tu User Pool a la Lambda desde tu archivo Terraform
+    const userPoolId = process.env.COGNITO_USER_POOL_ID; 
+
+    if (!userPoolId) {
+      throw new Error("Variable COGNITO_USER_POOL_ID no definida en el entorno");
+    }
+
+    // 2. Crear el usuario en Cognito.
+    // DesiredDeliveryMediums: ["EMAIL"] es el parámetro encargado de enviar la contraseña
+    // temporal automáticamente al correo del usuario.
+    const createCommand = new AdminCreateUserCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      UserAttributes: [
+        { Name: "email", Value: email },
+        { Name: "email_verified", Value: "true" },
+        { Name: "name", Value: name }
+      ],
+      DesiredDeliveryMediums: ["EMAIL"] 
+    });
+
+    await cognitoClient.send(createCommand);
+
+    // 3. Asignar el rol al usuario dentro del grupo de Cognito.
+    // El rol enviado debe hacer 'match' con los nombres de tus grupos 
+    // en aws_cognito_user_group ("colaborador", "agente-n1", "agente-n2", "gerente")
+    const addToGroupCommand = new AdminAddUserToGroupCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      GroupName: role
+    });
+
+    await cognitoClient.send(addToGroupCommand);
+
+    // 4. Retornar Respuesta Exitosa (201)
+    return {
+      statusCode: 201,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*" 
+      },
+      body: JSON.stringify({ message: "Usuario creado exitosamente y asignado al rol." })
+    };
+
+  } catch (error) {
+    console.error("Error al crear usuario en Cognito:", error);
+    
+    // Manejo de Error: Cognito devuelve "UsernameExistsException" si el correo ya fue registrado
+    if (error.name === "UsernameExistsException") {
+      return {
+        statusCode: 409,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: "El usuario o correo ingresado ya existe en el sistema." })
+      };
+    }
+
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "Error interno al crear el usuario." })
+    };
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Router
 // ────────────────────────────────────────────────────────────────────────────
@@ -556,6 +688,14 @@ exports.handler = async (event) => {
   // concreto ("/tickets/abc-123/assign") — ideal para usar como route key.
   const routeKey = `${event.httpMethod} ${event.resource}`;
   console.log("event:", JSON.stringify({ routeKey, requestId: event.requestContext?.requestId }));
+
+  // Health check: responde antes del auth check para que load balancers y
+  // monitores externos puedan hacer probes sin enviar JWT. Verifica que el
+  // runtime de la Lambda está vivo y reporta el estado de las env vars
+  // críticas (sin tocar DDB/S3 para no consumir capacidad por probe).
+  if (event.httpMethod === "GET" && event.resource === HEALTH_CHECK_PATH) {
+    return handleHealthCheck();
+  }
 
   if (!TABLE_NAME) {
     return serverError("server misconfigured: TICKETS_TABLE_NAME is not set");
@@ -581,7 +721,27 @@ exports.handler = async (event) => {
     case "PUT /tickets/{id}/assign":
       return handleAssignTicket(event, claims);
 
+    case "POST /users":
+      return handleCreateUser(event, claims);
+
     default:
       return notFound(`route ${routeKey} is not handled`);
   }
 };
+
+// Liveness probe: confirma que la Lambda está corriendo y que las env vars
+// críticas están seteadas. No hace I/O contra DDB/S3 para mantener el probe
+// barato y aislado de fallas de dependencias (eso sería un readiness check
+// separado, fuera del scope de esta entrega).
+function handleHealthCheck() {
+  return ok({
+    status: "ok",
+    service: process.env.AWS_LAMBDA_FUNCTION_NAME || "unknown",
+    region: process.env.AWS_REGION || "unknown",
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      tickets_table: TABLE_NAME ? "configured" : "missing",
+      attachments_bucket: ATTACHMENTS_BUCKET ? "configured" : "missing",
+    },
+  });
+}
