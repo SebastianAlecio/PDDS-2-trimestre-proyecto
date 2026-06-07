@@ -6,3 +6,20 @@ compute_function_name          = "chat-message-handler"
 compute_memory_size            = 128
 tickets_table_name             = "tickets"
 db_billing_mode                = "PAY_PER_REQUEST"
+api_health_check_path          = "/health"
+
+# DNS administrado por Route 53. Apply 1 crea la hosted zone del dominio
+# entero (lumenchat.app) con todos los records de la zona; nos da 4 NS que
+# se configuran como Custom Nameservers en el registrador del dominio.
+# Apply 2 (después de propagación) sube enable_api_custom_domain a true y
+# crea el cert ACM + custom domain del API + A-alias para api.ticke-t.lumenchat.app.
+dns_parent_domain              = "lumenchat.app"
+dns_api_full_hostname          = "api.ticke-t.lumenchat.app"
+dns_enable_api_custom_domain   = true
+dns_enable_ses_domain_identity = true
+
+# Notificaciones por email vía SES. La From es la dirección remitente; el
+# dominio se verifica via el módulo dns (DKIM + TXT) cuando
+# dns_enable_ses_domain_identity = true. Mientras la cuenta SES esté en
+# sandbox, los recipients tienen que estar verificados individualmente.
+ses_from_address = "soporte@lumenchat.app"

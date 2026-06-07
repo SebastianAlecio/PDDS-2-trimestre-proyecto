@@ -5,8 +5,23 @@
 > - 1 — Pitch, scope y mockups · dom 17 may 2026
 > - 2 — Cómputo y datos · jue 21 may 2026
 > - 3 — Red, ingreso y seguridad perimetral · dom 31 may 2026
+> - 4 — Procesamiento asíncrono (SNS · SQS · DLQ · notifier Lambda) · dom 7 jun 2026
 >
 > **Equipo:** Alessandro Alecio · David Garcia · Joaquin Marroquin
+
+---
+
+## Resumen de cambios E3 → E4
+
+Documento iterado sobre la E3; lo agregado/movido en esta entrega:
+
+- **Capa asíncrona introducida.** Sumamos un pipeline **SNS → SQS → Lambda → SES** que desacopla el envío de correos del request principal del usuario. El primer evento que viaja por este pipeline es `ticket.closed`: cuando un agente cierra un ticket, la Lambda síncrona publica el evento al topic, la SQS suscriptora lo entrega al *notifier* Lambda, y este último manda un correo de notificación al colaborador solicitante vía Amazon SES.
+- **Secciones nuevas.** § 15 Procesamiento asíncrono (pipeline `ticket.closed`, formato de payload, idempotencia, manejo de fallos con DLQ).
+- **Diagrama de contenedores actualizado a v2.** Incluye ahora el SNS topic `ticket-events`, la cola principal `ticket-notifications`, la DLQ, y el *notifier* Lambda. La separación de la Lambda síncrona (`chat-message-handler-dev`, dominio tickets) y la Lambda asíncrona (`ticket-notifier-dev`, dominio notificaciones) sigue el principio "una Lambda por bounded context".
+- **Renumeración.** Scope, Preguntas abiertas y Anexo IA corrieron una posición (eran § 15..§ 17 → ahora § 16..§ 18). Se mantiene el flujo *Negocio → Técnico → Reflexión*.
+- **Implementación que respalda el diseño.** Se construyó la cadena entera con Terraform: nuevo módulo `infra/modules/notifications/` (SNS topic + SQS queue principal + DLQ + subscription + queue policy), segunda instancia del módulo `compute/` para el *notifier* Lambda con event source mapping desde la SQS, e IAM least-privilege para `sns:Publish` (en la Lambda síncrona) y `ses:SendEmail` con condition `ses:FromAddress = soporte@lumenchat.app` (en el *notifier*). Para el envío real desde el dominio propio, agregamos verificación de dominio SES con DKIM (3 CNAMEs + TXT) al módulo `dns/` existente. Endpoint nuevo `PUT /tickets/{id}/status` con `ConditionExpression` que solo permite cerrar al agente asignado (`GSI2-PK = AGENT#<sub>`). **Idempotencia del consumer**: el *notifier* hace GET-before-send + PUT-after-send sobre `tickets-dev` con namespace `IDEMPOTENCY#<message_id>` y TTL de 7 días — `message_id` es determinístico desde el payload (`ticket_id#closed_at`). Frontend: botón "Cerrar ticket" en la cola del agente, con modal de confirmación e indicación explícita de que el cierre dispara una notificación irreversible.
+- **Preguntas abiertas (§ 17).** Se **cerraron** las preguntas de Asíncrono (notificaciones de escalamiento → un topic único `ticket-events` con shape genérica `{event, payload}` que permite filter policies a futuro · upload real de adjuntos → presigned PUT URLs, cabladas desde E3 ya integradas). Se **mantienen abiertas** Watchdog del SLA (todavía no implementado) y la conexión persistente del chat (WebSocket / SSE — pospuesta).
+- **Anexo IA (§ 18).** Bloque nuevo *"E4 — Decisiones técnicas exploradas con IA"* listando la discusión sobre SNS+SQS vs SQS directa vs EventBridge, el manejo de idempotencia, y la elección de SES sobre proveedores externos.
 
 ---
 
@@ -327,9 +342,9 @@ El frontend (`app/src/features/tickets/presentation/schema.ts`) valida hasta **1
 
 ---
 
-## 11. Diagrama de contenedores (v1)
+## 11. Diagrama de contenedores (v2)
 
-Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, servicio gestionado) y las flechas son llamadas reales entre ellos.
+Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, queue, topic, servicio gestionado) y las flechas son llamadas reales entre ellos. La **v2** suma sobre la v1 (E3) el pipeline asíncrono: SNS topic, SQS principal, DLQ, y el *notifier* Lambda que manda emails vía SES.
 
 ```mermaid
 flowchart TB
@@ -339,35 +354,56 @@ flowchart TB
     spa["SPA Vite + React 19<br/>(corre local en Vite hoy;<br/>S3 + CloudFront en deploy futuro)"]
   end
 
-  subgraph aws["AWS · plano gestionado (sin VPC)"]
+  subgraph sync["AWS · plano gestionado · pipeline síncrono"]
     waf["AWS WAF v2<br/>rate-limit 2000/5m/IP"]
-    apigw["API Gateway REST<br/>stage 'api', authorizer Cognito"]
+    apigw["API Gateway REST<br/>stage 'api', custom domain<br/>api.ticke-t.lumenchat.app"]
     cognito["Cognito User Pool<br/>4 groups, admin-only"]
-    lambda["Lambda chat-message-handler<br/>Node 22 · arm64 · 128MB<br/>router de 4 endpoints"]
+    lambda["Lambda chat-message-handler<br/>Node 22 · arm64 · 128MB<br/>router de 6 endpoints"]
     ddb[("DynamoDB tickets-dev<br/>single-table + 4 GSIs")]
     s3[("S3 attachments bucket<br/>versioning + SSE + SSL-only")]
-    cw["CloudWatch Logs"]
   end
+
+  subgraph async["AWS · plano gestionado · pipeline asíncrono (E4)"]
+    sns(["SNS topic<br/>ticket-events"])
+    sqs(["SQS<br/>ticket-notifications"])
+    dlq(["SQS DLQ<br/>ticket-notifications-dlq<br/>maxReceiveCount=3"])
+    notifier["Lambda ticket-notifier<br/>Node 22 · arm64<br/>event source mapping batch=1"]
+    ses["Amazon SES<br/>dominio verificado<br/>lumenchat.app + DKIM"]
+  end
+
+  cw["CloudWatch Logs"]
 
   user --> spa
   spa -- "login (Amplify Auth)" --> cognito
   spa -- "HTTPS + JWT" --> waf --> apigw
   apigw -- "valida JWT" --> cognito
   apigw -- "AWS_PROXY" --> lambda
-  lambda -- "SigV4" --> ddb
-  lambda -- "SigV4" --> s3
+  lambda -- "SigV4 · Put/Query/Update" --> ddb
+  lambda -- "SigV4 · PutObject + presigned PUT URL" --> s3
+  spa -- "PUT directo a S3<br/>(adjuntos reales)" --> s3
+
+  lambda -- "Publish ticket.closed" --> sns
+  sns -- "fan-out (subscription)" --> sqs
+  sqs -- "event source mapping" --> notifier
+  notifier -- "SendEmail SigV4" --> ses
+  sqs -. "tras 3 fallos" .-> dlq
+
   lambda --> cw
+  notifier --> cw
 ```
 
-Hay tres planos:
+Hay cuatro planos:
 
-- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para todas las llamadas de negocio). Cuando se despliegue a producción vivirá en S3 servido por CloudFront.
-- **Ingreso a AWS.** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese.
-- **Datos.** La Lambda persiste el ticket en DynamoDB y la metadata del adjunto en S3 en la misma invocación. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
+- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para llamadas de negocio). Para subir adjuntos, hace `PUT` directo a S3 usando los presigned URLs que devuelve el `POST /tickets`. Cuando se despliegue a producción vivirá en S3 servido por CloudFront.
+- **Ingreso a AWS (síncrono).** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese. La Lambda síncrona orquesta dominio tickets (crear, listar, asignar, cerrar, gerencia de usuarios) — devuelve respuesta al cliente y, cuando aplica, publica un evento al pipeline asíncrono.
+- **Procesamiento asíncrono (E4).** El SNS topic `ticket-events` recibe eventos del dominio tickets (hoy solo `ticket.closed`). La SQS suscriptora `ticket-notifications` los entrega al *notifier* Lambda vía event source mapping (batch size 1). El *notifier* manda emails vía SES. Si SES rechaza (recipient no verificado en sandbox, throttling, etc.) y el mensaje falla 3 veces, SQS lo mueve a la DLQ para inspección manual.
+- **Datos.** Tickets en DynamoDB, adjuntos en S3. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
 
-### 11.1 Diagrama de componentes de AWS
+### 11.1 Diagrama de componentes de AWS (v1 — pendiente regenerar con piezas de E4)
 
 ![Diagrama de componentes de AWS](images/AWS_icons_diagram.png)
+
+> El diagrama de íconos AWS arriba corresponde a la v1 (E3) y todavía no muestra los recursos del pipeline asíncrono (SNS topic, SQS + DLQ, *notifier* Lambda, SES domain identity). La v2 con esos elementos queda pendiente para próxima iteración del diagrama de íconos. La Mermaid de arriba sí refleja v2.
 
 ---
 
@@ -505,7 +541,136 @@ La decisión central es cómo las subnets privadas alcanzan AWS APIs (DynamoDB, 
 
 ---
 
-## 15. Scope (in / out)
+## 15. Procesamiento asíncrono
+
+Esta sección documenta el pipeline asíncrono introducido en E4. Cubre la distinción evento/comando, el catálogo de mensajes con producer/consumer/payload, el manejo de fallos con DLQ y threshold de reintentos, y la estrategia de idempotencia.
+
+### 15.1 Evento vs comando — convención del proyecto
+
+| | **Evento (notificación)** | **Comando (instrucción)** |
+|---|---|---|
+| **Significado** | "Algo pasó, podés reaccionar si querés" | "Hacé esto" |
+| **Producer** | No conoce ni le importa quién consume | Espera un consumer específico |
+| **Convención de nombre** | Past tense: `ticket.closed`, `ticket.created` | Imperativo: `send.notification`, `escalate.ticket` |
+| **Fan-out** | Sí (muchos suscriptores posibles) | No (un único destinatario lógico) |
+| **Transporte natural** | SNS topic (pub/sub) | SQS queue directa (point-to-point) |
+
+**En esta entrega solo usamos eventos.** El único mensaje que viaja es `ticket.closed`, publicado por la Lambda síncrona al cerrar un ticket. El *notifier* Lambda lo consume y manda el email — pero conceptualmente "mandar el email" es una **reacción al evento**, no un comando ordenado al *notifier*. Si mañana sumamos un segundo consumer (por ejemplo, un Lambda que actualice un dashboard en tiempo real), simplemente se suscribe al mismo topic sin que la Lambda síncrona se entere.
+
+Comandos no se usan todavía. Cuando aparezcan (ej. una operación pesada que el front quiere disparar y olvidarse), van a una SQS directa, no a un SNS topic.
+
+### 15.2 Pipeline `ticket.closed`
+
+```
+[1] Lambda chat-message-handler  ──Publish──▶  [2] SNS topic ticket-events
+                                                        │ subscription (SQS)
+                                                        ▼
+[5] DLQ  ◀──redrive (3 fallos)──  [3] SQS ticket-notifications
+                                          │ event source mapping (batch=1)
+                                          ▼
+                                  [4] Lambda ticket-notifier  ──SendEmail──▶  Amazon SES
+```
+
+**[1] Producer — Lambda síncrona (`chat-message-handler-dev`):**
+- Trigger: `PUT /tickets/{id}/status` con body `{"status":"Cerrado"}`, autenticado con JWT de un agente (grupo `agente-n1` o `agente-n2`).
+- Pre-condición: `ConditionExpression` del `UpdateItem` exige que el caller sea el agente asignado (`GSI2-PK = AGENT#<sub>`) y que el ticket no esté ya cerrado. Si falla, retorna 403 sin publicar nada.
+- Acción: `SNS PublishCommand` al topic `ticket-events`. La publicación es **best-effort**: si SNS falla, el ticket queda cerrado en DynamoDB y el error se loggea — no rollback. La consecuencia es que el colaborador no recibe el email; mitigación futura: outbox pattern (persistir el evento en DDB y un sweeper lo publica).
+
+**[2] SNS topic — `ticket-events`:**
+- Nombre: `ticket-notifications-dev` (parametrizado vía `var.notifications_name_prefix`).
+- Shape genérica `{event, payload}` para que sumar otros eventos (`ticket.created`, `ticket.assigned`) en futuras iteraciones no requiera recrear el recurso ni cambiar la signature de los consumers.
+- Política de acceso: solo este topic puede escribir a la SQS suscriptora (queue policy con condition `aws:SourceArn = topic_arn`).
+
+**[3] SQS `ticket-notifications`:**
+- `visibility_timeout_seconds = 60` (mayor o igual al timeout de la Lambda consumer para evitar reentregas mientras se procesa).
+- `message_retention_seconds = 4 días` (cubre fin de semana sin perder mensajes si el consumer estuviera caído).
+- `redrive_policy` con `deadLetterTargetArn` apuntando a la DLQ y `maxReceiveCount = 3`.
+
+**[4] Consumer — Lambda `ticket-notifier-dev`:**
+- Event source mapping con `batch_size = 1` (un mensaje por invocación: facilita debug y retry granular por mensaje individual).
+- Acción: parsea el wrapper de SNS notification (el campo `body.Message` contiene el payload original), extrae `solicitante.correo` y manda email vía `SES SendEmail` desde `soporte@lumenchat.app`.
+- Idempotencia: ver § 15.4.
+- Si `SES SendEmail` tira, el handler hace `throw` → SQS no borra el mensaje → reentrega tras `visibility_timeout`. La cuenta de re-recepciones llega a 3 → mensaje a DLQ.
+
+**[5] DLQ `ticket-notifications-dlq`:**
+- `message_retention_seconds = 14 días` (máximo de SQS, ventana de inspección amplia).
+- Sin consumer suscripto: el monitoring es manual (consola SQS muestra count > 0) o vía CloudWatch metric `ApproximateNumberOfMessagesVisible`. Alarmas dedicadas quedan para E5.
+
+### 15.3 Formato del payload — `ticket.closed`
+
+```json
+{
+  "event": "ticket.closed",
+  "ticket_id": "ab5d7e63-f9b6-472d-9e46-e97d74a06394",
+  "titulo": "No puedo entrar al portal",
+  "solicitante": {
+    "nombre": "Sebastian Alecio",
+    "correo": "sebastianalecio@gmail.com",
+    "area": "IT",
+    "user_id": "943804e8-f0e1-709d-484e-f3e509922baf"
+  },
+  "closed_by": {
+    "sub": "24d8a418-8061-7082-cd22-1b5a0c0aab1f",
+    "nombre": "David Garcia"
+  },
+  "closed_at": "2026-06-07T05:17:19.372Z"
+}
+```
+
+**Campos críticos** (lo que el consumer necesita para hacer su trabajo):
+- `event` — discriminator. El consumer hace `if (payload.event !== "ticket.closed") return;` para ignorar eventos que todavía no maneja.
+- `ticket_id` — referencia trazable a DDB; útil para logging y reconciliación.
+- `solicitante.correo` — destinatario del email. Sin esto el consumer falla y termina en DLQ.
+- `titulo` — para el subject del email.
+- `closed_by.nombre` — para el cuerpo del email ("fue cerrado por …").
+- `closed_at` — timestamp ISO para el cuerpo del email.
+
+Campos NO críticos pero incluidos: `solicitante.nombre`, `solicitante.area`, `closed_by.sub`. Se incluyen porque el payload es chico (~500 bytes) y permite a futuros consumers usarlos sin requerir queries adicionales contra DDB.
+
+### 15.4 Idempotencia
+
+**Garantía actual: at-least-once con dedup por idempotency key.** SQS standard entrega un mensaje al menos una vez — puede repetir en redelivery normal o cuando la Lambda se muere después de un `SES SendEmail` exitoso pero antes de devolver. Para evitar mandar dos veces el mismo email, el *notifier* implementa el patrón **GET-before-send + PUT-after-send** contra DynamoDB.
+
+**Mecánica:**
+
+1. **Producer (Lambda síncrona).** Al publicar `ticket.closed`, incluye en el payload un campo `message_id` determinístico: `${ticket_id}#${closed_at}`. Como la `ConditionExpression` del `UpdateItem` bloquea cerrar dos veces el mismo ticket (estado != Cerrado), el mismo evento de negocio siempre produce el mismo `message_id`.
+
+2. **Consumer (notifier Lambda).** Para cada record SQS:
+   - `GetItem` sobre `tickets-dev` con `PK = IDEMPOTENCY#<message_id>`, `SK = META`, `ConsistentRead = true`.
+   - Si el item existe → log `idempotency_skip` y `continue` (SQS borra el mensaje).
+   - Si no existe → `SES SendEmail` normalmente.
+   - Tras éxito de SES → `PutItem` con `{message_id, ticket_id, recipient, ses_message_id, processed_at, ttl}` con `ttl = now + 7 días`.
+
+3. **Tabla.** Reutilizamos `tickets-dev` con namespace `IDEMPOTENCY#`. El TTL de DynamoDB limpia automáticamente los records después de 7 días (cubre la retención máxima de la cola principal + ventana de margen).
+
+**Permisos IAM agregados al notifier:** `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:Query`, `dynamodb:UpdateItem` scoped al ARN exacto de `tickets-dev` y sus GSIs (el módulo `compute` solo expone un flag binario para DynamoDB; algunas acciones quedan disponibles aunque no se usen — el blast radius sigue acotado al ARN de la tabla).
+
+**Race window residual.** Dos invocaciones concurrentes del mismo `message_id` pueden ambas pasar el `GET` antes de que ninguna haya hecho `PutItem` → ambas mandan email → duplicado. Para SQS standard con throughput muy bajo (un mensaje por close de ticket) la probabilidad es muy baja. La alternativa libre de race es SQS FIFO con `MessageDeduplicationId`, que limita el throughput a 3000 msg/s por grupo — overkill para este caso de uso.
+
+**Qué pasa si el PUT post-send falla:** El email ya está mandado, pero el record de idempotencia no se persistió. Un retry posterior haría el `GetItem` y no encontraría nada → mandaría duplicado. Por eso el `PutItem` se loggea como warning (`idempotency_put_failed_email_already_sent`) sin tirar — preferimos un raro duplicado a perder la notificación entera por re-tirar.
+
+### 15.5 Idempotencia del producer
+
+La Lambda síncrona NO tiene mecanismo de retry sobre el `SNS Publish`. Si falla, loggea y retorna 200 al cliente (el cambio de estado ya pasó). Esto significa:
+
+- **0 emails enviados** en el caso patológico de un `Publish` fallido.
+- **No hay duplicación** desde el producer.
+
+Trade-off consciente: priorizamos no bloquear el response al cliente sobre garantizar la notificación. El usuario ya tuvo confirmación visual de que el ticket se cerró; el email es nice-to-have.
+
+### 15.6 Permisos IAM least-privilege
+
+| Lambda | Action añadida | Resource | Condition |
+|---|---|---|---|
+| `chat-message-handler-dev` | `sns:Publish` | `arn:aws:sns:…:ticket-notifications-dev` (ARN exacto) | n/a |
+| `ticket-notifier-dev` | `sqs:ReceiveMessage`, `DeleteMessage`, `GetQueueAttributes`, `ChangeMessageVisibility` | ARN exacto de la cola principal | n/a |
+| `ticket-notifier-dev` | `ses:SendEmail`, `ses:SendRawEmail` | `*` (acción IAM requiere wildcard) | `ses:FromAddress = soporte@lumenchat.app` |
+
+La condition `ses:FromAddress` es importante: aunque el dominio entero `lumenchat.app` está verificado en SES (cualquier `*@lumenchat.app` podría usarse), la policy del *notifier* lo restringe a una sola address. Si mañana otra Lambda necesita mandar desde `notificaciones@lumenchat.app`, requiere su propia policy.
+
+---
+
+## 16. Scope (in / out)
 
 ### IN — lo que el sistema SÍ hace
 
@@ -526,7 +691,7 @@ La decisión central es cómo las subnets privadas alcanzan AWS APIs (DynamoDB, 
 
 ---
 
-## 16. Preguntas abiertas
+## 17. Preguntas abiertas
 
 Decisiones técnicas que aún no tomamos.
 
@@ -535,15 +700,20 @@ Decisiones técnicas que aún no tomamos.
 > **Cerrado en E3:**
 > - **Ubicación de los Lambdas** → **fuera de VPC**, todas las comunicaciones a DynamoDB y S3 son SigV4 sobre HTTPS público.
 > - **Capa perimetral** → **AWS WAF v2** con regla de rate limit (2000 req/5m/IP), asociada al stage del REST API.
+> - **Dominio custom** → `api.ticke-t.lumenchat.app` con ACM cert wildcard, hosted zone Route 53, custom domain regional en API Gateway.
+>
+> **Cerrado en E4:**
+> - **Notificaciones de escalamiento (topic-per-area vs único)** → **un único topic** `ticket-events` con shape genérica `{event, payload}`. Filter policies por atributo de mensaje quedan disponibles si en el futuro un consumer quiere solo eventos de un área. Trade-off elegido: simplicidad operativa sobre granularidad de suscripción.
+> - **Upload real de adjuntos** → **presigned PUT URLs** desde el `POST /tickets`. La Lambda devuelve un URL firmado por adjunto y el frontend hace `PUT` directo a S3, evitando el límite de 6 MB del payload de API Gateway. Permite archivos de hasta 25 MB sin pasar bytes por Lambda.
+> - **Pipeline asíncrono** → **SNS → SQS → Lambda → SES** con DLQ tras 3 fallos. Documentado en § 15.
+> - **Idempotencia del consumer** → **GET-before-send + PUT-after-send** con `IDEMPOTENCY#<message_id>` en DynamoDB y TTL de 7 días. `message_id` determinístico desde el payload (`ticket_id#closed_at`). Documentado en § 15.4.
 
 ### Red y entrega (parcialmente abierto)
-- **CDN y dominio custom.** ¿CloudFront delante del bucket que sirva el frontend + delante del API Gateway (Route 53)? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando exista el dominio.
-- **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador. Decisión esperada en E4.
+- **CDN delante del frontend.** ¿CloudFront delante del bucket que sirva el frontend? El frontend hoy corre local en Vite; cuando se despliegue queda abierto si va a S3 directo, S3 + CloudFront, o algún proveedor externo. Decisión esperada al final del MVP, cuando se monte el deploy real del frontend.
+- **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador. Decisión pospuesta hasta que el chat sea prioridad — la base de presigned URLs y notificaciones por email cubre el flujo MVP sin chat en vivo.
 
-### Asíncrono (decisión en E4)
-- **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho.
-- **Notificaciones de escalamiento.** ¿Un **SNS topic por área** responsable (suscripciones distintas por equipo N2) o un **único topic con message filtering** por atributos? Trade-off: granularidad operativa vs. costo de mantenimiento.
-- **Upload real de adjuntos.** ¿Lambda recibe el archivo en base64 (limitado por payload de 6 MB) o el frontend pide una **presigned URL** y sube directo a S3? Hoy solo persistimos metadata; la subida real entra en una iteración asíncrona.
+### Asíncrono (parcialmente abierto)
+- **Watchdog del SLA.** ¿**EventBridge scheduled rule** + Lambda corriendo cada N minutos para marcar tickets vencidos, o **Step Functions** con un esquema de timeout-per-ticket? Scheduled rule es más simple; Step Functions escala mejor si los SLAs por ticket varían mucho. No implementado hoy.
 
 ### Seguridad (decisión en E5)
 - **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — hoy se aplica con `requireGroup` por endpoint. ¿Se ajusta a verificación de ownership por item (la Lambda lee el ticket y compara `responsable` con el `sub` del token)? Más granular pero más caro por request.
@@ -555,7 +725,7 @@ Decisiones técnicas que aún no tomamos.
 
 ---
 
-## 17. Anexo IA
+## 18. Anexo IA
 
 ### Qué le pedimos a la IA
 
@@ -586,6 +756,16 @@ La IA tuvo el reflejo correcto de aceptar pivotes cuando un dominio no funcionab
 2. **CORS en REST API con AWS_PROXY integration.** REST API no maneja CORS declarativamente como HTTP API. La IA nos guió a la solución de dos partes: (i) método `OPTIONS` con `MOCK` integration por cada path público que devuelve los headers CORS al preflight, (ii) `aws_api_gateway_gateway_response` de tipo `DEFAULT_4XX` y `DEFAULT_5XX` para que los errores del authorizer (401, 403) también lleven los headers CORS — sin esto el browser bloquea con "Failed to fetch" antes de mostrar el mensaje real.
 
 3. **Modelo de roles en Cognito.** Exploramos con la IA dos formas de representar los 4 roles del dominio: (a) Cognito Groups con `cognito:groups` en el JWT — flexible, un usuario puede pertenecer a varios — o (b) `custom:role` como atributo de string único. La IA nos mostró que Groups es lo estándar para multi-rol y permite usar la `precedence` para resolver el "rol principal" cuando un usuario pertenece a varios. Adoptamos Groups con precedence configurada (gerente=0 > agente-n2=10 > agente-n1=20 > colaborador=40).
+
+### E4 — Decisiones técnicas exploradas con IA (procesamiento asíncrono)
+
+1. **SNS+SQS vs SQS directa vs EventBridge.** Pedimos a la IA que aclarara cuándo usar cada uno. La discusión cerró tres puntos: (a) **SQS directa** es para *comandos* point-to-point (un único consumer lógico) — encaja para "procesar este archivo" pero no para "se cerró un ticket" donde podrían sumarse más consumers; (b) **EventBridge** es overkill para una sola integración intra-cuenta y suma costo de bus + reglas + complejidad de routing rules; (c) **SNS → SQS** es el patrón canónico para *eventos* con fan-out porque deja la puerta abierta a múltiples consumers (cada uno con su propia SQS suscriptora) sin tocar al producer. Adoptamos SNS+SQS aún sabiendo que hoy hay un único consumer — la inversión amortiza la primera vez que sumemos un segundo subscriber (ej. webhook a Slack, métricas en tiempo real).
+
+2. **Idempotencia: implementarla ya vs aceptar at-least-once.** La IA nos mostró las dos vertientes: (a) idempotency key con tabla DDB + TTL corto (~30 líneas de código en el consumer, costo despreciable); (b) SQS FIFO con `MessageDeduplicationId` (gratis pero throughput limitado y se necesita pensar `MessageGroupId`). Discutimos el peor caso real: un email duplicado al colaborador. Concluimos que para el MVP no vale la pena el código extra — el daño máximo es bajo (no es un pago duplicado, no es un cambio de estado) y la probabilidad real es chica. Documentamos honestamente la decisión en § 15.4 con el plan de migración cuando duplicados se vuelvan problema medible.
+
+3. **SES vs proveedor externo (SendGrid/Mailgun).** Evaluamos con la IA si meter SendGrid era razonable. Ventajas externas: deliverability mejor "out of the box", sandbox menos restrictivo. Contras: cuenta nueva, API key como secret rotable, otro vendor en la cadena. SES tiene la fricción del sandbox (recipients tienen que verificarse hasta que AWS apruebe salir), pero sumando el dominio `lumenchat.app` con DKIM (gestionado por el mismo módulo `dns/` de Terraform), la deliverability es razonable y el costo cae a $0.10 por 1000 emails. Adoptamos SES por mantener el stack 100% AWS y porque el flujo es internal (notificaciones a colaboradores ya conocidos), no marketing. Para producción real se reevaluaría.
+
+4. **Domain del notifier Lambda — separado vs mismo Lambda con router.** Discutimos si el código de mandar emails iba en la Lambda síncrona existente (router con un case nuevo) o en una Lambda separada. La IA nos mostró que separar es la posición correcta porque: (a) los triggers son distintos (API Gateway sync vs SQS event source mapping); (b) los permisos IAM son distintos (DDB+S3 vs SES); (c) los perfiles de carga son distintos (bursty HTTP vs steady processing). Adoptamos dos Lambdas — `chat-message-handler-dev` (dominio tickets) y `ticket-notifier-dev` (dominio notificaciones) — reutilizando el mismo módulo Terraform `compute/` con dos instances y flags IAM distintos.
 
 *(pendiente: ampliar con observaciones de las próximas entregas)*
 

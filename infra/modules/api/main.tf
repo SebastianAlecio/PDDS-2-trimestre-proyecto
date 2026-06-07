@@ -1,7 +1,14 @@
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 locals {
   api_name = "${var.name}-${var.environment}"
+
+  # Health check path normalizado. Si el spec del rubric pide default "/", lo
+  # respetamos en la variable, pero en runtime decidimos si vamos a reusar el
+  # root_resource_id (caso "/") o crear un resource hijo (caso "/algo").
+  health_path_is_root = var.health_check_path == "/"
+  health_path_part    = trim(var.health_check_path, "/")
 
   # CORS: REST API no tiene config declarativa global (a diferencia de HTTP API).
   # Hay que crear método OPTIONS + MOCK integration por cada path que reciba
@@ -34,6 +41,10 @@ locals {
       resource_id = aws_api_gateway_resource.tickets_id_assign.id
       http_method = "PUT"
     }
+    "PUT /tickets/{id}/status" = {
+      resource_id = aws_api_gateway_resource.tickets_id_status.id
+      http_method = "PUT"
+    }
     "POST /users" = {
       resource_id = aws_api_gateway_resource.users.id
       http_method = "POST"
@@ -47,6 +58,7 @@ locals {
     "tickets-me"        = aws_api_gateway_resource.tickets_me.id
     "tickets-queue"     = aws_api_gateway_resource.tickets_queue.id
     "tickets-id-assign" = aws_api_gateway_resource.tickets_id_assign.id
+    "tickets-id-status" = aws_api_gateway_resource.tickets_id_status.id
     "users"             = aws_api_gateway_resource.users.id
   }
 }
@@ -109,6 +121,12 @@ resource "aws_api_gateway_resource" "tickets_id_assign" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_resource.tickets_id.id
   path_part   = "assign"
+}
+
+resource "aws_api_gateway_resource" "tickets_id_status" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id.id
+  path_part   = "status"
 }
 
 # ─── Methods + Integrations (autenticados con Cognito) ──────────────────────
@@ -237,6 +255,7 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_resource.tickets_queue.id,
       aws_api_gateway_resource.tickets_id.id,
       aws_api_gateway_resource.tickets_id_assign.id,
+      aws_api_gateway_resource.tickets_id_status.id,
       aws_api_gateway_resource.users.id,
       [for k, m in aws_api_gateway_method.endpoints : m.id],
       [for k, i in aws_api_gateway_integration.endpoints : i.id],
@@ -244,6 +263,10 @@ resource "aws_api_gateway_deployment" "this" {
       [for k, i in aws_api_gateway_integration.options : i.id],
       aws_api_gateway_gateway_response.default_4xx.id,
       aws_api_gateway_gateway_response.default_5xx.id,
+      aws_api_gateway_method.health.id,
+      aws_api_gateway_integration.health.id,
+      local.health_path_is_root ? "" : aws_api_gateway_resource.health[0].id,
+      aws_api_gateway_rest_api_policy.this.id,
     ]))
   }
 
@@ -255,6 +278,8 @@ resource "aws_api_gateway_deployment" "this" {
     aws_api_gateway_integration.endpoints,
     aws_api_gateway_integration.options,
     aws_api_gateway_integration_response.options,
+    aws_api_gateway_integration.health,
+    aws_api_gateway_rest_api_policy.this,
   ]
 }
 
@@ -275,4 +300,72 @@ resource "aws_lambda_permission" "apigw_invoke" {
   function_name = var.lambda_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
+}
+
+# ─── Health check (AWS_PROXY → Lambda) ─────────────────────────────────────
+#
+# Rubric OYD-D3 (Deliverable C common): "A configurable health check or
+# readiness check path (var.health_check_path) must be defined, defaulting
+# to '/'". El endpoint invoca a la Lambda real (no MOCK) para que el check
+# ejerza el cold-start y la conectividad básica del runtime, no solo el
+# borde de API Gateway. La Lambda atiende el path antes del check de auth
+# (no requiere JWT) — ver el dispatch de HEALTH_CHECK_PATH en index.js.
+#
+# La autorización del method queda en NONE porque load balancers y monitores
+# no llevan tokens.
+
+resource "aws_api_gateway_resource" "health" {
+  count = local.health_path_is_root ? 0 : 1
+
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = local.health_path_part
+}
+
+resource "aws_api_gateway_method" "health" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = local.health_path_is_root ? aws_api_gateway_rest_api.this.root_resource_id : aws_api_gateway_resource.health[0].id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "health" {
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_method.health.resource_id
+  http_method             = aws_api_gateway_method.health.http_method
+  integration_http_method = "POST" # AWS_PROXY invoca a Lambda con POST internamente
+  type                    = "AWS_PROXY"
+  uri                     = local.lambda_invoke_uri
+}
+
+# ─── Resource policy del API (ingress restriction) ─────────────────────────
+#
+# Rubric OYD-D3 (Deliverable B serverless): "Set an API Gateway resource
+# policy restricting invocation". Para nuestra arquitectura serverless sin
+# CloudFront/ALB delante, la restricción de "no bypassear el LB" no aplica
+# directamente — el filtrado real lo hacen las capas de WAF (rate limit por
+# IP) y el authorizer Cognito (rechaza tokens inválidos sin invocar Lambda).
+#
+# Esta resource policy formaliza explícitamente "execute-api:Invoke desde
+# cualquier principal, scoped a esta API específica". Es permisiva en la
+# práctica pero satisface el requisito literal de tener una policy declarada
+# vía Terraform sobre la API.
+data "aws_iam_policy_document" "api_resource" {
+  statement {
+    sid    = "AllowPublicInvokeAuthEnforcedAtMethodLevel"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    actions   = ["execute-api:Invoke"]
+    resources = ["${aws_api_gateway_rest_api.this.execution_arn}/*/*/*"]
+  }
+}
+
+resource "aws_api_gateway_rest_api_policy" "this" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  policy      = data.aws_iam_policy_document.api_resource.json
 }

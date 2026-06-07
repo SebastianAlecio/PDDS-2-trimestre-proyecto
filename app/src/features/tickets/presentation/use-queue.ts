@@ -15,9 +15,15 @@ type AssignState =
   | { kind: "pending"; ticketId: string }
   | { kind: "error"; ticketId: string; message: string };
 
+export type CloseState =
+  | { kind: "idle" }
+  | { kind: "pending"; ticketId: string }
+  | { kind: "error"; ticketId: string; message: string };
+
 export function useQueue(repo: TicketRepository = defaultRepo) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [assignState, setAssignState] = useState<AssignState>({ kind: "idle" });
+  const [closeState, setCloseState] = useState<CloseState>({ kind: "idle" });
 
   const reload = useCallback(async () => {
     setState({ kind: "loading" });
@@ -51,16 +57,34 @@ export function useQueue(repo: TicketRepository = defaultRepo) {
     [repo, reload],
   );
 
+  const close = useCallback(
+    async (ticketId: string) => {
+      setCloseState({ kind: "pending", ticketId });
+      try {
+        await repo.closeTicket(ticketId);
+        setCloseState({ kind: "idle" });
+        await reload();
+      } catch (err) {
+        setCloseState({
+          kind: "error",
+          ticketId,
+          message: humanizeApiError(err),
+        });
+      }
+    },
+    [repo, reload],
+  );
+
   return useMemo(
-    () => ({ state, assignState, reload, assign }),
-    [state, assignState, reload, assign],
+    () => ({ state, assignState, closeState, reload, assign, close }),
+    [state, assignState, closeState, reload, assign, close],
   );
 }
 
 function humanizeApiError(err: unknown): string {
   if (err instanceof HttpError) {
     if (err.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
-    if (err.status === 403) return "Tu rol no permite ver o tomar tickets de la cola.";
+    if (err.status === 403) return "Tu rol no permite ver o cerrar este ticket.";
     if (err.status === 404) return "El ticket ya no existe.";
     if (err.status === 409) {
       const details = err.details as { responsable?: string } | undefined;

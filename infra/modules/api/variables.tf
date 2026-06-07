@@ -35,3 +35,9 @@ variable "cors_allow_origins" {
   type        = list(string)
   default     = ["*"]
 }
+
+variable "health_check_path" {
+  description = "Path del health/readiness check del API. Default \"/\" por el rubric de OYD-D3 (\"A configurable health check path must be defined, defaulting to '/'\"). En dev se sobreescribe a \"/health\" via tfvars porque \"/\" en API Gateway está reservado para responder \"Forbidden\" sobre rutas no mapeadas y no nos sirve como check real. El endpoint usa MOCK integration y devuelve 200 con {\"status\":\"ok\"} sin invocar Lambda."
+  type        = string
+  default     = "/"
+}

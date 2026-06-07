@@ -14,10 +14,49 @@ module "compute" {
   attach_cognito_policy = true
   cognito_user_pool_arn = module.security.user_pool_arn
 
+  # SNS publish para eventos del dominio tickets (ticket.closed). El topic se
+  # crea en el módulo notifications; la Lambda lo consume vía env var.
+  attach_sns_publish_policy = true
+  sns_topic_arn             = module.notifications.sns_topic_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
     COGNITO_USER_POOL_ID    = module.security.user_pool_id
+    HEALTH_CHECK_PATH       = var.api_health_check_path
+    SNS_TOPIC_ARN           = module.notifications.sns_topic_arn
+  }
+}
+
+# Notifier Lambda: consumer de la cola SQS que recibe los eventos publicados
+# al SNS topic. Por cada mensaje, manda un email vía SES a solicitante.correo.
+# Es una segunda instancia del módulo compute con source_dir distinto y
+# perms IAM distintos (SQS consume + SES send en vez de DDB + S3).
+module "notifier" {
+  source = "./modules/compute"
+
+  environment     = var.environment
+  name            = "ticket-notifier"
+  source_dir      = "${path.module}/modules/compute/src/notifier"
+  timeout_seconds = 15
+
+  attach_sqs_consume_policy = true
+  sqs_queue_arn             = module.notifications.sqs_queue_arn
+
+  attach_ses_send_policy = true
+  ses_from_address       = var.ses_from_address
+
+  # Acceso a DynamoDB para registros de idempotencia (IDEMPOTENCY#<message_id>
+  # en la misma tabla tickets-dev). Necesita GetItem (check pre-send) y
+  # PutItem (mark post-send). La policy del módulo compute incluye también
+  # Query y UpdateItem que no usamos acá — el scope sigue siendo el ARN
+  # exacto de la tabla, así que el blast radius está acotado.
+  attach_dynamodb_policy = true
+  dynamodb_table_arn     = module.database.table_arn
+
+  environment_variables = {
+    SES_FROM_ADDRESS   = var.ses_from_address
+    TICKETS_TABLE_NAME = module.database.table_name
   }
 }
 
@@ -56,6 +95,7 @@ module "api" {
   cognito_user_pool_arn = module.security.user_pool_arn
 
   cors_allow_origins = var.api_cors_allow_origins
+  health_check_path  = var.api_health_check_path
 }
 
 module "waf" {
@@ -65,4 +105,60 @@ module "waf" {
   name                  = var.waf_name
   api_gateway_stage_arn = module.api.stage_arn
   rate_limit_per_5min   = var.waf_rate_limit_per_5min
+}
+
+# Pipeline async de notificaciones: SNS topic + SQS queue principal + DLQ.
+# La tickets Lambda publica eventos al topic; el notifier Lambda los consume
+# desde la SQS y manda emails vía SES. Mensajes con 3 fallos consecutivos
+# (recipient inválido, SES sandbox restrictivo, etc.) van a la DLQ para
+# inspección manual.
+module "notifications" {
+  source = "./modules/notifications"
+
+  environment       = var.environment
+  name_prefix       = var.notifications_name_prefix
+  max_receive_count = var.notifications_max_receive_count
+}
+
+# DNS administrado por Terraform. Solo se instancia si var.dns_parent_domain
+# está seteado. Esta versión maneja la HOSTED ZONE COMPLETA del dominio
+# (lumenchat.app): los nameservers del registrador apuntan acá y todos los
+# records de la zona se gestionan como código.
+#
+# Los records inline cubren el inventario completo del dominio (apex A/AAAA,
+# MX para email, TXT para SPF/DMARC, CNAMEs para www/ftp/correo/DKIM). Si en
+# algún momento se agregue un record en Route 53 que no esté acá, hay que
+# sumarlo a esta lista o se perderá en el próximo apply.
+module "dns" {
+  source = "./modules/dns"
+  count  = var.dns_parent_domain != "" ? 1 : 0
+
+  environment                = var.environment
+  parent_domain              = var.dns_parent_domain
+  api_full_hostname          = var.dns_api_full_hostname
+  enable_api_custom_domain   = var.dns_enable_api_custom_domain
+  enable_ses_domain_identity = var.dns_enable_ses_domain_identity
+  api_gateway_id             = module.api.api_id
+  api_gateway_stage_name     = var.api_stage_name
+
+  # Records DNS de la zona (apex + subdominios).
+  apex_a_record    = "82.25.83.178"
+  apex_aaaa_record = "2a02:4780:2b:2099:0:1692:2e5b:2"
+  apex_mx_records = [
+    "5 mx1.hostinger.com",
+    "10 mx2.hostinger.com",
+  ]
+  apex_txt_records = [
+    "v=spf1 include:_spf.mail.hostinger.com ~all",
+  ]
+  subdomain_records = [
+    { name = "www", type = "CNAME", value = "lumenchat.app", ttl = 300 },
+    { name = "ftp", type = "A", value = "82.25.83.178", ttl = 1800 },
+    { name = "autoconfig", type = "CNAME", value = "autoconfig.mail.hostinger.com", ttl = 300 },
+    { name = "autodiscover", type = "CNAME", value = "autodiscover.mail.hostinger.com", ttl = 300 },
+    { name = "_dmarc", type = "TXT", value = "v=DMARC1; p=none", ttl = 3600 },
+    { name = "hostingermail-a._domainkey", type = "CNAME", value = "hostingermail-a.dkim.mail.hostinger.com", ttl = 300 },
+    { name = "hostingermail-b._domainkey", type = "CNAME", value = "hostingermail-b.dkim.mail.hostinger.com", ttl = 300 },
+    { name = "hostingermail-c._domainkey", type = "CNAME", value = "hostingermail-c.dkim.mail.hostinger.com", ttl = 300 },
+  ]
 }

@@ -230,7 +230,57 @@ Captura del error `Error: Error acquiring the state lock` que dispara DynamoDB c
 
 ![State lock contention](evidence/state-lock-contention.png)
 
+### Delivery 3 — Edge & DNS (serverless-only track)
+
+Salida de `dig` contra el dominio custom + `curl -v` contra el endpoint público `/health` (Lambda real, no MOCK), capturadas en `evidence/edge-dns.txt`. Confirma que:
+- `lumenchat.app` resuelve a los 4 nameservers de Route 53 (zona administrada en AWS).
+- `api.ticke-t.lumenchat.app` resuelve a las IPs del custom domain regional del API Gateway.
+- El TLS handshake con el cert wildcard `*.ticke-t.lumenchat.app` (ACM) cierra OK.
+- El `/health` responde 200 con el payload de la Lambda.
+
+### Delivery 3 — Ingress curl + auth verification
+
+`evidence/ingress-curl.txt` muestra dos requests al custom domain:
+- `GET /health` → HTTP 200 con `{"status":"ok",...}` (endpoint público, ejerce la Lambda).
+- `GET /tickets/me` → HTTP 401 `{"message":"Unauthorized"}` (route existe pero el Cognito authorizer rechaza sin token — prueba que el routing + authorizer están conectados).
+
+### Delivery 3 — Least-privilege IAM del invoker
+
+`evidence/invoker-iam-policy.txt` contiene:
+- El role `chat-message-handler-dev-exec` y su trust policy.
+- Las 4 inline policies (logs, dynamodb, attachments-bucket, cognito) todas con `Resource` scoped a ARNs específicos, sin wildcards.
+- El `aws_lambda_permission` con `source_arn` matcheando exactamente `${api_execution_arn}/*/*` — solo este REST API puede invocar esta Lambda.
+
+### Delivery 3 — WAF rule
+
+Captura de la consola mostrando la regla rate-limit del Web ACL `ticke-t-waf-dev`:
+
+![WAF rate limit rule](evidence/waf-rule.png)
+
+### Delivery 3 — End-to-end GET (lee desde DB)
+
+`evidence/e2e-get.txt`: `GET /tickets/queue` con Bearer token de un agente devuelve HTTP 200 y el seed `TICKET#seed-oyd-d3-001` (insertado vía `aws_dynamodb_table_item.seed_ticket` en `infra/seed.tf`).
+
+### Delivery 3 — End-to-end POST (escribe a S3)
+
+`evidence/e2e-post.txt`: `POST /tickets` con Bearer token de un colaborador devuelve HTTP 201 con `"object_key": "attachments/.../manifest.json"`. Ese objeto es el manifest del ticket que la Lambda escribe a S3 en cada creación.
+
+![Object visible en S3](evidence/e2e-storage.png)
+
+### Delivery 3 — API Gateway Resources sano
+
+Captura de la consola de API Gateway mostrando el tree de paths del REST API `ticke-t-api-dev`:
+
+![API Gateway resources sano](evidence/ingress-healthy.png)
+
+### Delivery 3 — CI plan-on-PR
+
+Screenshot del workflow run de GitHub Actions que postea el plan como comentario del PR:
+
+![CI plan-on-PR](evidence/ci-plan.png)
+
 ## Resúmenes de delivery
 
 - [Delivery 1 — IaC Workspace Bootstrap & CI Pipeline](docs/delivery-1-summary.md)
 - [Delivery 2 — Compute, Storage, Database & Remote State](docs/delivery-2-summary.md)
+- [Delivery 3 — Networking Layer Fully Automated](docs/delivery-3-summary.md)
