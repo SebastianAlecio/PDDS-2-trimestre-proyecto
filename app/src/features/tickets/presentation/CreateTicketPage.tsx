@@ -1,6 +1,8 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "react-router-dom";
+import { setActiveTicketId } from "../../chat/presentation/chat-session-storage";
 import { Field } from "../../../shared/ui/Field";
 import { Select } from "../../../shared/ui/Select";
 import { AppHeader } from "../../../shared/ui/AppHeader";
@@ -56,6 +58,7 @@ export function CreateTicketPage() {
   });
 
   const { create } = useCreateTicket();
+  const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<{ display: string; sla: string } | null>(null);
@@ -73,10 +76,15 @@ export function CreateTicketPage() {
     setSubmitError(null);
     try {
       const ticket = await create(values, files);
+      // Marca el ticket como activo para que el ChatWidget se auto-abra
+      // cuando lleguemos a /mis-tickets. El widget escucha el evento
+      // ticke-t:active-ticket-changed que dispara setActiveTicketId.
+      setActiveTicketId(ticket.id);
       setToast({ display: shortId(ticket.id), sla: ticket.slaLabel });
       reset();
       setFiles([]);
       setFileError(undefined);
+      navigate("/mis-tickets");
     } catch (err) {
       setSubmitError(humanizeApiError(err));
     }

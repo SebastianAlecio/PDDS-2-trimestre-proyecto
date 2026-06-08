@@ -6,81 +6,85 @@ import { QueuePage } from "./features/tickets/presentation/QueuePage";
 import { LoginPage } from "./features/auth/presentation/LoginPage";
 import { NewPasswordPage } from "./features/auth/presentation/NewPasswordPage";
 import { CreateUserForm } from "./features/users/presentation/CreateUserForm";
+import { ChatWidget } from "./features/chat/presentation/ChatWidget";
 import { useAuth } from "./shared/auth/use-auth";
 import { RequireAuth, RequireRole } from "./shared/auth/require-auth";
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/new-password" element={<NewPasswordPage />} />
+    <>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/new-password" element={<NewPasswordPage />} />
 
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <HomeRedirect />
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <HomeRedirect />
+            </RequireAuth>
+          }
+        />
 
-      <Route
-        path="/crear"
-        element={
-          <RequireAuth>
-            <RequireRole allow={["colaborador"]}>
-              <CreateTicketPage />
-            </RequireRole>
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/crear"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["colaborador"]}>
+                <CreateTicketPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
-      <Route
-        path="/mis-tickets"
-        element={
-          <RequireAuth>
-            <RequireRole allow={["colaborador"]}>
-              <MyTicketsPage />
-            </RequireRole>
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/mis-tickets"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["colaborador"]}>
+                <MyTicketsPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
-      <Route
-        path="/cola"
-        element={
-          <RequireAuth>
-            <RequireRole allow={["agente-n1", "agente-n2"]}>
-              <QueuePage />
-            </RequireRole>
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/cola"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
+                <QueuePage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
-      <Route
-        path="/agente/ticket/:id"
-        element={
-          <RequireAuth>
-            <RequireRole allow={["agente-n1", "agente-n2"]}>
-              <AgentTicketPage />
-            </RequireRole>
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/agente/ticket/:id"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
+                <AgentTicketPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
-      <Route
-        path="/crear-usuario"
-        element={
-          <RequireAuth>
-            <RequireRole allow={["gerente"]}>
-              <CreateUserForm />
-            </RequireRole>
-          </RequireAuth>
-        }
-      />
+        <Route
+          path="/crear-usuario"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["gerente"]}>
+                <CreateUserForm />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <ChatWidget />
+    </>
   );
 }
 
@@ -90,7 +94,7 @@ function HomeRedirect() {
   if (status.state !== "signed-in") return <Navigate to="/login" replace />;
 
   const role = status.user.primaryRole;
-  if (role === "colaborador") return <Navigate to="/crear" replace />;
+  if (role === "colaborador") return <Navigate to="/mis-tickets" replace />;
   if (role === "agente-n1" || role === "agente-n2") return <Navigate to="/cola" replace />;
   if (role === "gerente") return <Navigate to="/crear-usuario" replace />;
   return <ComingSoon title={titleForRole(role)} caption={captionForRole(role)} />;
