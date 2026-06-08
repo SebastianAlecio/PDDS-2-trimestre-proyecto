@@ -255,3 +255,59 @@
 .chatCol > * {
   flex: 1;
 }
+
+.takeBtn {
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary);
+  color: var(--canvas);
+  font-family: var(--type-text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.takeBtn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.takeBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.waitingCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--canvas-parchment);
+  border: 1px dashed var(--hairline);
+  border-radius: 12px;
+  padding: var(--s-xl);
+  gap: var(--s-sm);
+}
+
+.waitingIcon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.waitingCard h3 {
+  font-family: var(--type-display);
+  font-size: 20px;
+  color: var(--ink);
+  margin: 0;
+}
+
+.waitingCard p {
+  font-family: var(--type-text);
+  font-size: 14px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  max-width: 380px;
+  margin: 0;
+}

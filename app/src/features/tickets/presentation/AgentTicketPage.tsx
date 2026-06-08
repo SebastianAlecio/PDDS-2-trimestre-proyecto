@@ -15,8 +15,13 @@ export function AgentTicketPage() {
   const { status } = useAuth();
 
   const ticketId = params.id ?? null;
-  const { state, closeState, close } = useAgentTicket(ticketId);
-  const chat = useChat(ticketId);
+  const { state, assignState, closeState, assign, close } = useAgentTicket(ticketId);
+
+  // Solo abrimos el WS chat si soy el agente asignado — un ticket de
+  // otra persona o sin asignar no me da derecho a chatear (el backend
+  // me rechazaría con 403 igual).
+  const canChat = state.kind === "ready" && state.isAssignedToMe;
+  const chat = useChat(canChat ? ticketId : null);
 
   const [confirmingClose, setConfirmingClose] = useState(false);
 
@@ -47,8 +52,8 @@ export function AgentTicketPage() {
           <div className={styles.notFound}>
             <h2>Ticket no disponible</h2>
             <p>
-              El ticket no está en tu cola. Puede que aún no lo hayas tomado,
-              que ya esté cerrado, o que pertenezca a otro agente.
+              No encontramos el ticket en la cola. Puede que ya esté cerrado o
+              que pertenezca a un agente distinto.
             </p>
           </div>
         )}
@@ -121,7 +126,15 @@ export function AgentTicketPage() {
               )}
 
               <div className={styles.actions}>
-                {state.ticket.status !== "Cerrado" ? (
+                {state.ticket.status === "Cerrado" ? (
+                  <button
+                    type="button"
+                    className={styles.backToQueueBtn}
+                    onClick={() => navigate("/cola")}
+                  >
+                    Volver a la cola
+                  </button>
+                ) : state.isAssignedToMe ? (
                   <button
                     type="button"
                     className={styles.closeBtn}
@@ -133,11 +146,17 @@ export function AgentTicketPage() {
                 ) : (
                   <button
                     type="button"
-                    className={styles.backToQueueBtn}
-                    onClick={() => navigate("/cola")}
+                    className={styles.takeBtn}
+                    onClick={() => void assign()}
+                    disabled={assignState.kind === "pending"}
                   >
-                    Volver a la cola
+                    {assignState.kind === "pending" ? "Tomando…" : "Tomar ticket"}
                   </button>
+                )}
+                {assignState.kind === "error" && (
+                  <p className={styles.inlineError} role="alert">
+                    {assignState.message}
+                  </p>
                 )}
                 {closeState.kind === "error" && (
                   <p className={styles.inlineError} role="alert">
@@ -148,26 +167,30 @@ export function AgentTicketPage() {
             </section>
 
             <section className={styles.chatCol}>
-              <ChatPane
-                viewerSub={viewerSub}
-                messages={chat.messages}
-                connectionState={chat.connectionState}
-                sendState={chat.sendState}
-                historyLoading={chat.historyState.kind === "loading"}
-                historyError={
-                  chat.historyState.kind === "error" ? chat.historyState.message : null
-                }
-                closedNotice={
-                  chat.ticketClosed
-                    ? {
-                        closedByName: chat.ticketClosed.closedByName,
-                        closedAt: chat.ticketClosed.closedAt,
-                      }
-                    : null
-                }
-                onSend={chat.send}
-                onDismissSendError={chat.dismissSendError}
-              />
+              {canChat ? (
+                <ChatPane
+                  viewerSub={viewerSub}
+                  messages={chat.messages}
+                  connectionState={chat.connectionState}
+                  sendState={chat.sendState}
+                  historyLoading={chat.historyState.kind === "loading"}
+                  historyError={
+                    chat.historyState.kind === "error" ? chat.historyState.message : null
+                  }
+                  closedNotice={
+                    chat.ticketClosed
+                      ? {
+                          closedByName: chat.ticketClosed.closedByName,
+                          closedAt: chat.ticketClosed.closedAt,
+                        }
+                      : null
+                  }
+                  onSend={chat.send}
+                  onDismissSendError={chat.dismissSendError}
+                />
+              ) : (
+                <UntakenCard />
+              )}
             </section>
           </div>
         )}
@@ -184,6 +207,20 @@ export function AgentTicketPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function UntakenCard() {
+  return (
+    <div className={styles.waitingCard}>
+      <span className={styles.waitingIcon}>📥</span>
+      <h3>Tickets sin tomar</h3>
+      <p>
+        Para chatear con el solicitante, primero toma el ticket con el botón
+        a la izquierda. Una vez asignado, podrás ver el historial del chat y
+        enviar mensajes.
+      </p>
     </div>
   );
 }

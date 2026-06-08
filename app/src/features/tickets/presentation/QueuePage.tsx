@@ -9,8 +9,11 @@ import { useQueue } from "./use-queue";
 import { shortId } from "./use-create-ticket";
 import styles from "./QueuePage.module.css";
 
+// Cola del agente. Cada fila linkea al panel del ticket (/agente/ticket/:id)
+// — desde el panel el agente toma el ticket, chatea y lo cierra. Sin
+// acciones inline en la tabla para unificar el flujo "click → ver panel".
 export function QueuePage() {
-  const { state, assignState, reload, assign } = useQueue();
+  const { state, reload } = useQueue();
 
   const unassignedCount =
     state.kind === "ready" ? state.data.unassigned.length : 0;
@@ -25,8 +28,8 @@ export function QueuePage() {
           <p className={styles.heroEyebrow}>Soporte</p>
           <h1 className={styles.heroTitle}>Cola del agente</h1>
           <p className={styles.heroLead}>
-            Toma los tickets sin asignar para empezar a trabajarlos. Tu lista
-            personal muestra todo lo que aún no resuelves.
+            Click en cualquier ticket para abrir su panel: ahí podes tomarlo,
+            chatear con el solicitante y cerrarlo cuando lo resuelvas.
           </p>
 
           <div className={styles.metaRow}>
@@ -71,9 +74,7 @@ export function QueuePage() {
                 tickets={state.data.unassigned}
                 emptyTitle="No hay tickets sin asignar."
                 emptyBody="Cuando un colaborador cree uno, aparecerá aquí para que lo tomes."
-                showTakeButton
-                onTake={(id) => void assign(id)}
-                assignState={assignState}
+                showResponsible={false}
               />
 
               <QueueSection
@@ -81,23 +82,16 @@ export function QueuePage() {
                 meta={`${state.data.mine.length} activos`}
                 tickets={state.data.mine}
                 emptyTitle="Aún no tomaste ningún ticket."
-                emptyBody="Cuando tomes uno de la lista de arriba, aparecerá aquí."
-                showTakeButton={false}
-                assignState={assignState}
+                emptyBody="Toma uno de la lista de arriba y aparecerá aquí."
+                showResponsible
               />
             </>
           )}
         </div>
       </main>
-
     </div>
   );
 }
-
-type AssignState =
-  | { kind: "idle" }
-  | { kind: "pending"; ticketId: string }
-  | { kind: "error"; ticketId: string; message: string };
 
 function QueueSection({
   title,
@@ -105,18 +99,14 @@ function QueueSection({
   tickets,
   emptyTitle,
   emptyBody,
-  showTakeButton,
-  onTake,
-  assignState,
+  showResponsible,
 }: {
   title: string;
   meta: string;
   tickets: Ticket[];
   emptyTitle: string;
   emptyBody: string;
-  showTakeButton: boolean;
-  onTake?: (ticketId: string) => void;
-  assignState: AssignState;
+  showResponsible: boolean;
 }) {
   return (
     <article className={styles.card}>
@@ -140,36 +130,21 @@ function QueueSection({
               <th style={{ width: 110 }}>Prioridad</th>
               <th style={{ width: 160 }}>Estado</th>
               <th style={{ width: 140 }}>Solicitante</th>
-              {showTakeButton && (
-                <th style={{ width: 130 }} className={styles.actionCell}>
-                  Acción
-                </th>
-              )}
-              {!showTakeButton && (
+              {showResponsible && (
                 <th style={{ width: 140 }}>Responsable</th>
               )}
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => {
-              const isAssignPending =
-                assignState.kind === "pending" && assignState.ticketId === t.id;
-              const assignErrorMsg =
-                assignState.kind === "error" && assignState.ticketId === t.id
-                  ? assignState.message
-                  : null;
-              return (
-                <tr key={t.id}>
-                  <td className={styles.idCell}>
-                    {showTakeButton ? (
-                      shortId(t.id)
-                    ) : (
-                      <Link to={`/agente/ticket/${t.id}`} className={styles.ticketLink}>
-                        {shortId(t.id)}
-                      </Link>
-                    )}
-                  </td>
-                  <td>
+            {tickets.map((t) => (
+              <tr key={t.id}>
+                <td className={styles.idCell}>
+                  <Link to={`/agente/ticket/${t.id}`} className={styles.ticketLink}>
+                    {shortId(t.id)}
+                  </Link>
+                </td>
+                <td>
+                  <Link to={`/agente/ticket/${t.id}`} className={styles.titleCellLink}>
                     <div className={styles.titleCell}>
                       <span className={styles.titleMain}>{t.title}</span>
                       <span className={styles.titleMeta}>
@@ -177,38 +152,21 @@ function QueueSection({
                         {formatDate(t.createdAt)}
                       </span>
                     </div>
-                  </td>
-                  <td className={styles.cellMuted}>{t.area}</td>
-                  <td>
-                    <PriorityTag priority={t.priority} />
-                  </td>
-                  <td>
-                    <StatusTag status={t.status} />
-                  </td>
-                  <td className={styles.cellMuted}>{t.requester.name}</td>
-                  {showTakeButton && (
-                    <td className={styles.actionCell}>
-                      <button
-                        type="button"
-                        className={styles.takeBtn}
-                        onClick={() => onTake?.(t.id)}
-                        disabled={isAssignPending}
-                      >
-                        {isAssignPending ? "Tomando…" : "Tomar ticket"}
-                      </button>
-                      {assignErrorMsg && (
-                        <p className={styles.inlineError} role="alert">
-                          {assignErrorMsg}
-                        </p>
-                      )}
-                    </td>
-                  )}
-                  {!showTakeButton && (
-                    <td className={styles.cellMuted}>{t.responsible}</td>
-                  )}
-                </tr>
-              );
-            })}
+                  </Link>
+                </td>
+                <td className={styles.cellMuted}>{t.area}</td>
+                <td>
+                  <PriorityTag priority={t.priority} />
+                </td>
+                <td>
+                  <StatusTag status={t.status} />
+                </td>
+                <td className={styles.cellMuted}>{t.requester.name}</td>
+                {showResponsible && (
+                  <td className={styles.cellMuted}>{t.responsible}</td>
+                )}
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
