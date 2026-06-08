@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/use-auth";
 import { ChatPane } from "./ChatPane";
-import { useChat, type ChatTicketClosedSignal } from "./use-chat";
-import {
-  clearActiveTicketId,
-  getActiveTicketId,
-} from "./chat-session-storage";
+import { useChat } from "./use-chat";
+import { getActiveTicketId } from "./chat-session-storage";
 import styles from "./ChatWidget.module.css";
 
 // Widget flotante del colaborador. Renderiza por encima de cualquier
-// página, anclado a bottom-right. Se abre automáticamente cuando hay
-// un ticket activo en sessionStorage y se cierra al recibir el evento
-// ticket_closed (o cuando el usuario clickea cerrar).
+// página, anclado a bottom-right, y SIEMPRE visible para colaboradores
+// signed-in. Solo se puede minimizar — no hay "cerrar" destructivo
+// (perderia el ticket activo y dejaria al usuario sin acceso al chat).
+// Si no hay ticket activo en sessionStorage muestra un placeholder
+// invitando a crear uno.
 export function ChatWidget() {
   const { status } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(() => getActiveTicketId());
@@ -29,25 +29,10 @@ export function ChatWidget() {
     };
   }, []);
 
-  const onTicketClosed = useCallback((_signal: ChatTicketClosedSignal) => {
-    // El widget no se auto-cierra — mostramos el banner read-only y
-    // dejamos que el usuario lea el chat. Tiene que clickear "Cerrar"
-    // para limpiar la sessionStorage y deshacerse del widget.
-  }, []);
+  const chat = useChat(activeTicketId);
 
-  const chat = useChat(activeTicketId, { onTicketClosed });
-
-  const dismissWidget = () => {
-    clearActiveTicketId();
-    setActiveTicketId(null);
-    setCollapsed(false);
-  };
-
-  // No mostrar el widget si el usuario no es colaborador signed-in o
-  // si no hay ticket activo.
   if (status.state !== "signed-in") return null;
   if (status.user.primaryRole !== "colaborador") return null;
-  if (!activeTicketId) return null;
 
   if (collapsed) {
     return (
@@ -67,7 +52,11 @@ export function ChatWidget() {
       <header className={styles.header}>
         <div className={styles.title}>
           <strong>Chat de soporte</strong>
-          <small>Ticket #{activeTicketId.slice(0, 8)}</small>
+          <small>
+            {activeTicketId
+              ? `Ticket #${activeTicketId.slice(0, 8)}`
+              : "Sin conversación activa"}
+          </small>
         </div>
         <div className={styles.headerActions}>
           <button
@@ -75,41 +64,54 @@ export function ChatWidget() {
             className={styles.iconButton}
             onClick={() => setCollapsed(true)}
             aria-label="Minimizar chat"
+            title="Minimizar"
           >
             ⤵
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={dismissWidget}
-            aria-label="Cerrar chat"
-          >
-            ✕
           </button>
         </div>
       </header>
       <div className={styles.body}>
-        <ChatPane
-          viewerSub={status.user.username}
-          messages={chat.messages}
-          connectionState={chat.connectionState}
-          sendState={chat.sendState}
-          historyLoading={chat.historyState.kind === "loading"}
-          historyError={
-            chat.historyState.kind === "error" ? chat.historyState.message : null
-          }
-          closedNotice={
-            chat.ticketClosed
-              ? {
-                  closedByName: chat.ticketClosed.closedByName,
-                  closedAt: chat.ticketClosed.closedAt,
-                }
-              : null
-          }
-          onSend={chat.send}
-          onDismissSendError={chat.dismissSendError}
-        />
+        {activeTicketId ? (
+          <ChatPane
+            viewerSub={status.user.username}
+            messages={chat.messages}
+            connectionState={chat.connectionState}
+            sendState={chat.sendState}
+            historyLoading={chat.historyState.kind === "loading"}
+            historyError={
+              chat.historyState.kind === "error" ? chat.historyState.message : null
+            }
+            closedNotice={
+              chat.ticketClosed
+                ? {
+                    closedByName: chat.ticketClosed.closedByName,
+                    closedAt: chat.ticketClosed.closedAt,
+                  }
+                : null
+            }
+            onSend={chat.send}
+            onDismissSendError={chat.dismissSendError}
+          />
+        ) : (
+          <EmptyState />
+        )}
       </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className={styles.emptyState}>
+      <span className={styles.emptyIcon}>💬</span>
+      <p className={styles.emptyTitle}>Sin conversación activa</p>
+      <p className={styles.emptyBody}>
+        Cuando crees un ticket, el chat con el agente que lo tome se abrirá
+        acá automáticamente.
+      </p>
+      <Link to="/crear" className={styles.emptyAction}>
+        Crear ticket
+      </Link>
     </div>
   );
 }
