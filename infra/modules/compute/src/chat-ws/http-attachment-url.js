@@ -9,7 +9,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const { verifyIdToken } = require("./jwt-verify");
 const chatRepo = require("./chat-repo");
-const { jsonResponse } = require("./index");
+const { jsonResponse } = require("./response");
 
 const BUCKET = process.env.ATTACHMENTS_BUCKET_NAME;
 const UPLOAD_EXPIRES_SECONDS = 300;

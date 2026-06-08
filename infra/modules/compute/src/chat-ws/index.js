@@ -13,6 +13,7 @@ const wsDisconnect = require("./ws-disconnect");
 const wsSendMessage = require("./ws-send-message");
 const httpListMessages = require("./http-list-messages");
 const httpAttachmentUrl = require("./http-attachment-url");
+const { jsonResponse } = require("./response");
 
 exports.handler = async (event) => {
   const ctx = event.requestContext || {};
@@ -48,17 +49,3 @@ exports.handler = async (event) => {
   return jsonResponse(400, { error: "unknown event shape" });
 };
 
-function jsonResponse(statusCode, payload) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Authorization,Content-Type",
-      "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    },
-    body: JSON.stringify(payload),
-  };
-}
-
-module.exports.jsonResponse = jsonResponse;
