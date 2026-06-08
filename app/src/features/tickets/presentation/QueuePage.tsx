@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { AppHeader } from "../../../shared/ui/AppHeader";
 import type {
   Ticket,
@@ -159,7 +160,15 @@ function QueueSection({
                   : null;
               return (
                 <tr key={t.id}>
-                  <td className={styles.idCell}>{shortId(t.id)}</td>
+                  <td className={styles.idCell}>
+                    {showTakeButton ? (
+                      shortId(t.id)
+                    ) : (
+                      <Link to={`/agente/ticket/${t.id}`} className={styles.ticketLink}>
+                        {shortId(t.id)}
+                      </Link>
+                    )}
+                  </td>
                   <td>
                     <div className={styles.titleCell}>
                       <span className={styles.titleMain}>{t.title}</span>

@@ -472,3 +472,13 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+.ticketLink {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ticketLink:hover {
+  text-decoration: underline;
+}

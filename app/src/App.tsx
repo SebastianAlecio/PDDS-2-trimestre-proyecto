@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { AgentTicketPage } from "./features/tickets/presentation/AgentTicketPage";
 import { CreateTicketPage } from "./features/tickets/presentation/CreateTicketPage";
 import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
@@ -51,6 +52,17 @@ export function App() {
           <RequireAuth>
             <RequireRole allow={["agente-n1", "agente-n2"]}>
               <QueuePage />
+            </RequireRole>
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/agente/ticket/:id"
+        element={
+          <RequireAuth>
+            <RequireRole allow={["agente-n1", "agente-n2"]}>
+              <AgentTicketPage />
             </RequireRole>
           </RequireAuth>
         }
