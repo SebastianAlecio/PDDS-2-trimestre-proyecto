@@ -102,16 +102,15 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
-      # PutItem para crear tickets (POST /tickets). Query para "mis tickets"
-      # del colaborador (GET /tickets/me) y para la cola del agente (GET
-      # /tickets/queue, contra GSI4 y GSI2). UpdateItem para que el agente
-      # tome el ticket (PUT /tickets/{id}/assign). GetItem queda listo para
-      # el endpoint de detalle.
+      # PutItem/Query/GetItem/UpdateItem para tickets domain. DeleteItem
+      # agregado para chat-ws Lambda: limpiar CONN# items en $disconnect y
+      # reactivamente cuando PostToConnection devuelve GoneException.
       Action = [
         "dynamodb:PutItem",
         "dynamodb:Query",
         "dynamodb:GetItem",
         "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
       ]
       Resource = [
         var.dynamodb_table_arn,
@@ -134,8 +133,12 @@ resource "aws_iam_role_policy" "lambda_attachments_bucket" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject"]
+      Effect = "Allow"
+      # PutObject: el handler de crear ticket escribe metadata + el chat-ws
+      # firma presigned PUT URLs (la URL hereda los permisos del firmante).
+      # GetObject: chat-ws firma presigned GET URLs para que el frontend
+      # descargue/renderice adjuntos del chat.
+      Action   = ["s3:PutObject", "s3:GetObject"]
       Resource = ["${var.attachments_bucket_arn}/attachments/*"]
     }]
   })
@@ -253,6 +256,24 @@ resource "aws_iam_role_policy" "lambda_ses_send" {
           "ses:FromAddress" = var.ses_from_address
         }
       }
+    }]
+  })
+}
+
+# ─── WebSocket Management ────────────────────────────────────────────────
+# Necesario para PostToConnection. Scope: solo este WebSocket API específico.
+resource "aws_iam_role_policy" "lambda_websocket_management" {
+  count = var.attach_websocket_management_policy ? 1 : 0
+
+  name = "${local.function_name}-ws-mgmt"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["execute-api:ManageConnections"]
+      Resource = ["${var.websocket_api_execution_arn}/*/POST/@connections/*"]
     }]
   })
 }

@@ -154,3 +154,31 @@ variable "attach_ses_send_policy" {
   type        = bool
   default     = false
 }
+
+# ─── WebSocket Management API (para PostToConnection) ─────────────────────
+
+variable "websocket_api_execution_arn" {
+  description = "Execution ARN del WebSocket API. Read por la policy y por el lambda_permission cuando attach_websocket_management_policy = true."
+  type        = string
+  default     = ""
+}
+
+variable "attach_websocket_management_policy" {
+  description = "Si es true, adjunta IAM policy con execute-api:ManageConnections scoped al websocket_api_execution_arn. Necesario para que la Lambda pueda hacer PostToConnection a clientes WS conectados."
+  type        = bool
+  default     = false
+}
+
+# ─── Cognito (para verificación JWT en chat-ws Lambda) ───────────────────
+
+variable "cognito_user_pool_id" {
+  description = "ID del Cognito User Pool. Se expone como env var COGNITO_USER_POOL_ID al runtime. La Lambda chat-ws lo usa con aws-jwt-verify para validar el JWT recibido en $connect query string."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_client_id" {
+  description = "Client ID del Cognito User Pool. Se expone como env var COGNITO_APP_CLIENT_ID al runtime. aws-jwt-verify lo necesita para validar el claim audience del JWT."
+  type        = string
+  default     = ""
+}
