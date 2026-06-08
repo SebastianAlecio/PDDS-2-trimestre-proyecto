@@ -15,13 +15,23 @@ variable "stage_name" {
   default     = "api"
 }
 
-variable "lambda_function_arn" {
-  description = "ARN de la Lambda que actúa como integración AWS_PROXY para todas las rutas definidas en este módulo."
+variable "tickets_lambda_invoke_arn" {
+  description = "Invoke ARN de la Lambda tickets (chat-message-handler-dev). Backend para las rutas POST /tickets, GET /tickets/me, GET /tickets/queue, PUT /tickets/{id}/assign, PUT /tickets/{id}/status, POST /users."
   type        = string
 }
 
-variable "lambda_function_name" {
-  description = "Nombre de la Lambda. Necesario para crear el aws_lambda_permission que autoriza a API Gateway a invocarla."
+variable "tickets_lambda_function_name" {
+  description = "Nombre de la Lambda tickets. Para aws_lambda_permission."
+  type        = string
+}
+
+variable "chat_ws_lambda_invoke_arn" {
+  description = "Invoke ARN de la Lambda chat-ws (chat-ws-dev). Backend para GET /tickets/{id}/messages y POST /tickets/{id}/messages/attachments."
+  type        = string
+}
+
+variable "chat_ws_lambda_function_name" {
+  description = "Nombre de la Lambda chat-ws. Para aws_lambda_permission."
   type        = string
 }
 
