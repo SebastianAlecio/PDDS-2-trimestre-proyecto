@@ -4,7 +4,7 @@ variable "environment" {
 }
 
 variable "name" {
-  description = "Base name del WebSocket API. El nombre final es \"${name}-${environment}\"."
+  description = "Base name del WebSocket API. El nombre final es \"$${name}-$${environment}\"."
   type        = string
   default     = "ticke-t-ws"
 }
@@ -53,4 +53,10 @@ variable "throttling_rate_limit" {
   description = "Rate limit del stage WS (rps). 20 alcanza para varios chats simultáneos."
   type        = number
   default     = 20
+}
+
+variable "route53_zone_id" {
+  description = "ID de la hosted zone donde crear el A-alias del WS custom domain. Cuando enable_custom_domain = true y este valor != \"\", el módulo crea aws_route53_record.ws apuntando al regional endpoint del custom domain. Mover el record dentro de este módulo (en vez de en dns) rompe el ciclo dns ↔ realtime que aparece cuando realtime consume el cert desde dns Y dns consume el regional_domain_name desde realtime."
+  type        = string
+  default     = ""
 }

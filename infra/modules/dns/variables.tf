@@ -78,27 +78,3 @@ variable "enable_ses_domain_identity" {
   type        = bool
   default     = false
 }
-
-variable "enable_ws_custom_domain" {
-  description = "Si es true, crea aws_route53_record tipo A-alias para ws_full_hostname apuntando al regional_domain_name del WS custom domain. Dejar en false si el WS no tiene custom domain todavía."
-  type        = bool
-  default     = false
-}
-
-variable "ws_full_hostname" {
-  description = "FQDN del WebSocket custom domain (ej. \"ws.ticke-t.lumenchat.app\"). Requerido cuando enable_ws_custom_domain = true."
-  type        = string
-  default     = ""
-}
-
-variable "ws_api_regional_domain_name" {
-  description = "regional_domain_name del aws_apigatewayv2_domain_name del WS API. Output del módulo realtime."
-  type        = string
-  default     = ""
-}
-
-variable "ws_api_regional_zone_id" {
-  description = "regional_zone_id del aws_apigatewayv2_domain_name del WS API. Para el bloque alias."
-  type        = string
-  default     = ""
-}

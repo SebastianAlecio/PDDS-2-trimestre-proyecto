@@ -231,18 +231,9 @@ resource "aws_route53_record" "ses_dkim" {
   records = ["${aws_ses_domain_dkim.this[0].dkim_tokens[count.index]}.dkim.amazonses.com"]
 }
 
-# A-alias del WebSocket custom domain → regional endpoint del WS API.
-# Mismo patrón que el del REST API.
-resource "aws_route53_record" "ws" {
-  count = var.enable_ws_custom_domain ? 1 : 0
-
-  zone_id = aws_route53_zone.this.zone_id
-  name    = var.ws_full_hostname
-  type    = "A"
-
-  alias {
-    name                   = var.ws_api_regional_domain_name
-    zone_id                = var.ws_api_regional_zone_id
-    evaluate_target_health = false
-  }
-}
+# El A-alias del WebSocket custom domain (ws.ticke-t.lumenchat.app → regional
+# endpoint del WS API) vive en el módulo realtime, NO acá. Esto rompe el ciclo
+# dns ↔ realtime: realtime consume api_certificate_arn de dns; si dns tuviera
+# el record, también consumiría regional_domain_name/regional_zone_id de
+# realtime (ciclo bidireccional). Manteniéndolo en realtime, dns solo expone
+# hosted_zone_id (sin depender de realtime) y realtime depende de dns.

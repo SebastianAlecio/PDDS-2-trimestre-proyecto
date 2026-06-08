@@ -134,3 +134,21 @@ variable "notifications_max_receive_count" {
   default     = 3
 }
 
+variable "dns_ws_full_hostname" {
+  description = "FQDN del WebSocket custom domain (ej. \"ws.ticke-t.lumenchat.app\"). Solo se usa cuando dns_enable_ws_custom_domain = true."
+  type        = string
+  default     = ""
+}
+
+variable "dns_enable_ws_custom_domain" {
+  description = "Si es true, monta el WebSocket API en wss://dns_ws_full_hostname creando aws_apigatewayv2_domain_name + api_mapping + A-alias en Route 53. Reutiliza el cert wildcard de dns (mismo wildcard cubre api.* y ws.*). Dejar en false en envs sin DNS."
+  type        = bool
+  default     = false
+}
+
+variable "chat_ws_function_name" {
+  description = "Base name de la Lambda chat-ws. El nombre final es \"$${name}-$${environment}\"."
+  type        = string
+  default     = "chat-ws"
+}
+

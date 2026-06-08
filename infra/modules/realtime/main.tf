@@ -107,3 +107,21 @@ resource "aws_apigatewayv2_api_mapping" "ws" {
   domain_name = aws_apigatewayv2_domain_name.ws[0].id
   stage       = aws_apigatewayv2_stage.chat.id
 }
+
+# A-alias del WS custom domain en Route 53. Vive en el módulo realtime (no
+# en dns) para romper el ciclo: si el record estuviera en dns, dns dependería
+# de realtime.regional_domain_name Y realtime dependería de dns.api_certificate_arn.
+# Acá dependemos solo de la hosted zone id que dns expone — relación unidireccional.
+resource "aws_route53_record" "ws" {
+  count = var.enable_custom_domain && var.route53_zone_id != "" ? 1 : 0
+
+  zone_id = var.route53_zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.ws[0].domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.ws[0].domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}

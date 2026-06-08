@@ -19,8 +19,8 @@ output "custom_domain_endpoint" {
 }
 
 output "management_endpoint" {
-  description = "URL https del management endpoint que usa @aws-sdk/client-apigatewaymanagementapi para PostToConnection. Formato: https://<id>.execute-api.<region>.amazonaws.com/<stage>."
-  value       = replace(aws_apigatewayv2_stage.chat.invoke_url, "wss://", "https://")
+  description = "URL https del management endpoint que usa @aws-sdk/client-apigatewaymanagementapi para PostToConnection. Formato: https://<id>.execute-api.<region>.amazonaws.com/<stage>. Derivado del api_endpoint + var.stage_name (no del stage.invoke_url) para evitar un ciclo: el stage depende transitivamente de la integration → Lambda chat_ws, y chat_ws consume este output como env var."
+  value       = "${replace(aws_apigatewayv2_api.ws.api_endpoint, "wss://", "https://")}/${var.stage_name}"
 }
 
 output "regional_domain_name" {

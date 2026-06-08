@@ -23,3 +23,9 @@ dns_enable_ses_domain_identity = true
 # dns_enable_ses_domain_identity = true. Mientras la cuenta SES esté en
 # sandbox, los recipients tienen que estar verificados individualmente.
 ses_from_address = "soporte@lumenchat.app"
+
+# WebSocket custom domain. Apply 1 crea el WS API en wss://<api-id>.execute-api...
+# Apply 2 sube enable_ws_custom_domain a true y crea wss://ws.ticke-t.lumenchat.app
+# (reusa el cert wildcard de dns).
+dns_ws_full_hostname        = "ws.ticke-t.lumenchat.app"
+dns_enable_ws_custom_domain = true

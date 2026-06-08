@@ -19,12 +19,19 @@ module "compute" {
   attach_sns_publish_policy = true
   sns_topic_arn             = module.notifications.sns_topic_arn
 
+  # WebSocket Management: la tickets Lambda necesita PostToConnection para
+  # hacer broadcast del evento ticket.closed a todas las conexiones del
+  # ticket (colaborador con widget abierto + agente con panel abierto).
+  attach_websocket_management_policy = true
+  websocket_api_execution_arn        = module.realtime.api_execution_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
     COGNITO_USER_POOL_ID    = module.security.user_pool_id
     HEALTH_CHECK_PATH       = var.api_health_check_path
     SNS_TOPIC_ARN           = module.notifications.sns_topic_arn
+    WEBSOCKET_API_ENDPOINT  = module.realtime.management_endpoint
   }
 }
 
@@ -60,6 +67,44 @@ module "notifier" {
   }
 }
 
+# Lambda chat-ws: handler para el WebSocket API (3 routes WS) + 2 endpoints
+# HTTP en REST API (history + presigned upload URLs). Reutiliza el módulo
+# compute. Source en infra/modules/compute/src/chat-ws/.
+module "chat_ws" {
+  source = "./modules/compute"
+
+  environment     = var.environment
+  name            = var.chat_ws_function_name
+  source_dir      = "${path.module}/modules/compute/src/chat-ws"
+  timeout_seconds = 15
+
+  # DynamoDB: leer/escribir mensajes, conexiones, ticket metadata.
+  attach_dynamodb_policy = true
+  dynamodb_table_arn     = module.database.table_arn
+
+  # S3: GetObject (presigned GET para descargas) + PutObject (presigned PUT
+  # para uploads). La policy del módulo cubre ambas operaciones.
+  attach_attachments_bucket_policy = true
+  attachments_bucket_arn           = module.storage.bucket_arn
+
+  # WebSocket Management: PostToConnection requerida para broadcast.
+  attach_websocket_management_policy = true
+  websocket_api_execution_arn        = module.realtime.api_execution_arn
+
+  # Cognito: ID + ClientID inyectados como env vars para aws-jwt-verify
+  # validar JWT en $connect.
+  cognito_user_pool_id        = module.security.user_pool_id
+  cognito_user_pool_client_id = module.security.user_pool_client_id
+
+  environment_variables = {
+    TICKETS_TABLE_NAME      = module.database.table_name
+    ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
+    COGNITO_USER_POOL_ID    = module.security.user_pool_id
+    COGNITO_APP_CLIENT_ID   = module.security.user_pool_client_id
+    WEBSOCKET_API_ENDPOINT  = module.realtime.management_endpoint
+  }
+}
+
 module "storage" {
   source = "./modules/storage"
 
@@ -89,13 +134,32 @@ module "api" {
   name        = var.api_name
   stage_name  = var.api_stage_name
 
-  lambda_function_arn  = module.compute.function_arn
-  lambda_function_name = module.compute.function_name
+  tickets_lambda_invoke_arn    = module.compute.function_arn
+  tickets_lambda_function_name = module.compute.function_name
+  chat_ws_lambda_invoke_arn    = module.chat_ws.function_arn
+  chat_ws_lambda_function_name = module.chat_ws.function_name
 
   cognito_user_pool_arn = module.security.user_pool_arn
 
   cors_allow_origins = var.api_cors_allow_origins
   health_check_path  = var.api_health_check_path
+}
+
+# WebSocket API: provee las 3 routes $connect, $disconnect, sendMessage
+# integradas a la Lambda chat-ws. Custom domain wss://ws.ticke-t.lumenchat.app
+# habilitado cuando dns_enable_ws_custom_domain = true (reutiliza el cert
+# wildcard del módulo dns).
+module "realtime" {
+  source = "./modules/realtime"
+
+  environment          = var.environment
+  lambda_function_arn  = module.chat_ws.function_arn
+  lambda_function_name = module.chat_ws.function_name
+
+  enable_custom_domain     = var.dns_enable_ws_custom_domain && length(module.dns) > 0
+  domain_name              = var.dns_ws_full_hostname
+  regional_certificate_arn = length(module.dns) > 0 ? module.dns[0].api_certificate_arn : ""
+  route53_zone_id          = length(module.dns) > 0 ? module.dns[0].hosted_zone_id : ""
 }
 
 module "waf" {

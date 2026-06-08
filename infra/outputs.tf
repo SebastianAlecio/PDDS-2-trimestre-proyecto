@@ -93,3 +93,18 @@ output "hosted_zone_id" {
   description = "ID de la hosted zone Route 53 (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
   value       = length(module.dns) > 0 ? module.dns[0].hosted_zone_id : ""
 }
+
+output "ws_default_endpoint" {
+  description = "URL wss del WebSocket API en el endpoint execute-api default. Útil para debug con wscat antes de propagar el custom domain."
+  value       = module.realtime.default_endpoint
+}
+
+output "ws_custom_domain_endpoint" {
+  description = "URL wss del WebSocket custom domain (ej. wss://ws.ticke-t.lumenchat.app). Vacío hasta que dns_enable_ws_custom_domain = true y el A-alias propague."
+  value       = module.realtime.custom_domain_endpoint
+}
+
+output "ws_management_endpoint" {
+  description = "Endpoint https para PostToConnection (lo consume @aws-sdk/client-apigatewaymanagementapi). Inyectado a las Lambdas chat-ws y tickets como env var WEBSOCKET_API_ENDPOINT."
+  value       = module.realtime.management_endpoint
+}
