@@ -1,0 +1,102 @@
+.frame {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 380px;
+  height: 540px;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface-black, #111);
+  color: var(--on-dark, #fff);
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--type-text);
+}
+
+.title strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.title small {
+  font-size: 11px;
+  color: #b8b8b8;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconButton {
+  background: transparent;
+  color: var(--on-dark, #fff);
+  border: none;
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  /* La ChatPane ya trae su propio borde + radius; lo bypasseamos
+     anulando con background transparente. */
+  background: var(--canvas);
+}
+
+.body > * {
+  flex: 1;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.collapsedButton {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: none;
+  background: var(--primary);
+  color: var(--canvas);
+  font-family: var(--type-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 9999;
+}
+
+.collapsedButton:hover {
+  filter: brightness(1.05);
+}
