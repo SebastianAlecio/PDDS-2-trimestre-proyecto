@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AgentTicketPage } from "./features/tickets/presentation/AgentTicketPage";
+import { CollaboratorTicketPage } from "./features/tickets/presentation/CollaboratorTicketPage";
 import { CreateTicketPage } from "./features/tickets/presentation/CreateTicketPage";
 import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
@@ -49,6 +50,17 @@ export function App() {
         />
 
         <Route
+          path="/mis-tickets/:id"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["colaborador"]}>
+                <CollaboratorTicketPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        <Route
           path="/cola"
           element={
             <RequireAuth>
@@ -83,9 +95,21 @@ export function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <ChatWidget />
+      <GlobalChatWidget />
     </>
   );
+}
+
+// Oculta el widget en rutas que ya tienen el chat como vista principal
+// (página por-ticket del colaborador y panel del agente). Evita
+// duplicación visual del mismo chat en el mismo viewport.
+function GlobalChatWidget() {
+  const location = useLocation();
+  const path = location.pathname;
+  if (path.startsWith("/mis-tickets/") || path.startsWith("/agente/ticket/")) {
+    return null;
+  }
+  return <ChatWidget />;
 }
 
 // Decide a dónde mandar al usuario tras /. Cada rol va a su pantalla principal.

@@ -84,14 +84,20 @@ export function MyTicketsPage() {
                 <tbody>
                   {state.tickets.map((t) => (
                     <tr key={t.id}>
-                      <td className={styles.idCell}>{shortId(t.id)}</td>
+                      <td className={styles.idCell}>
+                        <Link to={`/mis-tickets/${t.id}`} className={styles.ticketLink}>
+                          {shortId(t.id)}
+                        </Link>
+                      </td>
                       <td>
-                        <div className={styles.titleCell}>
-                          <span className={styles.titleMain}>{t.title}</span>
-                          <span className={styles.titleMeta}>
-                            {capitalize(t.category)}
-                          </span>
-                        </div>
+                        <Link to={`/mis-tickets/${t.id}`} className={styles.titleCellLink}>
+                          <div className={styles.titleCell}>
+                            <span className={styles.titleMain}>{t.title}</span>
+                            <span className={styles.titleMeta}>
+                              {capitalize(t.category)}
+                            </span>
+                          </div>
+                        </Link>
                       </td>
                       <td className={styles.cellMuted}>{t.area}</td>
                       <td>

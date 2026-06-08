@@ -290,3 +290,23 @@
     padding-right: var(--s-md);
   }
 }
+
+.ticketLink {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ticketLink:hover {
+  text-decoration: underline;
+}
+
+.titleCellLink {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.titleCellLink:hover .titleMain {
+  text-decoration: underline;
+}
