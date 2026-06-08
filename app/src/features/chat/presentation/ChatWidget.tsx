@@ -1,31 +1,35 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../shared/auth/use-auth";
+import { useMyTickets } from "../../tickets/presentation/use-my-tickets";
+import { shortId } from "../../tickets/presentation/use-create-ticket";
+import type { Ticket } from "../../tickets/domain/ticket";
 import { ChatPane } from "./ChatPane";
 import { useChat } from "./use-chat";
-import { getActiveTicketId } from "./chat-session-storage";
+import {
+  getActiveTicketId,
+  setActiveTicketId,
+} from "./chat-session-storage";
 import styles from "./ChatWidget.module.css";
 
-// Widget flotante del colaborador. Renderiza por encima de cualquier
-// página, anclado a bottom-right, y SIEMPRE visible para colaboradores
-// signed-in. Solo se puede minimizar — no hay "cerrar" destructivo
-// (perderia el ticket activo y dejaria al usuario sin acceso al chat).
-// Si no hay ticket activo en sessionStorage muestra un placeholder
-// invitando a crear uno.
+// Widget flotante del colaborador. Estados:
+//   - Sin tickets activos → empty state con CTA "Crear ticket"
+//   - Con tickets activos y NINGUNO seleccionado → lista clickeable
+//   - Con ticket seleccionado → chat de ese ticket + boton "Volver a la lista"
+// Siempre visible para colaboradores signed-in; solo se puede minimizar.
 export function ChatWidget() {
   const { status } = useAuth();
-  const [activeTicketId, setActiveTicketId] = useState<string | null>(() => getActiveTicketId());
+  const [activeTicketId, setActiveTicketIdLocal] = useState<string | null>(() => getActiveTicketId());
   const [collapsed, setCollapsed] = useState(false);
+  const { state: ticketsState, reload } = useMyTickets();
 
-  // Re-leer sessionStorage cuando la página dispare el evento custom
-  // (lo hace CreateTicketPage al crear ticket).
   useEffect(() => {
-    const reload = () => setActiveTicketId(getActiveTicketId());
-    window.addEventListener("ticke-t:active-ticket-changed", reload);
-    window.addEventListener("storage", reload);
+    const sync = () => setActiveTicketIdLocal(getActiveTicketId());
+    window.addEventListener("ticke-t:active-ticket-changed", sync);
+    window.addEventListener("storage", sync);
     return () => {
-      window.removeEventListener("ticke-t:active-ticket-changed", reload);
-      window.removeEventListener("storage", reload);
+      window.removeEventListener("ticke-t:active-ticket-changed", sync);
+      window.removeEventListener("storage", sync);
     };
   }, []);
 
@@ -47,16 +51,57 @@ export function ChatWidget() {
     );
   }
 
+  // Tickets activos del colaborador (excluye cerrados).
+  const activeTickets =
+    ticketsState.kind === "ready"
+      ? ticketsState.tickets.filter((t) => t.status !== "Cerrado")
+      : [];
+
+  const selectedTicket =
+    activeTickets.find((t) => t.id === activeTicketId) ?? null;
+
+  const handleSelectTicket = (ticketId: string) => {
+    setActiveTicketId(ticketId);
+    setActiveTicketIdLocal(ticketId);
+  };
+
+  const handleBackToList = () => {
+    // No limpiamos sessionStorage — solo cambiamos la vista del widget.
+    setActiveTicketIdLocal(null);
+  };
+
+  const showChat = selectedTicket !== null;
+
   return (
     <div className={styles.frame}>
       <header className={styles.header}>
         <div className={styles.title}>
-          <strong>Chat de soporte</strong>
-          <small>
-            {activeTicketId
-              ? `Ticket #${activeTicketId.slice(0, 8)}`
-              : "Sin conversación activa"}
-          </small>
+          {showChat ? (
+            <>
+              <button
+                type="button"
+                className={styles.backInlineBtn}
+                onClick={handleBackToList}
+                aria-label="Volver a la lista de tickets"
+                title="Volver a la lista"
+              >
+                ←
+              </button>
+              <div className={styles.titleText}>
+                <strong>{selectedTicket.title}</strong>
+                <small>{shortId(selectedTicket.id)} · {selectedTicket.status}</small>
+              </div>
+            </>
+          ) : (
+            <div className={styles.titleText}>
+              <strong>Chat de soporte</strong>
+              <small>
+                {activeTickets.length > 0
+                  ? `${activeTickets.length} ticket${activeTickets.length === 1 ? "" : "s"} activo${activeTickets.length === 1 ? "" : "s"}`
+                  : "Sin tickets activos"}
+              </small>
+            </div>
+          )}
         </div>
         <div className={styles.headerActions}>
           <button
@@ -71,7 +116,7 @@ export function ChatWidget() {
         </div>
       </header>
       <div className={styles.body}>
-        {activeTicketId ? (
+        {showChat ? (
           <ChatPane
             viewerSub={status.user.username}
             messages={chat.messages}
@@ -93,25 +138,87 @@ export function ChatWidget() {
             onDismissSendError={chat.dismissSendError}
           />
         ) : (
-          <EmptyState />
+          <TicketsList
+            state={ticketsState.kind}
+            tickets={activeTickets}
+            errorMessage={ticketsState.kind === "error" ? ticketsState.message : null}
+            onSelect={handleSelectTicket}
+            onReload={() => void reload()}
+          />
         )}
       </div>
     </div>
   );
 }
 
-function EmptyState() {
+type TicketsListState = "loading" | "ready" | "error";
+
+function TicketsList({
+  state,
+  tickets,
+  errorMessage,
+  onSelect,
+  onReload,
+}: {
+  state: TicketsListState;
+  tickets: Ticket[];
+  errorMessage: string | null;
+  onSelect: (ticketId: string) => void;
+  onReload: () => void;
+}) {
+  if (state === "loading") {
+    return <div className={styles.listPlaceholder}>Cargando tickets…</div>;
+  }
+  if (state === "error") {
+    return (
+      <div className={styles.listError}>
+        <p>{errorMessage}</p>
+        <button type="button" className={styles.reloadBtn} onClick={onReload}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  if (tickets.length === 0) {
+    return (
+      <div className={styles.emptyState}>
+        <span className={styles.emptyIcon}>💬</span>
+        <p className={styles.emptyTitle}>Sin conversación activa</p>
+        <p className={styles.emptyBody}>
+          Cuando crees un ticket, el chat con el agente que lo tome aparecerá
+          acá.
+        </p>
+        <Link to="/crear" className={styles.emptyAction}>
+          Crear ticket
+        </Link>
+      </div>
+    );
+  }
   return (
-    <div className={styles.emptyState}>
-      <span className={styles.emptyIcon}>💬</span>
-      <p className={styles.emptyTitle}>Sin conversación activa</p>
-      <p className={styles.emptyBody}>
-        Cuando crees un ticket, el chat con el agente que lo tome se abrirá
-        acá automáticamente.
-      </p>
-      <Link to="/crear" className={styles.emptyAction}>
-        Crear ticket
-      </Link>
+    <div className={styles.ticketsList}>
+      {tickets.map((t) => {
+        const assigned = t.responsible !== "Sin asignar";
+        return (
+          <button
+            key={t.id}
+            type="button"
+            className={styles.ticketRow}
+            onClick={() => onSelect(t.id)}
+          >
+            <div className={styles.ticketRowMain}>
+              <strong className={styles.ticketRowTitle}>{t.title}</strong>
+              <span className={styles.ticketRowMeta}>
+                {shortId(t.id)} · {t.status}
+              </span>
+            </div>
+            <span
+              className={`${styles.ticketRowBadge} ${assigned ? styles.badgeAssigned : styles.badgeWaiting}`}
+            >
+              {assigned ? `Con ${t.responsible}` : "Sin agente"}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

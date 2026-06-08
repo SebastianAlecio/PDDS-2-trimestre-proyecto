@@ -26,19 +26,51 @@
 
 .title {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--type-text);
+  flex: 1;
+  min-width: 0;
+}
+
+.titleText {
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  font-family: var(--type-text);
+  min-width: 0;
+  overflow: hidden;
 }
 
-.title strong {
+.titleText strong {
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.title small {
+.titleText small {
   font-size: 11px;
   color: #b8b8b8;
+}
+
+.backInlineBtn {
+  background: transparent;
+  border: none;
+  color: var(--on-dark, #fff);
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.backInlineBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .headerActions {
@@ -149,4 +181,111 @@
 
 .emptyAction:hover {
   filter: brightness(1.05);
+}
+
+.ticketsList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ticketRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--type-text);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.ticketRow:hover {
+  background: var(--canvas-parchment);
+  border-color: var(--ink-muted);
+}
+
+.ticketRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ticketRowTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticketRowMeta {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.ticketRowBadge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.badgeAssigned {
+  background: #ebf9f0;
+  color: #0a6e3d;
+  border: 1px solid #b3e3c5;
+}
+
+.badgeWaiting {
+  background: #fff5dc;
+  color: #8a5800;
+  border: 1px solid #f0d39c;
+}
+
+.listPlaceholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-family: var(--type-text);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.listError {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  font-family: var(--type-text);
+  font-size: 13px;
+  color: #8a1f1f;
+}
+
+.reloadBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  cursor: pointer;
+  font-family: var(--type-text);
+  font-size: 12px;
 }
