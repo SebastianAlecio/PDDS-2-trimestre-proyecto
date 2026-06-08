@@ -1,22 +1,15 @@
-import { useState } from "react";
 import { AppHeader } from "../../../shared/ui/AppHeader";
 import type {
   Ticket,
   TicketPriority,
   TicketStatus,
 } from "../domain/ticket";
-import { useQueue, type CloseState } from "./use-queue";
+import { useQueue } from "./use-queue";
 import { shortId } from "./use-create-ticket";
 import styles from "./QueuePage.module.css";
 
 export function QueuePage() {
-  const { state, assignState, closeState, reload, assign, close } = useQueue();
-  const [confirmingCloseId, setConfirmingCloseId] = useState<string | null>(null);
-
-  const ticketBeingClosed =
-    state.kind === "ready" && confirmingCloseId
-      ? state.data.mine.find((t) => t.id === confirmingCloseId) ?? null
-      : null;
+  const { state, assignState, reload, assign } = useQueue();
 
   const unassignedCount =
     state.kind === "ready" ? state.data.unassigned.length : 0;
@@ -89,87 +82,13 @@ export function QueuePage() {
                 emptyTitle="Aún no tomaste ningún ticket."
                 emptyBody="Cuando tomes uno de la lista de arriba, aparecerá aquí."
                 showTakeButton={false}
-                showCloseButton
-                onClose={(id) => setConfirmingCloseId(id)}
                 assignState={assignState}
-                closeState={closeState}
               />
             </>
           )}
         </div>
       </main>
 
-      {ticketBeingClosed && (
-        <CloseConfirmModal
-          ticket={ticketBeingClosed}
-          isClosing={
-            closeState.kind === "pending" && closeState.ticketId === ticketBeingClosed.id
-          }
-          onCancel={() => setConfirmingCloseId(null)}
-          onConfirm={async () => {
-            await close(ticketBeingClosed.id);
-            setConfirmingCloseId(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// Modal de confirmación: el cierre dispara un email automático al colaborador
-// y no se puede deshacer desde la UI. Por eso pedimos una confirmación
-// explícita en vez de cerrar al primer click.
-function CloseConfirmModal({
-  ticket,
-  isClosing,
-  onCancel,
-  onConfirm,
-}: {
-  ticket: Ticket;
-  isClosing: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      className={styles.modalBackdrop}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="close-ticket-title"
-      onClick={(e) => {
-        // click fuera del modal cancela (ergonomía estándar)
-        if (e.target === e.currentTarget && !isClosing) onCancel();
-      }}
-    >
-      <div className={styles.modal}>
-        <h2 id="close-ticket-title" className={styles.modalTitle}>
-          ¿Cerrar este ticket?
-        </h2>
-        <p className={styles.modalBody}>
-          Estás por cerrar <strong>{shortId(ticket.id)} — {ticket.title}</strong>.
-          El solicitante <strong>{ticket.requester.name}</strong> recibirá un
-          correo automático notificándole el cierre. Esta acción no se puede
-          deshacer desde el portal.
-        </p>
-        <div className={styles.modalActions}>
-          <button
-            type="button"
-            className={styles.modalCancelBtn}
-            onClick={onCancel}
-            disabled={isClosing}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className={styles.modalConfirmBtn}
-            onClick={onConfirm}
-            disabled={isClosing}
-          >
-            {isClosing ? "Cerrando…" : "Cerrar ticket"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -186,11 +105,8 @@ function QueueSection({
   emptyTitle,
   emptyBody,
   showTakeButton,
-  showCloseButton = false,
   onTake,
-  onClose,
   assignState,
-  closeState,
 }: {
   title: string;
   meta: string;
@@ -198,11 +114,8 @@ function QueueSection({
   emptyTitle: string;
   emptyBody: string;
   showTakeButton: boolean;
-  showCloseButton?: boolean;
   onTake?: (ticketId: string) => void;
-  onClose?: (ticketId: string) => void;
   assignState: AssignState;
-  closeState?: CloseState;
 }) {
   return (
     <article className={styles.card}>
@@ -231,15 +144,7 @@ function QueueSection({
                   Acción
                 </th>
               )}
-              {showCloseButton && (
-                <>
-                  <th style={{ width: 140 }}>Responsable</th>
-                  <th style={{ width: 140 }} className={styles.actionCell}>
-                    Acción
-                  </th>
-                </>
-              )}
-              {!showTakeButton && !showCloseButton && (
+              {!showTakeButton && (
                 <th style={{ width: 140 }}>Responsable</th>
               )}
             </tr>
@@ -251,12 +156,6 @@ function QueueSection({
               const assignErrorMsg =
                 assignState.kind === "error" && assignState.ticketId === t.id
                   ? assignState.message
-                  : null;
-              const isClosePending =
-                closeState?.kind === "pending" && closeState.ticketId === t.id;
-              const closeErrorMsg =
-                closeState?.kind === "error" && closeState.ticketId === t.id
-                  ? closeState.message
                   : null;
               return (
                 <tr key={t.id}>
@@ -295,31 +194,7 @@ function QueueSection({
                       )}
                     </td>
                   )}
-                  {showCloseButton && (
-                    <>
-                      <td className={styles.cellMuted}>{t.responsible}</td>
-                      <td className={styles.actionCell}>
-                        {t.status === "Cerrado" ? (
-                          <span className={styles.cellMuted}>Cerrado</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className={styles.closeBtn}
-                            onClick={() => onClose?.(t.id)}
-                            disabled={isClosePending}
-                          >
-                            {isClosePending ? "Cerrando…" : "Cerrar ticket"}
-                          </button>
-                        )}
-                        {closeErrorMsg && (
-                          <p className={styles.inlineError} role="alert">
-                            {closeErrorMsg}
-                          </p>
-                        )}
-                      </td>
-                    </>
-                  )}
-                  {!showTakeButton && !showCloseButton && (
+                  {!showTakeButton && (
                     <td className={styles.cellMuted}>{t.responsible}</td>
                   )}
                 </tr>
