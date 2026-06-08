@@ -34,6 +34,7 @@ const {
 } = require("@aws-sdk/lib-dynamodb");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
 const crypto = require("node:crypto");
 const { 
   CognitoIdentityProviderClient, 
@@ -61,8 +62,13 @@ const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET_NAME;
 // El handler matchea contra event.resource (template path) para responder ANTES
 // del check de auth — health checks no llevan JWT.
 const HEALTH_CHECK_PATH = process.env.HEALTH_CHECK_PATH || "/health";
+// ARN del SNS topic donde publicamos eventos del dominio tickets (ticket.closed,
+// etc). Si está vacío, el handler de cierre se ejecuta sin publicar el evento —
+// útil en desarrollo local o si el módulo notifications no está aplicado.
+const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN || "";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
+const sns = new SNSClient({});
 const cognitoClient = new CognitoIdentityProviderClient({});
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -600,6 +606,127 @@ async function handleAssignTicket(event, claims) {
   }
 }
 
+// Cierra un ticket: marca estado=Cerrado y publica el evento ticket.closed a
+// SNS (consumido por la cola SQS que dispara el notifier Lambda → email al
+// solicitante). Autoriza únicamente al agente asignado al ticket (mismo
+// patrón que handleAssignTicket: ConditionExpression contra GSI2-PK).
+//
+// Notas:
+//   - El endpoint genérico es PUT /tickets/{id}/status, pero esta entrega
+//     solo acepta {"status":"Cerrado"} como transición. Otras transiciones
+//     (reabrir, marcar resuelto, etc.) requieren agregar casos al handler.
+//   - El SNS Publish es best-effort: si falla, el ticket queda cerrado en
+//     DDB pero el colaborador no recibe el email. Se loggea el error para
+//     debugging y se retorna 200 al cliente igualmente (el cambio de estado
+//     ya pasó). Mitigación futura: outbox pattern.
+async function handleCloseTicket(event, claims) {
+  if (!requireGroup(claims, ["agente-n1", "agente-n2"])) {
+    return forbidden("only assigned agents can close tickets");
+  }
+
+  const ticketId = event.pathParameters && event.pathParameters.id;
+  if (!ticketId) {
+    return badRequest("path parameter 'id' is required");
+  }
+
+  let body;
+  try {
+    body = event.body ? JSON.parse(event.body) : {};
+  } catch (err) {
+    return badRequest("body is not valid JSON", err.message);
+  }
+
+  if (body.status !== "Cerrado") {
+    return badRequest(
+      `unsupported status transition; this endpoint only accepts {"status":"Cerrado"}, got: ${JSON.stringify(body.status)}`,
+    );
+  }
+
+  const sub = claims.sub;
+  const nameClaim = (claims.name || "").trim();
+  if (!sub) {
+    return unauthorized("token is missing required claim (sub)");
+  }
+
+  const now = new Date().toISOString();
+
+  // 1) UpdateItem con condition: ticket existe + caller es el agente asignado +
+  // estado todavía no es Cerrado. Si falla la condition, devolvemos 403
+  // genérico (no revelamos cuál de las 3 sub-condiciones falló).
+  let result;
+  try {
+    result = await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: `TICKET#${ticketId}`, SK: "METADATA" },
+        UpdateExpression: "SET estado = :cerrado, #g4pk = :statusPk, closed_at = :now, closed_by = :sub, updated_at = :now",
+        ConditionExpression: "attribute_exists(PK) AND #g2pk = :agent AND estado <> :cerrado",
+        ExpressionAttributeNames: {
+          "#g2pk": "GSI2-PK",
+          "#g4pk": "GSI4-PK",
+        },
+        ExpressionAttributeValues: {
+          ":cerrado":  "Cerrado",
+          ":statusPk": "STATUS#Cerrado",
+          ":agent":    `AGENT#${sub}`,
+          ":sub":      sub,
+          ":now":      now,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+  } catch (err) {
+    if (err.name === "ConditionalCheckFailedException") {
+      return forbidden("ticket not assigned to you or already closed");
+    }
+    console.error("dynamodb_close_failed:", err);
+    return serverError("failed to close ticket", { name: err.name, message: err.message });
+  }
+
+  const item = result.Attributes;
+  console.log("close_success:", JSON.stringify({ id: ticketId, table: TABLE_NAME }));
+
+  // 2) Publicar evento a SNS — best-effort. Si SNS falla, el ticket ya está
+  // cerrado en DDB; logueamos el error y devolvemos 200 igual al cliente.
+  //
+  // El message_id es determinístico (ticket_id + closed_at) para que el
+  // consumer pueda deduplicar entregas repetidas de SQS. Como cerrar dos
+  // veces el mismo ticket está bloqueado por la ConditionExpression del
+  // UpdateItem (estado != Cerrado), el mismo evento siempre genera el
+  // mismo message_id.
+  if (SNS_TOPIC_ARN) {
+    const messageId = `${ticketId}#${now}`;
+    try {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: SNS_TOPIC_ARN,
+          Subject: "ticket.closed",
+          Message: JSON.stringify({
+            event:        "ticket.closed",
+            message_id:   messageId,
+            ticket_id:    ticketId,
+            titulo:       item.titulo,
+            solicitante:  item.solicitante,
+            closed_by:    { sub, nombre: nameClaim },
+            closed_at:    now,
+          }),
+        }),
+      );
+      console.log("sns_published:", JSON.stringify({ ticket_id: ticketId, message_id: messageId, topic: SNS_TOPIC_ARN }));
+    } catch (err) {
+      console.error("sns_publish_failed:", {
+        ticket_id: ticketId,
+        err: { name: err.name, message: err.message },
+      });
+      // No retornamos error al cliente: el cambio de estado ya pasó.
+    }
+  } else {
+    console.warn("sns_topic_not_configured: skipping publish");
+  }
+
+  return ok({ id: ticketId, item });
+}
+
 async function handleCreateUser(event, claims) {
   if (!requireGroup(claims, ["gerente"])) {
     return forbidden("No tienes permisos para crear usuarios. Solo los gerentes pueden hacerlo.");
@@ -720,6 +847,9 @@ exports.handler = async (event) => {
 
     case "PUT /tickets/{id}/assign":
       return handleAssignTicket(event, claims);
+
+    case "PUT /tickets/{id}/status":
+      return handleCloseTicket(event, claims);
 
     case "POST /users":
       return handleCreateUser(event, claims);

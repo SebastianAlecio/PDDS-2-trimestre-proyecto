@@ -72,3 +72,9 @@ variable "subdomain_records" {
   }))
   default = []
 }
+
+variable "enable_ses_domain_identity" {
+  description = "Si es true, crea aws_ses_domain_identity para parent_domain + DKIM + records DNS de verificación (TXT _amazonses + 3 CNAMEs DKIM). Una vez verificado, SES permite mandar desde cualquier *@parent_domain (sujeto a sandbox). Dejar en false si todavía no se necesita SES."
+  type        = bool
+  default     = false
+}

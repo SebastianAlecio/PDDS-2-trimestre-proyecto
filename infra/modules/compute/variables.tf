@@ -106,3 +106,51 @@ variable "attach_cognito_policy" {
   type        = bool
   default     = false
 }
+
+# ─── SNS publish (para tickets Lambda que publica eventos ticket.closed) ───
+
+variable "sns_topic_arn" {
+  description = "ARN del topic SNS donde la Lambda publica eventos. Read por la policy cuando attach_sns_publish_policy = true."
+  type        = string
+  default     = ""
+}
+
+variable "attach_sns_publish_policy" {
+  description = "Si es true, adjunta una policy con sns:Publish scoped al sns_topic_arn."
+  type        = bool
+  default     = false
+}
+
+# ─── SQS consume (para notifier Lambda con event source mapping) ──────────
+
+variable "sqs_queue_arn" {
+  description = "ARN de la cola SQS de la que la Lambda consume mensajes. Read por la policy y por aws_lambda_event_source_mapping cuando attach_sqs_consume_policy = true."
+  type        = string
+  default     = ""
+}
+
+variable "attach_sqs_consume_policy" {
+  description = "Si es true, adjunta IAM policy con sqs:ReceiveMessage / DeleteMessage / GetQueueAttributes scoped al sqs_queue_arn, Y crea el aws_lambda_event_source_mapping que conecta la cola con la Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "sqs_batch_size" {
+  description = "Cantidad de mensajes SQS que el event source mapping entrega por invocación de la Lambda. 1 = un mensaje por invocación (fácil debuggear, retry granular). 10 = mejor throughput. Default 1 para MVP."
+  type        = number
+  default     = 1
+}
+
+# ─── SES SendEmail (para notifier Lambda) ─────────────────────────────────
+
+variable "ses_from_address" {
+  description = "Dirección remitente que la Lambda usa para SendEmail. La policy condiciona ses:FromAddress a este valor — la Lambda no puede mandar como cualquier otro address aunque el dominio entero esté verificado."
+  type        = string
+  default     = ""
+}
+
+variable "attach_ses_send_policy" {
+  description = "Si es true, adjunta IAM policy con ses:SendEmail / SendRawEmail con condition StringEquals ses:FromAddress = ses_from_address."
+  type        = bool
+  default     = false
+}

@@ -22,6 +22,7 @@ type CreateResponse = {
 type ListResponse = { items: unknown[]; count: number };
 type QueueResponse = { unassigned: unknown[]; mine: unknown[] };
 type AssignResponse = { id: string; item: unknown };
+type CloseResponse = { id: string; item: unknown };
 
 export class HttpTicketRepository implements TicketRepository {
   async create(input: CreateTicketInput, files: File[] = []): Promise<Ticket> {
@@ -76,6 +77,30 @@ export class HttpTicketRepository implements TicketRepository {
       { method: "PUT" },
     );
     return mapDynamoItemToTicket(response.item);
+  }
+
+  async closeTicket(ticketId: string): Promise<Ticket> {
+    const response = await apiFetch<CloseResponse>(
+      `/tickets/${encodeURIComponent(ticketId)}/status`,
+      { method: "PUT", body: { status: "Cerrado" } },
+    );
+    return mapDynamoItemToTicket(response.item);
+  }
+}
+
+// Sube un único archivo a S3 vía presigned PUT URL. El Content-Type DEBE
+// coincidir con el que se usó al generar el URL (el backend lo bindea al
+// `attachment.type` original); si difiere, S3 rechaza con 403 SignatureDoesNotMatch.
+// No usa apiFetch porque el destino es S3 directo, no nuestra API.
+async function uploadFileToS3(url: string, file: File): Promise<void> {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`S3 upload failed (${response.status}): ${detail || response.statusText}`);
   }
 }
 

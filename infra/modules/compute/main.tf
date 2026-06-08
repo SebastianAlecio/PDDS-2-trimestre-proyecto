@@ -165,3 +165,94 @@ resource "aws_iam_role_policy" "lambda_cognito" {
     }]
   })
 }
+
+# ─── SNS publish ─────────────────────────────────────────────────────────
+#
+# Permite a la Lambda publicar mensajes al topic SNS específico. Scoped al
+# ARN del topic (no permite publicar a otros topics de la cuenta).
+resource "aws_iam_role_policy" "lambda_sns_publish" {
+  count = var.attach_sns_publish_policy ? 1 : 0
+
+  name = "${local.function_name}-sns-publish"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sns:Publish"]
+      Resource = [var.sns_topic_arn]
+    }]
+  })
+}
+
+# ─── SQS consume ─────────────────────────────────────────────────────────
+#
+# Permisos requeridos por el aws_lambda_event_source_mapping para que el
+# servicio de Lambda haga long-polling sobre la cola y entregue mensajes a
+# la función. Scoped al ARN exacto de la cola.
+resource "aws_iam_role_policy" "lambda_sqs_consume" {
+  count = var.attach_sqs_consume_policy ? 1 : 0
+
+  name = "${local.function_name}-sqs-consume"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:ChangeMessageVisibility",
+      ]
+      Resource = [var.sqs_queue_arn]
+    }]
+  })
+}
+
+# Event source mapping: conecta la cola con la Lambda. El servicio Lambda
+# hace long-polling y entrega batches de mensajes al handler. batch_size
+# controla el throughput vs facilidad de debug (1 = un mensaje por
+# invocación, retry granular). Si el handler tira un error, el batch
+# completo vuelve a la cola y el receive_count se incrementa — eso es lo
+# que mueve mensajes a la DLQ después de max_receive_count intentos.
+resource "aws_lambda_event_source_mapping" "sqs" {
+  count = var.attach_sqs_consume_policy ? 1 : 0
+
+  event_source_arn = var.sqs_queue_arn
+  function_name    = aws_lambda_function.this.arn
+  batch_size       = var.sqs_batch_size
+  enabled          = true
+
+  depends_on = [aws_iam_role_policy.lambda_sqs_consume]
+}
+
+# ─── SES SendEmail ───────────────────────────────────────────────────────
+#
+# Permite a la Lambda mandar emails vía SES. La condition StringEquals sobre
+# ses:FromAddress restringe el remitente: aunque el dominio entero esté
+# verificado en SES, esta Lambda solo puede mandar desde la dirección
+# específica configurada (ej. soporte@lumenchat.app). Sin esta condition,
+# cualquier address verificado del dominio podría usarse.
+resource "aws_iam_role_policy" "lambda_ses_send" {
+  count = var.attach_ses_send_policy ? 1 : 0
+
+  name = "${local.function_name}-ses-send"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+      Resource = "*"
+      Condition = {
+        StringEquals = {
+          "ses:FromAddress" = var.ses_from_address
+        }
+      }
+    }]
+  })
+}

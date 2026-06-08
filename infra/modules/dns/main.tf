@@ -172,3 +172,61 @@ resource "aws_route53_record" "api" {
     evaluate_target_health = false
   }
 }
+
+# ─── SES domain identity + DKIM ────────────────────────────────────────────
+#
+# Una vez que estos records propaguen, SES marca el dominio como Verified y
+# permite mandar emails desde cualquier *@parent_domain. La cuenta queda en
+# SES sandbox por default: addresses destinatarios igual tienen que
+# verificarse individualmente en consola SES mientras la cuenta no salga del
+# sandbox (requiere ticket a AWS support — días).
+#
+# aws_ses_domain_identity registra el dominio en SES y genera un token de
+# verificación. El TXT _amazonses contiene ese token y permite a SES
+# confirmar la propiedad del dominio.
+#
+# aws_ses_domain_dkim genera 3 keys CNAME que se publican como records DNS.
+# DKIM firma cada email saliente y mejora la deliverability (los emails no
+# caen en spam por dominio sospechoso).
+resource "aws_ses_domain_identity" "this" {
+  count  = var.enable_ses_domain_identity ? 1 : 0
+  domain = var.parent_domain
+}
+
+resource "aws_route53_record" "ses_verification" {
+  count = var.enable_ses_domain_identity ? 1 : 0
+
+  zone_id = aws_route53_zone.this.zone_id
+  name    = "_amazonses.${var.parent_domain}"
+  type    = "TXT"
+  ttl     = 600
+  records = [aws_ses_domain_identity.this[0].verification_token]
+}
+
+# Espera hasta que SES marque el dominio como verified leyendo el TXT.
+# Puede tardar varios minutos por la propagación DNS.
+resource "aws_ses_domain_identity_verification" "this" {
+  count = var.enable_ses_domain_identity ? 1 : 0
+
+  domain     = aws_ses_domain_identity.this[0].id
+  depends_on = [aws_route53_record.ses_verification]
+
+  timeouts {
+    create = "15m"
+  }
+}
+
+resource "aws_ses_domain_dkim" "this" {
+  count  = var.enable_ses_domain_identity ? 1 : 0
+  domain = aws_ses_domain_identity.this[0].domain
+}
+
+resource "aws_route53_record" "ses_dkim" {
+  count = var.enable_ses_domain_identity ? 3 : 0
+
+  zone_id = aws_route53_zone.this.zone_id
+  name    = "${aws_ses_domain_dkim.this[0].dkim_tokens[count.index]}._domainkey.${var.parent_domain}"
+  type    = "CNAME"
+  ttl     = 600
+  records = ["${aws_ses_domain_dkim.this[0].dkim_tokens[count.index]}.dkim.amazonses.com"]
+}
