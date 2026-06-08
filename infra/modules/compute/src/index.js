@@ -35,6 +35,11 @@ const {
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
+const {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+} = require("@aws-sdk/client-apigatewaymanagementapi");
+const { DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 const crypto = require("node:crypto");
 const { 
   CognitoIdentityProviderClient, 
@@ -66,9 +71,16 @@ const HEALTH_CHECK_PATH = process.env.HEALTH_CHECK_PATH || "/health";
 // etc). Si está vacío, el handler de cierre se ejecuta sin publicar el evento —
 // útil en desarrollo local o si el módulo notifications no está aplicado.
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN || "";
+// Endpoint https para PostToConnection al WS API. Lo setea el módulo compute
+// con module.realtime.management_endpoint. Si está vacío, el broadcast de
+// ticket.closed por WS se skipea — útil en envs sin WS API desplegado.
+const WS_ENDPOINT = process.env.WEBSOCKET_API_ENDPOINT || "";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 const sns = new SNSClient({});
+const wsClient = WS_ENDPOINT
+  ? new ApiGatewayManagementApiClient({ endpoint: WS_ENDPOINT })
+  : null;
 const cognitoClient = new CognitoIdentityProviderClient({});
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -606,6 +618,88 @@ async function handleAssignTicket(event, claims) {
   }
 }
 
+// Broadcast best-effort: notifica via WS a todas las conexiones del ticket que
+// el ticket fue cerrado. Cada cliente conectado (colaborador con widget abierto,
+// agente con panel abierto) recibe el payload y actualiza su UI sin polling.
+//
+// Errors: si WS_ENDPOINT no está configurado, skipea silenciosamente. Si una
+// PostToConnection devuelve 410 GoneException, limpia el item huérfano de la
+// tabla (la conexión cerró sin que llegara $disconnect).
+async function broadcastTicketClosedWs({ ticketId, closedBy, closedAt }) {
+  if (!wsClient) {
+    console.log("ws_broadcast_skipped: no WEBSOCKET_API_ENDPOINT configured");
+    return;
+  }
+
+  let connections;
+  try {
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": `TICKET#${ticketId}`,
+          ":prefix": "CONN#",
+        },
+      }),
+    );
+    connections = res.Items || [];
+  } catch (err) {
+    console.error("ws_broadcast_query_failed:", { ticket_id: ticketId, name: err.name, message: err.message });
+    return;
+  }
+
+  if (connections.length === 0) {
+    console.log("ws_broadcast_no_connections:", JSON.stringify({ ticket_id: ticketId }));
+    return;
+  }
+
+  const payload = JSON.stringify({
+    type: "ticket_closed",
+    ticket_id: ticketId,
+    closed_by: closedBy,
+    closed_at: closedAt,
+  });
+  const data = Buffer.from(payload);
+
+  await Promise.all(
+    connections.map(async (c) => {
+      try {
+        await wsClient.send(
+          new PostToConnectionCommand({
+            ConnectionId: c.connection_id,
+            Data: data,
+          }),
+        );
+      } catch (err) {
+        if (err.name === "GoneException" || (err.$metadata && err.$metadata.httpStatusCode === 410)) {
+          // Conexión muerta — limpiamos ambos items idempotentemente.
+          await Promise.all([
+            ddb.send(
+              new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: { PK: `TICKET#${ticketId}`, SK: `CONN#${c.connection_id}` },
+              }),
+            ),
+            ddb.send(
+              new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: { PK: `CONN#${c.connection_id}`, SK: "META" },
+              }),
+            ),
+          ]).catch((cleanupErr) => {
+            console.error("ws_broadcast_cleanup_failed:", { connection_id: c.connection_id, name: cleanupErr.name });
+          });
+          return;
+        }
+        console.error("ws_broadcast_post_failed:", { connection_id: c.connection_id, name: err.name, message: err.message });
+      }
+    }),
+  );
+
+  console.log("ws_broadcast_ticket_closed:", JSON.stringify({ ticket_id: ticketId, connections: connections.length }));
+}
+
 // Cierra un ticket: marca estado=Cerrado y publica el evento ticket.closed a
 // SNS (consumido por la cola SQS que dispara el notifier Lambda → email al
 // solicitante). Autoriza únicamente al agente asignado al ticket (mismo
@@ -723,6 +817,15 @@ async function handleCloseTicket(event, claims) {
   } else {
     console.warn("sns_topic_not_configured: skipping publish");
   }
+
+  // 3) Broadcast por WS — best-effort. Los clientes con widget/panel abierto
+  //    actualizan su UI sin necesidad de polling. Si falla, el ticket ya está
+  //    cerrado en DDB y el email asíncrono ya está encolado.
+  await broadcastTicketClosedWs({
+    ticketId,
+    closedBy: { sub, nombre: nameClaim },
+    closedAt: now,
+  });
 
   return ok({ id: ticketId, item });
 }
