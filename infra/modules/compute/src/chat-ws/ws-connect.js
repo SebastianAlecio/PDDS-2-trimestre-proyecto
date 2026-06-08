@@ -46,12 +46,7 @@ exports.handler = async (event) => {
 
   // Authorize: solicitante o agente asignado únicos autorizados.
   const sub = claims.sub;
-  const solicitanteSub = ticket.solicitante && ticket.solicitante.sub;
-  const asignadoSub = ticket.asignado_a && ticket.asignado_a.sub;
-  const isSolicitante = solicitanteSub === sub;
-  const isAssignedAgent = asignadoSub && asignadoSub === sub;
-
-  if (!isSolicitante && !isAssignedAgent) {
+  if (!chatRepo.isPartyToTicket(ticket, sub)) {
     return deny(403, "not a party to this ticket");
   }
 

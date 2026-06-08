@@ -49,12 +49,7 @@ exports.handler = async (event) => {
   const ticket = await chatRepo.getTicket(ticketId);
   if (!ticket) return jsonResponse(404, { error: "ticket not found" });
 
-  const sub = claims.sub;
-  const isSolicitante = ticket.solicitante && ticket.solicitante.sub === sub;
-  const isAssignedAgent =
-    ticket.asignado_a && ticket.asignado_a.sub === sub;
-
-  if (!isSolicitante && !isAssignedAgent) {
+  if (!chatRepo.isPartyToTicket(ticket, claims.sub)) {
     return jsonResponse(403, { error: "not a party to this ticket" });
   }
 

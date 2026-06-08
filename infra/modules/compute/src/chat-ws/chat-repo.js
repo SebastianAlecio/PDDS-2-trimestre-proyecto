@@ -169,6 +169,19 @@ async function listMessagesByTicket(ticketId, limit = 50) {
   return res.Items || [];
 }
 
+// Authorization helper: el sub puede chatear si es el solicitante o el
+// agente asignado. El item DDB guarda el solicitante en
+// `solicitante.user_id` y al agente asignado SOLO en `GSI2-PK` con formato
+// "AGENT#<sub>" (no hay campo `asignado_a` materializado).
+function isPartyToTicket(ticket, sub) {
+  if (!ticket || !sub) return false;
+  const solicitanteSub = ticket.solicitante && ticket.solicitante.user_id;
+  if (solicitanteSub === sub) return true;
+  const gsi2Pk = ticket["GSI2-PK"];
+  if (typeof gsi2Pk === "string" && gsi2Pk === `AGENT#${sub}`) return true;
+  return false;
+}
+
 module.exports = {
   getTicket,
   registerConnection,
@@ -177,4 +190,5 @@ module.exports = {
   listConnectionsByTicket,
   putMessage,
   listMessagesByTicket,
+  isPartyToTicket,
 };
