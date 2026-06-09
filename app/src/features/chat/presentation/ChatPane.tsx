@@ -46,12 +46,27 @@ export function ChatPane({
   const isClosed = closedNotice !== null;
   const canSend = !isClosed && connectionState === "open" && sendState.kind !== "pending";
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const trySend = () => {
     if (!canSend) return;
     onSend({ body, files });
     setBody("");
     setFiles([]);
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    trySend();
+  };
+
+  // Enter envia, Shift+Enter inserta salto de linea (convencion estandar
+  // de chats — Slack, WhatsApp Web, etc.). IME composition (acentos en
+  // teclados muertos, IME asiaticos) usa Enter para confirmar — no
+  // interferimos en ese caso.
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    trySend();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,11 +123,12 @@ export function ChatPane({
             isClosed
               ? "Este ticket está cerrado."
               : connectionState === "open"
-              ? "Escribe un mensaje…"
+              ? "Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"
               : "Conectando al chat…"
           }
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onKeyDown={handleKeyDown}
           disabled={isClosed}
           rows={2}
         />
