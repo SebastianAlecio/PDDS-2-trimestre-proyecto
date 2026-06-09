@@ -123,7 +123,7 @@ export function ChatPane({
             isClosed
               ? "Este ticket está cerrado."
               : connectionState === "open"
-              ? "Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"
+              ? "Escribe un mensaje…"
               : "Conectando al chat…"
           }
           value={body}
