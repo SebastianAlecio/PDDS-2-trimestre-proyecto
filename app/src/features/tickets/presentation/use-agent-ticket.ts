@@ -42,6 +42,14 @@ export function useAgentTicket(
         setState({ kind: "ready", ticket: mine, isAssignedToMe: true });
         return;
       }
+      // Historial son tickets que YO cerré — siempre fueron míos, así que
+      // `isAssignedToMe: true`. El AgentTicketPage usa ese flag para
+      // mostrar el chat (read-only en cerrados) y NO el botón "Tomar".
+      const archived = data.historial.find((t) => t.id === ticketId);
+      if (archived) {
+        setState({ kind: "ready", ticket: archived, isAssignedToMe: true });
+        return;
+      }
       const unassigned = data.unassigned.find((t) => t.id === ticketId);
       if (unassigned) {
         setState({ kind: "ready", ticket: unassigned, isAssignedToMe: false });
