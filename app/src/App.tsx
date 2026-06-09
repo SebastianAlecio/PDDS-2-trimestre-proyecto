@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { AgentHistoryPage } from "./features/tickets/presentation/AgentHistoryPage";
 import { AgentTicketPage } from "./features/tickets/presentation/AgentTicketPage";
 import { CollaboratorTicketPage } from "./features/tickets/presentation/CollaboratorTicketPage";
 import { CreateTicketPage } from "./features/tickets/presentation/CreateTicketPage";
@@ -77,6 +78,17 @@ export function App() {
             <RequireAuth>
               <RequireRole allow={["agente-n1", "agente-n2"]}>
                 <AgentTicketPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/agente/historial"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
+                <AgentHistoryPage />
               </RequireRole>
             </RequireAuth>
           }

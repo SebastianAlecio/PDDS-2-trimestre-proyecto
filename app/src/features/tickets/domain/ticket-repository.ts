@@ -3,6 +3,7 @@ import type { CreateTicketInput, Ticket } from "./ticket";
 export type QueueData = {
   unassigned: Ticket[];
   mine: Ticket[];
+  historial: Ticket[];
 };
 
 // `files` debe matchear posicionalmente con `input.attachments`: el archivo

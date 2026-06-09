@@ -18,11 +18,24 @@ export function AgentTicketPage() {
   const ticketId = params.id ?? null;
   const { state, assignState, closeState, assign, close } = useAgentTicket(ticketId);
 
-  // Solo abrimos el WS chat si soy el agente asignado — un ticket de
-  // otra persona o sin asignar no me da derecho a chatear (el backend
-  // me rechazaría con 403 igual).
-  const canChat = state.kind === "ready" && state.isAssignedToMe;
+  // Solo abrimos el WS chat si soy el agente asignado Y el ticket esta
+  // abierto — un ticket de otra persona, sin asignar o cerrado no requiere
+  // conexion WS (mostramos historial REST si aplica).
+  const isClosed = state.kind === "ready" && state.ticket.status === "Cerrado";
+  const canChat = state.kind === "ready" && state.isAssignedToMe && !isClosed;
   const chat = useChat(canChat ? ticketId : null);
+
+  // closedNotice combinado: persistente desde el status (sobrevive re-mounts)
+  // o efímero desde el evento WS broadcast.
+  const closedNotice =
+    state.kind === "ready" && isClosed
+      ? { closedByName: state.ticket.responsible, closedAt: "" }
+      : chat.ticketClosed
+        ? {
+            closedByName: chat.ticketClosed.closedByName,
+            closedAt: chat.ticketClosed.closedAt,
+          }
+        : null;
 
   const [confirmingClose, setConfirmingClose] = useState(false);
 
@@ -161,7 +174,7 @@ export function AgentTicketPage() {
             </section>
 
             <section className={styles.chatCol}>
-              {canChat ? (
+              {state.isAssignedToMe ? (
                 <ChatPane
                   viewerSub={viewerSub}
                   messages={chat.messages}
@@ -171,14 +184,7 @@ export function AgentTicketPage() {
                   historyError={
                     chat.historyState.kind === "error" ? chat.historyState.message : null
                   }
-                  closedNotice={
-                    chat.ticketClosed
-                      ? {
-                          closedByName: chat.ticketClosed.closedByName,
-                          closedAt: chat.ticketClosed.closedAt,
-                        }
-                      : null
-                  }
+                  closedNotice={closedNotice}
                   onSend={chat.send}
                   onDismissSendError={chat.dismissSendError}
                 />

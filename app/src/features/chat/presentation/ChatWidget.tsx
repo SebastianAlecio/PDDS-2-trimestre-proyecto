@@ -43,7 +43,31 @@ export function ChatWidget() {
     ticketsList.find((t) => t.id === selectedTicketForCheck) ?? null;
   const isMatchedAssigned =
     matched !== null && matched.responsible !== "Sin asignar";
-  const chat = useChat(isMatchedAssigned ? activeTicketId : null);
+  const isMatchedClosed = matched !== null && matched.status === "Cerrado";
+  // Si ya está cerrado solo necesitamos historial (REST) — no hay sentido
+  // en abrir un WS para esperar mensajes que nunca van a llegar.
+  const chat = useChat(isMatchedAssigned && !isMatchedClosed ? activeTicketId : null);
+
+  // Si llega el evento ticket_closed por WS mientras estamos viendo el
+  // chat, refetcheamos la lista para que el ticket cerrado salga del
+  // listado activo (que filtra Cerrado).
+  useEffect(() => {
+    if (chat.ticketClosed) void reload();
+  }, [chat.ticketClosed, reload]);
+
+  // closedNotice combinado: persistente desde el ticket (status Cerrado) o
+  // efímero desde el broadcast WS. El primero sobrevive a re-montajes.
+  const persistedClosedNotice =
+    isMatchedClosed && matched
+      ? { closedByName: matched.responsible, closedAt: "" }
+      : null;
+  const liveClosedNotice = chat.ticketClosed
+    ? {
+        closedByName: chat.ticketClosed.closedByName,
+        closedAt: chat.ticketClosed.closedAt,
+      }
+    : null;
+  const closedNotice = persistedClosedNotice ?? liveClosedNotice;
 
   if (status.state !== "signed-in") return null;
   if (status.user.primaryRole !== "colaborador") return null;
@@ -136,14 +160,7 @@ export function ChatWidget() {
             historyError={
               chat.historyState.kind === "error" ? chat.historyState.message : null
             }
-            closedNotice={
-              chat.ticketClosed
-                ? {
-                    closedByName: chat.ticketClosed.closedByName,
-                    closedAt: chat.ticketClosed.closedAt,
-                  }
-                : null
-            }
+            closedNotice={closedNotice}
             onSend={chat.send}
             onDismissSendError={chat.dismissSendError}
           />

@@ -34,10 +34,24 @@ export function CollaboratorTicketPage() {
 
   const isAssigned =
     ticket !== null && ticket.responsible !== "Sin asignar";
+  const isClosed = ticket !== null && ticket.status === "Cerrado";
 
-  // Solo conectamos al WS si hay agente — si nadie tomó el ticket el
-  // chat no tiene contraparte y mostramos un placeholder en su lugar.
-  const chat = useChat(isAssigned ? ticketId : null);
+  // Solo conectamos al WS si hay agente Y el ticket está abierto. Tickets
+  // cerrados muestran el historial (REST) sin WS — no van a llegar más
+  // mensajes y evitamos consumir una conexión.
+  const chat = useChat(isAssigned && !isClosed ? ticketId : null);
+
+  // closedNotice combinado: persistente desde el status del ticket o
+  // efímero desde el evento WS. El persistente sobrevive a navegaciones.
+  const closedNotice =
+    isClosed && ticket
+      ? { closedByName: ticket.responsible, closedAt: "" }
+      : chat.ticketClosed
+        ? {
+            closedByName: chat.ticketClosed.closedByName,
+            closedAt: chat.ticketClosed.closedAt,
+          }
+        : null;
 
   const viewerSub =
     status.state === "signed-in" ? status.user.username : "";
@@ -137,14 +151,7 @@ export function CollaboratorTicketPage() {
                       ? chat.historyState.message
                       : null
                   }
-                  closedNotice={
-                    chat.ticketClosed
-                      ? {
-                          closedByName: chat.ticketClosed.closedByName,
-                          closedAt: chat.ticketClosed.closedAt,
-                        }
-                      : null
-                  }
+                  closedNotice={closedNotice}
                   onSend={chat.send}
                   onDismissSendError={chat.dismissSendError}
                 />

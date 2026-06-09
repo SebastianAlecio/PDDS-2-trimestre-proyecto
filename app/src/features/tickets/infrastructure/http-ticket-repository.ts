@@ -20,7 +20,7 @@ type CreateResponse = {
   uploads: PresignedUpload[];
 };
 type ListResponse = { items: unknown[]; count: number };
-type QueueResponse = { unassigned: unknown[]; mine: unknown[] };
+type QueueResponse = { unassigned: unknown[]; mine: unknown[]; historial?: unknown[] };
 type AssignResponse = { id: string; item: unknown };
 type CloseResponse = { id: string; item: unknown };
 
@@ -68,6 +68,7 @@ export class HttpTicketRepository implements TicketRepository {
     return {
       unassigned: (response.unassigned ?? []).map(mapDynamoItemToTicket),
       mine: (response.mine ?? []).map(mapDynamoItemToTicket),
+      historial: (response.historial ?? []).map(mapDynamoItemToTicket),
     };
   }
 

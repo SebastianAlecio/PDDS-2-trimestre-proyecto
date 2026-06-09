@@ -525,13 +525,14 @@ async function handleQueue(event, claims) {
   const sub = claims.sub;
   if (!sub) return unauthorized("token is missing 'sub' claim");
 
-  // Dos queries paralelas:
+  // Tres queries paralelas:
   //   1. Sin asignar: GSI4 con STATUS#Abierto. Al tomar el ticket pasamos a
   //      STATUS#En progreso, así que esta lista contiene solo los disponibles.
-  //   2. Míos: GSI2 con AGENT#{sub}, filtrando fuera Resuelto/Cerrado para
-  //      que la cola no se llene de historial.
+  //   2. Míos activos: GSI2 con AGENT#{sub}, filtrando fuera Resuelto/Cerrado.
+  //   3. Historial: GSI2 con AGENT#{sub} filtrando IN Cerrado/Resuelto —
+  //      tickets que ya cerré, para la pestaña de historial del agente.
   try {
-    const [unassignedResult, mineResult] = await Promise.all([
+    const [unassignedResult, mineResult, historialResult] = await Promise.all([
       ddb.send(
         new QueryCommand({
           TableName: TABLE_NAME,
@@ -559,15 +560,33 @@ async function handleQueue(event, claims) {
           Limit: 100,
         }),
       ),
+      ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          IndexName: "GSI2",
+          KeyConditionExpression: "#pk = :agent",
+          FilterExpression: "estado = :done OR estado = :closed",
+          ExpressionAttributeNames: { "#pk": "GSI2-PK" },
+          ExpressionAttributeValues: {
+            ":agent": `AGENT#${sub}`,
+            ":done": "Resuelto",
+            ":closed": "Cerrado",
+          },
+          ScanIndexForward: false, // más recientes primero (por fecha_inicio)
+          Limit: 100,
+        }),
+      ),
     ]);
 
-    const [unassignedEnriched, mineEnriched] = await Promise.all([
+    const [unassignedEnriched, mineEnriched, historialEnriched] = await Promise.all([
       Promise.all((unassignedResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
       Promise.all((mineResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+      Promise.all((historialResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
     ]);
     return ok({
       unassigned: unassignedEnriched,
       mine: mineEnriched,
+      historial: historialEnriched,
     });
   } catch (err) {
     console.error("dynamodb_queue_query_failed:", err);
