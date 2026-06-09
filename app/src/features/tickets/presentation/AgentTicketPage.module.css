@@ -1,16 +1,19 @@
 .shell {
-  min-height: 100dvh;
+  height: 100dvh;
   background: var(--canvas);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .main {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--s-lg);
   padding: var(--s-xl);
+  overflow: hidden;
 }
 
 .backRow {
@@ -56,15 +59,27 @@
 }
 
 .layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1.1fr;
   gap: var(--s-lg);
-  min-height: 600px;
 }
 
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;
+    /* En mobile dejamos el body scrolear: cada columna se apila y la
+       experiencia natural es scroll vertical de toda la página. */
+    overflow-y: auto;
+  }
+  .shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .main {
+    overflow: visible;
   }
 }
 
@@ -248,12 +263,13 @@
 }
 
 .chatCol {
-  min-height: 600px;
+  min-height: 0;
   display: flex;
 }
 
 .chatCol > * {
   flex: 1;
+  min-height: 0;
 }
 
 .takeBtn {
