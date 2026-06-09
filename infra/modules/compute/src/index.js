@@ -32,7 +32,7 @@ const {
   QueryCommand,
   UpdateCommand,
 } = require("@aws-sdk/lib-dynamodb");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
 const {
@@ -260,6 +260,37 @@ const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
 // IMPORTANTE: el frontend debe hacer PUT con el header Content-Type
 // matcheando el `attachment.type` original — si difiere, S3 rechaza con
 // 403. Por eso lo bindeamos al PutObjectCommand acá.
+// Enriquece los adjuntos de un ticket con presigned GET URLs para que el
+// frontend pueda renderizar imágenes inline o linkear descargas sin un
+// roundtrip extra. Skip si el bucket no está configurado o si el item no
+// tiene adjuntos. El URL expira en 5 minutos — alcanza para que el browser
+// haga el GET inicial; tras eso queda cacheado en memoria mientras dure la
+// vista.
+const ATTACHMENT_DOWNLOAD_TTL_SECONDS = 300;
+async function enrichTicketAttachmentsWithUrls(item) {
+  if (!item || !Array.isArray(item.adjuntos) || item.adjuntos.length === 0) {
+    return item;
+  }
+  if (!ATTACHMENTS_BUCKET) return item;
+  const enriched = await Promise.all(
+    item.adjuntos.map(async (a) => {
+      if (!a || typeof a.s3_key !== "string") return a;
+      try {
+        const url = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: a.s3_key }),
+          { expiresIn: ATTACHMENT_DOWNLOAD_TTL_SECONDS },
+        );
+        return { ...a, download_url: url };
+      } catch (err) {
+        console.warn("attachment_presign_failed:", a.s3_key, err.name);
+        return a;
+      }
+    }),
+  );
+  return { ...item, adjuntos: enriched };
+}
+
 async function generatePresignedUploadUrl(ticketId, attachment) {
   if (!ATTACHMENTS_BUCKET) {
     throw new Error("ATTACHMENTS_BUCKET_NAME not set");
@@ -477,7 +508,9 @@ async function handleListMyTickets(event, claims) {
       }),
     );
 
-    return ok({ items: result.Items ?? [], count: result.Count ?? 0 });
+    const items = result.Items ?? [];
+    const enriched = await Promise.all(items.map(enrichTicketAttachmentsWithUrls));
+    return ok({ items: enriched, count: result.Count ?? 0 });
   } catch (err) {
     console.error("dynamodb_query_failed:", err);
     return serverError("failed to list tickets", { name: err.name, message: err.message });
@@ -528,9 +561,13 @@ async function handleQueue(event, claims) {
       ),
     ]);
 
+    const [unassignedEnriched, mineEnriched] = await Promise.all([
+      Promise.all((unassignedResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+      Promise.all((mineResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+    ]);
     return ok({
-      unassigned: unassignedResult.Items ?? [],
-      mine: mineResult.Items ?? [],
+      unassigned: unassignedEnriched,
+      mine: mineEnriched,
     });
   } catch (err) {
     console.error("dynamodb_queue_query_failed:", err);

@@ -5,6 +5,7 @@ import { useAuth } from "../../../shared/auth/use-auth";
 import { ChatPane } from "../../chat/presentation/ChatPane";
 import { useChat } from "../../chat/presentation/use-chat";
 import { CloseTicketConfirmModal } from "./CloseTicketConfirmModal";
+import { TicketAttachmentsView } from "./TicketAttachmentsView";
 import { useAgentTicket } from "./use-agent-ticket";
 import { shortId } from "./use-create-ticket";
 import styles from "./AgentTicketPage.module.css";
@@ -114,14 +115,7 @@ export function AgentTicketPage() {
               {state.ticket.attachments.length > 0 && (
                 <section className={styles.description}>
                   <h3>Adjuntos del ticket</h3>
-                  <ul className={styles.attachList}>
-                    {state.ticket.attachments.map((a) => (
-                      <li key={a.id}>
-                        {a.name}
-                        <small> · {a.type}</small>
-                      </li>
-                    ))}
-                  </ul>
+                  <TicketAttachmentsView attachments={state.ticket.attachments} />
                 </section>
               )}
 
