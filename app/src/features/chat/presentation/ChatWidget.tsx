@@ -33,7 +33,17 @@ export function ChatWidget() {
     };
   }, []);
 
-  const chat = useChat(activeTicketId);
+  // No abrir el WS si el ticket no tiene agente — no hay con quien chatear
+  // y evitamos consumir una conexión inútil. El widget detecta esto desde
+  // el shape del Ticket (responsible) y muestra una card de espera.
+  const selectedTicketForCheck = activeTicketId;
+  const ticketsList =
+    ticketsState.kind === "ready" ? ticketsState.tickets : [];
+  const matched =
+    ticketsList.find((t) => t.id === selectedTicketForCheck) ?? null;
+  const isMatchedAssigned =
+    matched !== null && matched.responsible !== "Sin asignar";
+  const chat = useChat(isMatchedAssigned ? activeTicketId : null);
 
   if (status.state !== "signed-in") return null;
   if (status.user.primaryRole !== "colaborador") return null;
@@ -116,7 +126,7 @@ export function ChatWidget() {
         </div>
       </header>
       <div className={styles.body}>
-        {showChat ? (
+        {showChat && isMatchedAssigned ? (
           <ChatPane
             viewerSub={status.user.username}
             messages={chat.messages}
@@ -137,6 +147,8 @@ export function ChatWidget() {
             onSend={chat.send}
             onDismissSendError={chat.dismissSendError}
           />
+        ) : showChat && !isMatchedAssigned ? (
+          <WaitingForAgentMini onBack={handleBackToList} />
         ) : (
           <TicketsList
             state={ticketsState.kind}
@@ -147,6 +159,22 @@ export function ChatWidget() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function WaitingForAgentMini({ onBack }: { onBack: () => void }) {
+  return (
+    <div className={styles.emptyState}>
+      <span className={styles.emptyIcon}>⏳</span>
+      <p className={styles.emptyTitle}>Esperando agente</p>
+      <p className={styles.emptyBody}>
+        Aún nadie tomó este ticket. Cuando un agente lo tome, vas a poder
+        chatear con él desde acá.
+      </p>
+      <button type="button" className={styles.emptyAction} onClick={onBack}>
+        Volver a la lista
+      </button>
     </div>
   );
 }

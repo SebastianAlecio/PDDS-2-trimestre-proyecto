@@ -104,7 +104,7 @@ exports.handler = async (event) => {
 
   console.log(
     "attachment_url_issued",
-    JSON.stringify({ ticketId, key, contentType, size, sub }),
+    JSON.stringify({ ticketId, key, contentType, size, sub: claims.sub }),
   );
 
   return jsonResponse(200, {
