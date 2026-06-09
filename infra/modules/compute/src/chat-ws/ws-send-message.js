@@ -15,18 +15,50 @@ const {
   DynamoDBDocumentClient,
   GetCommand,
 } = require("@aws-sdk/lib-dynamodb");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const chatRepo = require("./chat-repo");
 
 const TABLE_NAME = process.env.TICKETS_TABLE_NAME;
 const WS_ENDPOINT = process.env.WEBSOCKET_API_ENDPOINT;
+const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET_NAME;
+const DOWNLOAD_TTL_SECONDS = 300;
 
 if (!WS_ENDPOINT) {
   throw new Error("WEBSOCKET_API_ENDPOINT es requerido");
 }
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const s3 = new S3Client({});
 const wsClient = new ApiGatewayManagementApiClient({ endpoint: WS_ENDPOINT });
+
+// Firma presigned GET URLs para cada attachment del mensaje. Los clientes
+// reciben las URLs en el broadcast y pueden renderizar imágenes inline
+// sin un round-trip extra al refetch del history.
+async function enrichAttachmentsWithUrls(attachments) {
+  if (!Array.isArray(attachments) || attachments.length === 0) return [];
+  if (!ATTACHMENTS_BUCKET) return attachments;
+  return await Promise.all(
+    attachments.map(async (a) => {
+      if (!a || typeof a.key !== "string") return a;
+      try {
+        const url = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: a.key }),
+          { expiresIn: DOWNLOAD_TTL_SECONDS },
+        );
+        return { ...a, download_url: url };
+      } catch (err) {
+        console.warn(
+          "ws_send_message_presign_failed",
+          JSON.stringify({ key: a.key, name: err.name }),
+        );
+        return a;
+      }
+    }),
+  );
+}
 
 // Lee el item de conexión bajo TICKET#<id>/CONN#<connId>. Tiene user_id,
 // user_name y role — los necesitamos para autoría del mensaje sin pegarle a
@@ -110,8 +142,10 @@ exports.handler = async (event) => {
     author,
   });
 
-  // Broadcast
+  // Broadcast — enriquecemos attachments con presigned GET URLs antes de
+  // serializar para que los receptores rendericen imágenes inline.
   const connections = await chatRepo.listConnectionsByTicket(ticketId);
+  const enrichedAttachments = await enrichAttachmentsWithUrls(item.attachments);
   const wsPayload = JSON.stringify({
     type: "message",
     ticket_id: ticketId,
@@ -121,7 +155,7 @@ exports.handler = async (event) => {
       author_name: item.author_name,
       author_role: item.author_role,
       body: item.body,
-      attachments: item.attachments,
+      attachments: enrichedAttachments,
       created_at: item.created_at,
     },
   });
