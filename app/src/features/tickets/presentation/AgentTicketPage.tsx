@@ -18,11 +18,12 @@ export function AgentTicketPage() {
   const ticketId = params.id ?? null;
   const { state, assignState, closeState, assign, close } = useAgentTicket(ticketId);
 
-  // Solo abrimos el WS chat si soy el agente asignado Y el ticket esta
-  // abierto — un ticket de otra persona, sin asignar o cerrado no requiere
-  // conexion WS (mostramos historial REST si aplica).
+  // Cargamos history (REST) + WS para todos los tickets donde soy el
+  // agente asignado, incluso si están cerrados — queremos ver el chat
+  // archivado. El closedNotice (derivado abajo) bloquea el input cuando
+  // corresponde, así que la conexión WS extra es benigna.
   const isClosed = state.kind === "ready" && state.ticket.status === "Cerrado";
-  const canChat = state.kind === "ready" && state.isAssignedToMe && !isClosed;
+  const canChat = state.kind === "ready" && state.isAssignedToMe;
   const chat = useChat(canChat ? ticketId : null);
 
   // closedNotice combinado: persistente desde el status (sobrevive re-mounts)

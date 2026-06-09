@@ -44,9 +44,11 @@ export function ChatWidget() {
   const isMatchedAssigned =
     matched !== null && matched.responsible !== "Sin asignar";
   const isMatchedClosed = matched !== null && matched.status === "Cerrado";
-  // Si ya está cerrado solo necesitamos historial (REST) — no hay sentido
-  // en abrir un WS para esperar mensajes que nunca van a llegar.
-  const chat = useChat(isMatchedAssigned && !isMatchedClosed ? activeTicketId : null);
+  // Cargamos history (y WS) para cualquier ticket con agente, incluso
+  // cerrados — queremos mostrar la conversación archivada. La conexión WS
+  // extra es benigna (no llegarán mensajes); el closedNotice bloquea
+  // el input cuando corresponde.
+  const chat = useChat(isMatchedAssigned ? activeTicketId : null);
 
   // Si llega el evento ticket_closed por WS mientras estamos viendo el
   // chat, refetcheamos la lista para que el ticket cerrado salga del

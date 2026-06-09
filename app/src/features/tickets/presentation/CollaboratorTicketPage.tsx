@@ -36,10 +36,10 @@ export function CollaboratorTicketPage() {
     ticket !== null && ticket.responsible !== "Sin asignar";
   const isClosed = ticket !== null && ticket.status === "Cerrado";
 
-  // Solo conectamos al WS si hay agente Y el ticket está abierto. Tickets
-  // cerrados muestran el historial (REST) sin WS — no van a llegar más
-  // mensajes y evitamos consumir una conexión.
-  const chat = useChat(isAssigned && !isClosed ? ticketId : null);
+  // Cargamos history + WS para cualquier ticket con agente, incluso
+  // cerrados — queremos mostrar la conversación archivada. El closedNotice
+  // (derivado abajo) bloquea el input cuando el ticket ya está cerrado.
+  const chat = useChat(isAssigned ? ticketId : null);
 
   // closedNotice combinado: persistente desde el status del ticket o
   // efímero desde el evento WS. El persistente sobrevive a navegaciones.
