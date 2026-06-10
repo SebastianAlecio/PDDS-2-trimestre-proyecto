@@ -15,9 +15,11 @@ crash.*.log
 .terraform/
 .terraform.tfstate.lock.info
 
-# Terraform planfiles (binary)
+# Terraform planfiles (binary) — generados por `terraform plan -out=...`,
+# son ephemerals y voluminosos, no van al repo.
 tfplan
 *.tfplan
+tfplan*.bin
 
 # Lambda zip artifacts produced by data "archive_file" at plan/apply time
 infra/modules/compute/build/
