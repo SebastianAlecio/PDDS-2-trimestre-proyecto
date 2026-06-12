@@ -277,3 +277,29 @@ resource "aws_iam_role_policy" "lambda_websocket_management" {
     }]
   })
 }
+
+# ─── EventBridge Schedule (para Watchdog) ────────────────────────────────
+#
+# Si se proporciona schedule_expression, configura una regla de EventBridge
+# para invocar esta Lambda periódicamente de forma automática.
+resource "aws_cloudwatch_event_rule" "schedule" {
+  count               = var.schedule_expression != "" ? 1 : 0
+  name                = "${local.function_name}-schedule"
+  description         = "Ejecuta ${local.function_name} periódicamente"
+  schedule_expression = var.schedule_expression
+}
+
+resource "aws_cloudwatch_event_target" "lambda_schedule" {
+  count = var.schedule_expression != "" ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.schedule[0].name
+  arn   = aws_lambda_function.this.arn
+}
+
+resource "aws_lambda_permission" "eventbridge_invoke" {
+  count         = var.schedule_expression != "" ? 1 : 0
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.this.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.schedule[0].arn
+}

@@ -8,6 +8,16 @@ output "compute_function_name" {
   value       = module.compute.function_name
 }
 
+output "watchdog_function_arn" {
+  description = "ARN de la función Lambda del watchdog"
+  value       = module.watchdog.function_arn
+}
+
+output "watchdog_function_name" {
+  description = "Nombre de la función Lambda del watchdog"
+  value       = module.watchdog.function_name
+}
+
 output "attachments_bucket_name" {
   description = "Name of the attachments bucket provisioned by the storage module."
   value       = module.storage.bucket_name

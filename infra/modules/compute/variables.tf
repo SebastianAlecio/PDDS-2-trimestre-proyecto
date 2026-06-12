@@ -182,3 +182,10 @@ variable "cognito_user_pool_client_id" {
   type        = string
   default     = ""
 }
+
+# ─── EventBridge Schedule (para Watchdog Lambda) ──────────────────────────
+variable "schedule_expression" {
+  description = "Expresión cron o rate para invocar la Lambda periódicamente (ej. 'rate(5 minutes)'). Si se especifica, crea una regla de EventBridge y el permiso asociado."
+  type        = string
+  default     = ""
+}

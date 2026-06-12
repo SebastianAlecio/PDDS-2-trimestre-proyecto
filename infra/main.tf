@@ -105,6 +105,27 @@ module "chat_ws" {
   }
 }
 
+# Watchdog Lambda: Trabajo automático en segundo plano que revisa periódicamente
+# los tickets para marcar como "Vencido" aquellos que excedieron su SLA.
+module "watchdog" {
+  source = "./modules/compute"
+
+  environment     = var.environment
+  name            = "${var.project_name}-watchdog"
+  source_dir      = "${path.module}/modules/compute/src/watchdog"
+  handler         = "index.handler"
+  memory_size     = 128
+  timeout_seconds = 60
+
+  schedule_expression    = var.watchdog_schedule
+  attach_dynamodb_policy = true
+  dynamodb_table_arn     = module.database.table_arn
+
+  environment_variables = {
+    TICKETS_TABLE_NAME = module.database.table_name
+  }
+}
+
 module "storage" {
   source = "./modules/storage"
 

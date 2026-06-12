@@ -32,7 +32,7 @@ export function App() {
           path="/crear"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador"]}>
+              <RequireRole allow={["colaborador", "gerente"]}>
                 <CreateTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -43,7 +43,7 @@ export function App() {
           path="/mis-tickets"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador"]}>
+              <RequireRole allow={["colaborador", "gerente"]}>
                 <MyTicketsPage />
               </RequireRole>
             </RequireAuth>
@@ -54,7 +54,7 @@ export function App() {
           path="/mis-tickets/:id"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador"]}>
+              <RequireRole allow={["colaborador", "gerente"]}>
                 <CollaboratorTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -65,7 +65,7 @@ export function App() {
           path="/cola"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2"]}>
+              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
                 <QueuePage />
               </RequireRole>
             </RequireAuth>
@@ -76,7 +76,7 @@ export function App() {
           path="/agente/ticket/:id"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2"]}>
+              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
                 <AgentTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -87,7 +87,7 @@ export function App() {
           path="/agente/historial"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2"]}>
+              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
                 <AgentHistoryPage />
               </RequireRole>
             </RequireAuth>

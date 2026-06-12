@@ -38,6 +38,12 @@ variable "compute_memory_size" {
   default     = 128
 }
 
+variable "watchdog_schedule" {
+  description = "Frecuencia de ejecución para la Lambda del Watchdog"
+  type        = string
+  default     = "rate(5 minutes)"
+}
+
 variable "tickets_table_name" {
   description = "Base name of the DynamoDB tickets table. The environment suffix is appended inside the module."
   type        = string
@@ -151,4 +157,3 @@ variable "chat_ws_function_name" {
   type        = string
   default     = "chat-ws"
 }
-
