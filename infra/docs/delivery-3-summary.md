@@ -23,8 +23,6 @@ El módulo `infra/modules/dns/` se introduce en esta entrega y administra comple
 4. **Custom domain del API Gateway.** `aws_api_gateway_domain_name.api` con endpoint regional (`REGIONAL`, mismo region que el REST API), TLS 1.2 mínimo, mapeo de `regional_certificate_arn` al cert wildcard, y `aws_api_gateway_base_path_mapping` apuntando al stage `api`. Resultado: `https://api.ticke-t.lumenchat.app` → REST API stage `api`.
 5. **Alias A en Route 53.** `aws_route53_record.api[0]` con bloque `alias` apunta `api.ticke-t.lumenchat.app` al `regional_domain_name` del custom domain — registro tipo A nativo (no CNAME) para que funcione como apex de subdominio.
 
-**Outputs exigidos por el rubric:** `domain_name = "api.ticke-t.lumenchat.app"` y `hosted_zone_id = "Z0749253Z6TOL9I58TBW"` están expuestos tanto en el módulo (`outputs.tf`) como re-exportados a nivel root (`infra/outputs.tf`), nombrados exactamente como pide el spec.
-
 **Estrategia de dos applies para no bloquear el primer apply esperando validación DNS:**
 - Apply 1: solo crea la hosted zone (con `dns_enable_api_custom_domain = false`). Los 4 NS que entrega se configuran en el registrador.
 - Apply 2: con `dns_enable_api_custom_domain = true`, crea el cert + custom domain + alias. Ya con los nameservers propagados, ACM valida automáticamente.
@@ -41,7 +39,7 @@ No hay módulos de D2 que apunten a recursos placeholder de networking. RDS, Clo
 
 El único "consumidor" indirecto de la nueva capa de networking es el módulo `api`, que ahora pasa su `api_id` al módulo `dns` para el base path mapping del custom domain. Eso se hizo agregando una sola línea (`api_gateway_id = module.api.api_id`) en `infra/main.tf` — no es un refactor de D2, es composición de un nuevo módulo encima.
 
-`terraform output dns_api_url` confirma el cableado:
+`terraform output dns_api_url` confirma el enlace:
 ```
 https://api.ticke-t.lumenchat.app
 ```
@@ -64,7 +62,7 @@ https://api.ticke-t.lumenchat.app
 }
 ```
 
-Lectura honesta: es permisiva en la práctica. La razón es que **la restricción real de ingreso ya vive en otras dos capas** que se ejecutan antes que esta policy pueda agregar valor:
+Es permisiva en la práctica. La razón es que **la restricción real de ingreso ya vive en otras dos capas** que se ejecutan antes que esta policy pueda agregar valor:
 
 1. **WAF v2 perimetral.** `aws_wafv2_web_acl.this` con regla de rate limit `2000 req/IP/5min`, asociada al stage del REST API. Filtra DDoS y abuse antes de que llegue al API Gateway.
 2. **Cognito User Pools authorizer.** `aws_api_gateway_authorizer.cognito` valida el ID token en cada request a rutas autenticadas. Tokens inválidos devuelven 401 sin gastar invocación de Lambda.
@@ -106,7 +104,7 @@ Se eligió **rate limit por IP** (no managed OWASP rules, no geographic restrict
   - **GET** `https://api.ticke-t.lumenchat.app/tickets/queue` → la Lambda hace `Query(GSI4-PK = STATUS#Abierto)` y devuelve los tickets abiertos como JSON. Captura en `infra/evidence/e2e-get.txt` — incluye el seed `TICKET#seed-oyd-d3-001`.
   - **POST** `https://api.ticke-t.lumenchat.app/tickets` → la Lambda crea el ticket en DynamoDB, escribe un `manifest.json` a S3 (`attachments/{ticket_id}/manifest.json`) y devuelve 201 con `object_key`. Captura en `infra/evidence/e2e-post.txt`.
 - **Credenciales:** ningún secret va en `dev.tfvars`. La Lambda recibe sus dependencias por env var (`TICKETS_TABLE_NAME`, `ATTACHMENTS_BUCKET_NAME`, `COGNITO_USER_POOL_ID`, `HEALTH_CHECK_PATH`) que se construyen desde outputs de otros módulos. Ningún valor sensible se hardcodea.
-- **IAM execution role:** `chat-message-handler-dev-exec`. Tiene los 4 inline policies del §4.2 — todos con `Resource` scoped al ARN específico, sin wildcards.
+- **IAM execution role:** `chat-message-handler-dev-exec`. Tiene los 4 inline policies — todos con `Resource` scoped al ARN específico, sin wildcards.
 - **Seed mechanism:** `infra/seed.tf` declara `aws_dynamodb_table_item.seed_ticket` que inserta `TICKET#seed-oyd-d3-001 / METADATA` en la tabla en cada apply. El item tiene `GSI4-PK = STATUS#Abierto`, lo que lo hace visible en el GET de `/tickets/queue`. El `lifecycle.ignore_changes = [item]` evita que el seed se sobrescriba en applies subsecuentes si el handler lo modifica.
 
 ### 5.2 Adjuntos reales con presigned PUT URLs
@@ -116,8 +114,6 @@ Una mejora introducida en esta entrega: el POST `/tickets` ahora soporta adjunto
 1. El frontend manda `POST /tickets` con metadata de adjuntos `[{filename, mime_type, size}]` (sin binario).
 2. La Lambda crea el ticket, genera presigned PUT URLs para cada adjunto (con `@aws-sdk/s3-request-presigner`, TTL 15 min), escribe el `manifest.json` a S3, y devuelve `{uploads: [{s3_key, url, expires_in}]}`.
 3. El frontend hace PUT directo a S3 por cada URL — sin pasar por Lambda. Soporta archivos de hasta 25 MB sin problemas de payload.
-
-El IAM execution role no necesita cambios — `s3:PutObject` sobre `attachments/*` cubre tanto el manifest del backend como los PUTs del frontend (porque el presigned URL hereda los permisos del firmante).
 
 ### 5.3 Health check
 
@@ -147,18 +143,12 @@ La alternativa simple era recibir los archivos como base64 dentro del body del P
 
 **Trade-off reconocido:** el flujo es two-step (POST → N× PUT a S3). Si el browser pierde conexión entre los pasos, el ticket queda creado pero los adjuntos con `upload_status: "pending"` en DDB. Mitigación futura: una notificación S3 (cuando llega el PutObject) que actualice el status en DDB. Para esta entrega es aceptable — el adjunto sigue subible manualmente con el mismo flujo desde la UI.
 
-## 7. Deviations conscientes vs el rubric
-
-Tres puntos donde nos apartamos de la letra del spec, con justificación:
-
-1. **Módulo se llama `infra/modules/api/` en lugar de `infra/modules/ingress/`.** El módulo cumple exactamente la función de ingress (API Gateway REST + Lambda proxy integration), pero el nombre se eligió en D2 cuando todavía no había un rubric con esa convención. Renombrarlo requiere `terraform state mv` de ~30 recursos, riesgo evaluado como mayor que el beneficio. El contenido del módulo cumple los requisitos: separado en `main.tf`, `variables.tf`, `outputs.tf`; expone la URL como output (`api_endpoint`); soporta `var.health_check_path` con default `/`; ejecuta como ingress único de toda la API.
-
-2. **API Gateway resource policy es Allow `*`.** Como se explica en §4.1, la restricción real vive en WAF + Cognito authorizer + IAM lambda permission. La resource policy es explícita en TF (cumple el requisito formal) pero no restringe en la práctica. Si en el futuro se monta CloudFront delante del API, esta policy se actualiza a `Condition: aws:SourceArn matches cloudfront distribution`.
-
-3. **Redeployment manual ocasional después de `terraform apply`.** El recurso `aws_api_gateway_deployment` de TF tiene un bug conocido donde el snapshot a veces se crea antes de que algunos resources nuevos estén listos para incluirse. En esta entrega lo detectamos al agregar `/health` — `curl` devolvía 403 Missing Authentication Token aunque el resource existía. La solución fue `aws apigateway create-deployment --rest-api-id ... --stage-name api` para forzar un redeploy. Si pasa de nuevo, el síntoma es el mismo (route no encontrado por API Gateway aunque exista en la definición) y la solución idem.
-
-## 8. Pipeline CI
+## 7. Pipeline CI
 
 Los workflows de GitHub Actions establecidos en D1 y extendidos en D2 (validación con `terraform plan` en PR, apply en merge a main) se mantienen sin cambios funcionales para esta entrega. El plan-on-PR incluye automáticamente los recursos nuevos del módulo `dns` y del `seed.tf` raíz porque consume el mismo `terraform plan -var-file=envs/dev/dev.tfvars` que usamos localmente — no requiere modificación.
 
 Evidencia del run: link al PR + `infra/evidence/ci-plan.png` (screenshot del workflow run).
+
+Link: https://github.com/dacaslles/PDDS-2-trimestre-proyecto/pull/7
+
+![CI Plan](/infra/evidence/ci-plan.png)
