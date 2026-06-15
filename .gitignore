@@ -33,10 +33,14 @@ infra/modules/compute/src/*/node_modules/
 plan.txt
 
 # Ignore all *.tfvars by default — they may contain secrets.
-# Whitelist the dev tfvars so the grader and CI can use it.
+# Whitelist los tfvars per-env (dev + staging) para que el grader y los
+# workflows de CI/CD puedan usarlos. Los secrets reales viven en GitHub
+# Actions environment secrets inyectados como TF_VAR_* en runtime — los
+# .tfvars solo cargan config no-sensible.
 *.tfvars
 *.tfvars.json
 !infra/envs/dev/dev.tfvars
+!infra/envs/staging/staging.tfvars
 
 # Override files (often used for local dev)
 override.tf
