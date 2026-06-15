@@ -229,7 +229,62 @@ resource "aws_lambda_event_source_mapping" "sqs" {
   batch_size       = var.sqs_batch_size
   enabled          = true
 
+  # maximum_batching_window_in_seconds: cuánto espera SQS para acumular
+  # mensajes antes de mandar el batch al Lambda. 0 = enviar apenas haya
+  # uno disponible (latencia mínima). > 0 = agrupa hasta llenar batch_size
+  # o vencer la ventana (ahorra invocaciones a costa de latencia).
+  maximum_batching_window_in_seconds = var.maximum_batching_window_in_seconds
+
+  # bisect_batch_on_function_error: cuando el handler falla con un batch,
+  # SQS divide en dos sub-batches y reintenta cada uno. Aísla el record
+  # malo sin re-procesar todo el batch — útil para evitar que un solo
+  # mensaje envenenado bloquee todo el throughput hasta llegar a la DLQ.
+  bisect_batch_on_function_error = var.bisect_batch_on_function_error
+
   depends_on = [aws_iam_role_policy.lambda_sqs_consume]
+}
+
+# ─── SQS SendMessage (producer) ────────────────────────────────────────────
+#
+# Para Lambdas que ENCOLAN mensajes a una SQS (no que las consumen). Útil
+# para los handlers tipo POST /<resource>/enqueue del Deliverable E del
+# rubric OYD-D4. Scoped al ARN exacto de la cola — sin wildcard.
+resource "aws_iam_role_policy" "lambda_sqs_send" {
+  count = var.attach_sqs_send_policy ? 1 : 0
+
+  name = "${local.function_name}-sqs-send"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+      Resource = [var.sqs_send_queue_arn]
+    }]
+  })
+}
+
+# ─── S3 PutObject scoped a un prefix configurable ──────────────────────────
+#
+# Separada de attach_attachments_bucket_policy (que ya está scoped a
+# attachments/*) porque el async consumer del rubric OYD-D4 Deliverable E
+# escribe bajo un prefix distinto (ej. async-events/*) y queremos
+# least-privilege real, no un permiso que cubra todo el bucket.
+resource "aws_iam_role_policy" "lambda_async_bucket" {
+  count = var.attach_async_bucket_policy ? 1 : 0
+
+  name = "${local.function_name}-async-bucket"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject"]
+      Resource = ["${var.async_bucket_arn}/${var.async_bucket_key_prefix}*"]
+    }]
+  })
 }
 
 # ─── SES SendEmail ───────────────────────────────────────────────────────
