@@ -17,7 +17,7 @@ on:
     branches: [main]
     paths:
       - "infra/**"
-      - ".github/workflows/terraform-ci.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: read

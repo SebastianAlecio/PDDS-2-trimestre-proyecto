@@ -37,6 +37,13 @@ jobs:
     environment: ${{ inputs.environment }}
 
     steps:
+      # Checkout antes que los steps de validación/echo — el default
+      # working-directory: infra requiere que el repo esté checked out
+      # primero, sino bash falla con "No such file or directory" al
+      # tratar de chdir a infra/.
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Validate confirm input
         if: inputs.confirm != 'destroy'
         run: |
@@ -48,9 +55,6 @@ jobs:
           echo "::notice::Destroying environment: ${{ inputs.environment }}"
           echo "Target tfvars: infra/envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars"
           echo "Target backend: infra/envs/${{ inputs.environment }}/backend-${{ inputs.environment }}.hcl"
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
