@@ -69,9 +69,17 @@ module "async_consumer" {
   async_bucket_arn           = module.storage.bucket_arn
   async_bucket_key_prefix    = "async-events/"
 
+  # SES SendEmail con condition StringEquals ses:FromAddress. Cuando el
+  # consumer procesa un evento `ticket.expired`, manda email al solicitante.
+  # Misma from-address que el notifier (soporte@lumenchat.app) para que el
+  # destinatario perciba un único remitente del sistema.
+  attach_ses_send_policy = true
+  ses_from_address       = var.ses_from_address
+
   environment_variables = {
     ASYNC_BUCKET_NAME       = module.storage.bucket_name
     ASYNC_BUCKET_KEY_PREFIX = "async-events/"
+    SES_FROM_ADDRESS        = var.ses_from_address
   }
 }
 
@@ -167,8 +175,16 @@ module "watchdog" {
   attach_dynamodb_policy = true
   dynamodb_table_arn     = module.database.table_arn
 
+  # Publica eventos `ticket.expired` al async queue (módulo async/). El
+  # async_consumer toma el mensaje, escribe audit log a S3 y manda email
+  # al solicitante vía SES. Flow distinto del notifier (que vive en el
+  # pipeline SNS+SQS de Cloud E4 y maneja `ticket.closed`).
+  attach_sqs_send_policy = true
+  sqs_send_queue_arn     = module.async.queue_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME = module.database.table_name
+    ASYNC_QUEUE_URL    = module.async.queue_url
   }
 }
 
