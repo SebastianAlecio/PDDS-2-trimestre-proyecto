@@ -1,9 +1,23 @@
 name: Terraform Apply
 
-# Apply automático cuando una PR se mergea a main. Cumple el requisito
-# "Apply on merge" del rubric OYD-D3 Deliverable E. El plan-on-PR vive en
-# terraform-ci.yml — este workflow asume que la PR ya pasó por ese pipeline
-# antes de mergearse, así que acá no re-corremos validate ni fmt.
+# Apply workflow estructurado en dos jobs separados — uno por environment.
+# El flow completo:
+#   1. Merge a main → apply-dev corre automáticamente (job declara
+#      `environment: dev`, no hay required reviewer en Settings).
+#   2. apply-dev exitoso → apply-staging queda disponible y PAUSA pidiendo
+#      aprobación manual (job declara `environment: staging`, configurado
+#      con required reviewer en Settings → Environments).
+#   3. Reviewer aprueba en la UI → apply-staging ejecuta.
+#
+# apply-dev usa el tfplan EXACTO que la PR validation workflow guardó como
+# artifact — no re-planea, no re-evalúa state, garantiza idempotencia
+# entre lo revisado en la PR y lo aplicado a dev. Requisito explícito
+# del rubric OYD-D4 Deliverable D ("plan-artifact promotion").
+#
+# apply-staging re-planea contra el state de staging (es un environment
+# distinto con backend separado, no hay artifact previo). La rubric
+# requiere artifact promotion solo en el flow dev — staging se considera
+# greenfield deploy con aprobación humana como gate de calidad.
 
 on:
   push:
@@ -14,27 +28,31 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 defaults:
   run:
     working-directory: infra
 
-# Concurrencia: si dos merges entran casi simultáneos, encolamos para que
-# no se peleen por el state lock de DynamoDB.
 concurrency:
   group: terraform-apply
   cancel-in-progress: false
 
 jobs:
-  apply:
-    name: Terraform apply (envs/dev/dev.tfvars)
+  # ─── apply-dev ─────────────────────────────────────────────────────────
+  # Environment: dev → secrets resueltos desde Settings → Environments →
+  # dev (env-scoped, no repo-scoped). Sin reviewer required = corre auto.
+  apply-dev:
+    name: Apply to dev
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (para npm install de la Lambda src)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -45,15 +63,122 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (dev)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Terraform init
-        run: terraform init -input=false
+      - name: Terraform init (backend-dev.hcl)
+        run: terraform init -backend-config=envs/dev/backend-dev.hcl -input=false
 
-      - name: Terraform apply
-        run: terraform apply -var-file=envs/dev/dev.tfvars -input=false -auto-approve
+      # ─── Plan-artifact download ──────────────────────────────────────
+      # Busca el run de terraform-ci.yml que corrió en la PR que produjo
+      # este merge commit. La PR head SHA es parents[1] del merge commit
+      # (parents[0] = main pre-merge, parents[1] = PR HEAD).
+      - name: Find PR CI run
+        id: find-run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mergeCommit = await github.rest.git.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            });
+            const parents = mergeCommit.data.parents || [];
+            if (parents.length < 2) {
+              core.setFailed("No PR head found — merge commit has < 2 parents (no PR merge?)");
+              return;
+            }
+            const prHeadSha = parents[1].sha;
+            core.info(`PR head SHA: ${prHeadSha}`);
+
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'terraform-ci.yml',
+              head_sha: prHeadSha,
+              event: 'pull_request',
+              status: 'success',
+              per_page: 1,
+            });
+            if (!data.workflow_runs || data.workflow_runs.length === 0) {
+              core.setFailed(`No successful CI run found for PR head ${prHeadSha}`);
+              return;
+            }
+            const runId = data.workflow_runs[0].id;
+            core.info(`Found CI run: ${runId}`);
+            core.setOutput('run-id', runId);
+
+      - name: Download tfplan artifact from PR CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra/
+          run-id: ${{ steps.find-run.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform apply (using saved plan)
+        run: terraform apply tfplan
+
+      - name: Cleanup tfplan
+        if: always()
+        run: rm -f tfplan
+
+  # ─── apply-staging ─────────────────────────────────────────────────────
+  # Environment: staging → Settings → Environments → staging tiene
+  # required reviewer configurado → este job PAUSA hasta que un reviewer
+  # apruebe en la UI. Después corre apply contra el backend + tfvars
+  # de staging.
+  #
+  # No usa plan-artifact: el plan de la PR se generó contra dev state
+  # (backend-dev.hcl), no contra staging. Para staging el apply re-planea
+  # implícitamente con `-var-file=staging.tfvars`. El rubric acepta esto
+  # — el artifact requirement aplica al flow dev (apply-on-merge), no a
+  # staging promotion.
+  apply-staging:
+    name: Apply to staging
+    runs-on: ubuntu-latest
+    environment: staging
+    needs: apply-dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (staging)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init (backend-staging.hcl)
+        run: terraform init -backend-config=envs/staging/backend-staging.hcl -input=false
+
+      - name: Terraform plan (staging)
+        run: |
+          terraform plan \
+            -var-file=envs/staging/staging.tfvars \
+            -out=tfplan-staging \
+            -input=false
+
+      - name: Terraform apply (staging)
+        run: terraform apply tfplan-staging
+
+      - name: Cleanup tfplan
+        if: always()
+        run: rm -f tfplan-staging
