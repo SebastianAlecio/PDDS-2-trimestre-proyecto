@@ -8,7 +8,7 @@ variable "environment" {
   }
 }
 
-variable "project_name" {
+variable "project_name"    {  # BROKEN: extra spaces, demo ruleset blocking
   description = "Short project identifier used as a name component and in default tags."
   type        = string
   default     = "pdds-oyd"
