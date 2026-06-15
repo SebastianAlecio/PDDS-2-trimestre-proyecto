@@ -65,6 +65,15 @@ locals {
       http_method = "POST"
       invoke_uri  = local.invoke_uri_chat_ws
     }
+    "POST /async/enqueue" = {
+      # Endpoint del Deliverable E del rubric OYD-D4: encola un mensaje
+      # arbitrario en la cola del módulo async/. Backend = tickets Lambda,
+      # auth = Cognito User Pools (igual que el resto del API — el
+      # evidence curl del rubric va a pasar Bearer token).
+      resource_id = aws_api_gateway_resource.async_enqueue.id
+      http_method = "POST"
+      invoke_uri  = local.invoke_uri_tickets
+    }
   }
 
   # Recursos que aceptan requests cross-origin desde el browser y por tanto
@@ -78,6 +87,7 @@ locals {
     "users"                           = aws_api_gateway_resource.users.id
     "tickets-id-messages"             = aws_api_gateway_resource.tickets_id_messages.id
     "tickets-id-messages-attachments" = aws_api_gateway_resource.tickets_id_messages_attachments.id
+    "async-enqueue"                   = aws_api_gateway_resource.async_enqueue.id
   }
 }
 
@@ -157,6 +167,23 @@ resource "aws_api_gateway_resource" "tickets_id_messages_attachments" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_resource.tickets_id_messages.id
   path_part   = "attachments"
+}
+
+# ─── /async/enqueue (OYD-D4 Deliverable E producer endpoint) ───────────────
+# Tree separado de /tickets/* para que el endpoint async sea conceptualmente
+# distinto del CRUD de tickets. Sigue colgando del mismo REST API porque
+# vive detrás del mismo authorizer Cognito + mismo WAF.
+
+resource "aws_api_gateway_resource" "async" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "async"
+}
+
+resource "aws_api_gateway_resource" "async_enqueue" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.async.id
+  path_part   = "enqueue"
 }
 
 # ─── Methods + Integrations (autenticados con Cognito) ──────────────────────
@@ -289,6 +316,8 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_resource.users.id,
       aws_api_gateway_resource.tickets_id_messages.id,
       aws_api_gateway_resource.tickets_id_messages_attachments.id,
+      aws_api_gateway_resource.async.id,
+      aws_api_gateway_resource.async_enqueue.id,
       [for k, m in aws_api_gateway_method.endpoints : m.id],
       [for k, i in aws_api_gateway_integration.endpoints : i.id],
       [for k, m in aws_api_gateway_method.options : m.id],
