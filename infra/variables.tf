@@ -1,10 +1,10 @@
 variable "environment" {
-  description = "Deployment environment. Drives resource naming and per-environment overrides."
+  description = "Deployment environment. Drives resource naming and per-environment overrides. Acepta dev / staging / prod — staging se agregó en OYD-D4 para el multi-env pipeline."
   type        = string
 
   validation {
-    condition     = contains(["dev", "prod"], var.environment)
-    error_message = "environment must be either \"dev\" or \"prod\"."
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of \"dev\", \"staging\", or \"prod\"."
   }
 }
 
