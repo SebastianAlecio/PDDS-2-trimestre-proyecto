@@ -279,8 +279,108 @@ Screenshot del workflow run de GitHub Actions que postea el plan como comentario
 
 ![CI plan-on-PR](evidence/ci-plan.png)
 
+---
+
+### Delivery 4 — Async Messaging Module (Deliverable A)
+
+`terraform output` de los recursos del módulo `infra/modules/async/` (SQS queue + DLQ con redrive_policy):
+
+```
+async_consumer_function_arn = "arn:aws:lambda:us-east-1:544341949288:function:pdds-oyd-async-consumer-dev"
+async_consumer_function_name = "pdds-oyd-async-consumer-dev"
+async_dlq_arn = "arn:aws:sqs:us-east-1:544341949288:ticke-t-async-dev-dlq"
+async_dlq_name = "ticke-t-async-dev-dlq"
+async_dlq_url = "https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev-dlq"
+async_queue_arn = "arn:aws:sqs:us-east-1:544341949288:ticke-t-async-dev"
+async_queue_name = "ticke-t-async-dev"
+async_queue_url = "https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev"
+```
+
+Output completo en [`evidence/async-foundation.txt`](evidence/async-foundation.txt).
+
+### Delivery 4 — Event-Driven Compute (Deliverable B)
+
+Output de `aws lambda get-event-source-mapping` mostrando el SQS→Lambda mapping del async consumer en [`evidence/event-source-plan.txt`](evidence/event-source-plan.txt). Captura de la consola Lambda → tab Triggers:
+
+![Event source mapping](evidence/event-source.png)
+
+### Delivery 4 — Scheduled Jobs (Deliverable C)
+
+Output de `aws scheduler get-schedule` con el `aws_scheduler_schedule` del watchdog en [`evidence/scheduler-plan.txt`](evidence/scheduler-plan.txt). Capturas de la consola EventBridge → Schedules:
+
+Tab Schedule pattern (rate + timezone):
+
+![EventBridge Scheduler — Schedule pattern](evidence/scheduler.png)
+
+Tab Target (Lambda ARN + IAM role del scheduler):
+
+![EventBridge Scheduler — Target](evidence/scheduler-target.png)
+
+### Delivery 4 — Full CD Pipeline (Deliverable D)
+
+#### GitHub Environments
+
+Settings → Environments mostrando ambos envs listados:
+
+![GitHub Environments overview](evidence/github-environments.png)
+
+Detalle del environment `staging` con el required reviewer configurado:
+
+![GitHub Environments — staging detail](evidence/github-environments-staging.png)
+
+#### Branch ruleset
+
+Settings → Rules → Rulesets → `main-protection` activo. Vista general (Status + Target + rules de PR/up-to-date/force-push/deletion):
+
+![Ruleset config — overview](evidence/ruleset-config.png)
+
+Required status checks del ruleset (Terraform fmt / validate / plan (dev)):
+
+![Ruleset config — required checks](evidence/ruleset-config-checks.png)
+
+PR mostrando el merge bloqueado por un check fallando (`Terraform fmt`):
+
+![Ruleset blocked merge](evidence/ruleset-blocked-merge.png)
+
+#### CI/CD pipeline runs
+
+`terraform-apply.yml` post-merge — job `apply-dev` corriendo automáticamente:
+
+![CI apply-dev](evidence/ci-apply-dev.png)
+
+`terraform-apply.yml` — job `apply-staging` pausado en el approval gate:
+
+![CI apply-staging](evidence/ci-apply-staging.png)
+
+`terraform-destroy.yml` — UI del `workflow_dispatch` con inputs `environment` (dropdown dev/staging) + `confirm` (string):
+
+![CI destroy workflow_dispatch UI](evidence/ci-destroy.png)
+
+`terraform-drift.yml` — drift detection scheduled run mostrando el plan output renderizado en el GITHUB_STEP_SUMMARY:
+
+![CI drift detection](evidence/ci-drift.png)
+
+### Delivery 4 — End-to-End Async Proof (Deliverable E)
+
+Output del `curl -X POST /async/enqueue` con HTTP 202 y MessageId real de SQS en [`evidence/async-enqueue.txt`](evidence/async-enqueue.txt) (extracto):
+
+```
+< HTTP/2 202
+< content-type: application/json
+{"message_id":"e99d08b7-10cb-4c12-a913-05ff2009f40e","queue_url":"https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev"}
+```
+
+CloudWatch log del async consumer procesando el mensaje (`async_consumer_ok` con `messageId`, `bucket`, `objectKey`):
+
+![Async consumer log](evidence/async-consumer.png)
+
+Objeto resultante en S3 (`async-events/<messageId>.json`):
+
+![Async object en S3](evidence/async-object.png)
+
 ## Resúmenes de delivery
 
 - [Delivery 1 — IaC Workspace Bootstrap & CI Pipeline](docs/delivery-1-summary.md)
 - [Delivery 2 — Compute, Storage, Database & Remote State](docs/delivery-2-summary.md)
 - [Delivery 3 — Networking Layer Fully Automated](docs/delivery-3-summary.md)
+- [Delivery 4 — Async Infrastructure & Full CD Pipeline](docs/delivery-4-summary.md)
