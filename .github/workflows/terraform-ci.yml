@@ -123,11 +123,21 @@ jobs:
       # Upload del plan artifact — descargado por terraform-apply.yml en
       # el job apply-dev. El nombre "tfplan" es referenciado por el otro
       # workflow; si cambia acá, cambia allá.
-      - name: Upload tfplan artifact
+      #
+      # IMPORTANTE: incluimos modules/compute/build/*.zip además del tfplan
+      # binary. El data.archive_file de Terraform materializa los zips de
+      # las Lambdas durante el plan; el binary del plan guarda solo el
+      # HASH de los zips, no su contenido. Si el apply intenta crear/update
+      # un aws_lambda_function sin tener el zip en disk, falla con
+      # "open ...zip: no such file or directory". Subir el build/ dir
+      # junto con el tfplan es la forma standard de resolver esto.
+      - name: Upload tfplan + Lambda zips artifact
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
-          path: infra/tfplan
+          path: |
+            infra/tfplan
+            infra/modules/compute/build/
           if-no-files-found: error
           retention-days: 7
 
