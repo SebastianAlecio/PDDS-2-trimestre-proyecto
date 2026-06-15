@@ -32,9 +32,15 @@ const {
   QueryCommand,
   UpdateCommand,
 } = require("@aws-sdk/lib-dynamodb");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
+const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+const {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+} = require("@aws-sdk/client-apigatewaymanagementapi");
+const { DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 const crypto = require("node:crypto");
 const { 
   CognitoIdentityProviderClient, 
@@ -66,9 +72,21 @@ const HEALTH_CHECK_PATH = process.env.HEALTH_CHECK_PATH || "/health";
 // etc). Si está vacío, el handler de cierre se ejecuta sin publicar el evento —
 // útil en desarrollo local o si el módulo notifications no está aplicado.
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN || "";
+// Endpoint https para PostToConnection al WS API. Lo setea el módulo compute
+// con module.realtime.management_endpoint. Si está vacío, el broadcast de
+// ticket.closed por WS se skipea — útil en envs sin WS API desplegado.
+const WS_ENDPOINT = process.env.WEBSOCKET_API_ENDPOINT || "";
+// URL de la cola SQS del módulo async/. Si está vacía, el endpoint
+// POST /async/enqueue responde 503 — eso evita silent failures cuando la
+// Lambda se deploya sin la env var correctamente seteada por Terraform.
+const ASYNC_QUEUE_URL = process.env.ASYNC_QUEUE_URL || "";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 const sns = new SNSClient({});
+const sqs = new SQSClient({});
+const wsClient = WS_ENDPOINT
+  ? new ApiGatewayManagementApiClient({ endpoint: WS_ENDPOINT })
+  : null;
 const cognitoClient = new CognitoIdentityProviderClient({});
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -99,6 +117,10 @@ function ok(payload) {
 
 function created(payload) {
   return jsonResponse(201, payload);
+}
+
+function accepted(payload) {
+  return jsonResponse(202, payload);
 }
 
 function badRequest(message, details) {
@@ -248,6 +270,37 @@ const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
 // IMPORTANTE: el frontend debe hacer PUT con el header Content-Type
 // matcheando el `attachment.type` original — si difiere, S3 rechaza con
 // 403. Por eso lo bindeamos al PutObjectCommand acá.
+// Enriquece los adjuntos de un ticket con presigned GET URLs para que el
+// frontend pueda renderizar imágenes inline o linkear descargas sin un
+// roundtrip extra. Skip si el bucket no está configurado o si el item no
+// tiene adjuntos. El URL expira en 5 minutos — alcanza para que el browser
+// haga el GET inicial; tras eso queda cacheado en memoria mientras dure la
+// vista.
+const ATTACHMENT_DOWNLOAD_TTL_SECONDS = 300;
+async function enrichTicketAttachmentsWithUrls(item) {
+  if (!item || !Array.isArray(item.adjuntos) || item.adjuntos.length === 0) {
+    return item;
+  }
+  if (!ATTACHMENTS_BUCKET) return item;
+  const enriched = await Promise.all(
+    item.adjuntos.map(async (a) => {
+      if (!a || typeof a.s3_key !== "string") return a;
+      try {
+        const url = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: a.s3_key }),
+          { expiresIn: ATTACHMENT_DOWNLOAD_TTL_SECONDS },
+        );
+        return { ...a, download_url: url };
+      } catch (err) {
+        console.warn("attachment_presign_failed:", a.s3_key, err.name);
+        return a;
+      }
+    }),
+  );
+  return { ...item, adjuntos: enriched };
+}
+
 async function generatePresignedUploadUrl(ticketId, attachment) {
   if (!ATTACHMENTS_BUCKET) {
     throw new Error("ATTACHMENTS_BUCKET_NAME not set");
@@ -465,7 +518,9 @@ async function handleListMyTickets(event, claims) {
       }),
     );
 
-    return ok({ items: result.Items ?? [], count: result.Count ?? 0 });
+    const items = result.Items ?? [];
+    const enriched = await Promise.all(items.map(enrichTicketAttachmentsWithUrls));
+    return ok({ items: enriched, count: result.Count ?? 0 });
   } catch (err) {
     console.error("dynamodb_query_failed:", err);
     return serverError("failed to list tickets", { name: err.name, message: err.message });
@@ -480,13 +535,14 @@ async function handleQueue(event, claims) {
   const sub = claims.sub;
   if (!sub) return unauthorized("token is missing 'sub' claim");
 
-  // Dos queries paralelas:
+  // Tres queries paralelas:
   //   1. Sin asignar: GSI4 con STATUS#Abierto. Al tomar el ticket pasamos a
   //      STATUS#En progreso, así que esta lista contiene solo los disponibles.
-  //   2. Míos: GSI2 con AGENT#{sub}, filtrando fuera Resuelto/Cerrado para
-  //      que la cola no se llene de historial.
+  //   2. Míos activos: GSI2 con AGENT#{sub}, filtrando fuera Resuelto/Cerrado.
+  //   3. Historial: GSI2 con AGENT#{sub} filtrando IN Cerrado/Resuelto —
+  //      tickets que ya cerré, para la pestaña de historial del agente.
   try {
-    const [unassignedResult, mineResult] = await Promise.all([
+    const [unassignedResult, mineResult, historialResult] = await Promise.all([
       ddb.send(
         new QueryCommand({
           TableName: TABLE_NAME,
@@ -514,11 +570,33 @@ async function handleQueue(event, claims) {
           Limit: 100,
         }),
       ),
+      ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          IndexName: "GSI2",
+          KeyConditionExpression: "#pk = :agent",
+          FilterExpression: "estado = :done OR estado = :closed",
+          ExpressionAttributeNames: { "#pk": "GSI2-PK" },
+          ExpressionAttributeValues: {
+            ":agent": `AGENT#${sub}`,
+            ":done": "Resuelto",
+            ":closed": "Cerrado",
+          },
+          ScanIndexForward: false, // más recientes primero (por fecha_inicio)
+          Limit: 100,
+        }),
+      ),
     ]);
 
+    const [unassignedEnriched, mineEnriched, historialEnriched] = await Promise.all([
+      Promise.all((unassignedResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+      Promise.all((mineResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+      Promise.all((historialResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+    ]);
     return ok({
-      unassigned: unassignedResult.Items ?? [],
-      mine: mineResult.Items ?? [],
+      unassigned: unassignedEnriched,
+      mine: mineEnriched,
+      historial: historialEnriched,
     });
   } catch (err) {
     console.error("dynamodb_queue_query_failed:", err);
@@ -604,6 +682,88 @@ async function handleAssignTicket(event, claims) {
     console.error("dynamodb_assign_failed:", err);
     return serverError("failed to assign ticket", { name: err.name, message: err.message });
   }
+}
+
+// Broadcast best-effort: notifica via WS a todas las conexiones del ticket que
+// el ticket fue cerrado. Cada cliente conectado (colaborador con widget abierto,
+// agente con panel abierto) recibe el payload y actualiza su UI sin polling.
+//
+// Errors: si WS_ENDPOINT no está configurado, skipea silenciosamente. Si una
+// PostToConnection devuelve 410 GoneException, limpia el item huérfano de la
+// tabla (la conexión cerró sin que llegara $disconnect).
+async function broadcastTicketClosedWs({ ticketId, closedBy, closedAt }) {
+  if (!wsClient) {
+    console.log("ws_broadcast_skipped: no WEBSOCKET_API_ENDPOINT configured");
+    return;
+  }
+
+  let connections;
+  try {
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": `TICKET#${ticketId}`,
+          ":prefix": "CONN#",
+        },
+      }),
+    );
+    connections = res.Items || [];
+  } catch (err) {
+    console.error("ws_broadcast_query_failed:", { ticket_id: ticketId, name: err.name, message: err.message });
+    return;
+  }
+
+  if (connections.length === 0) {
+    console.log("ws_broadcast_no_connections:", JSON.stringify({ ticket_id: ticketId }));
+    return;
+  }
+
+  const payload = JSON.stringify({
+    type: "ticket_closed",
+    ticket_id: ticketId,
+    closed_by: closedBy,
+    closed_at: closedAt,
+  });
+  const data = Buffer.from(payload);
+
+  await Promise.all(
+    connections.map(async (c) => {
+      try {
+        await wsClient.send(
+          new PostToConnectionCommand({
+            ConnectionId: c.connection_id,
+            Data: data,
+          }),
+        );
+      } catch (err) {
+        if (err.name === "GoneException" || (err.$metadata && err.$metadata.httpStatusCode === 410)) {
+          // Conexión muerta — limpiamos ambos items idempotentemente.
+          await Promise.all([
+            ddb.send(
+              new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: { PK: `TICKET#${ticketId}`, SK: `CONN#${c.connection_id}` },
+              }),
+            ),
+            ddb.send(
+              new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: { PK: `CONN#${c.connection_id}`, SK: "META" },
+              }),
+            ),
+          ]).catch((cleanupErr) => {
+            console.error("ws_broadcast_cleanup_failed:", { connection_id: c.connection_id, name: cleanupErr.name });
+          });
+          return;
+        }
+        console.error("ws_broadcast_post_failed:", { connection_id: c.connection_id, name: err.name, message: err.message });
+      }
+    }),
+  );
+
+  console.log("ws_broadcast_ticket_closed:", JSON.stringify({ ticket_id: ticketId, connections: connections.length }));
 }
 
 // Cierra un ticket: marca estado=Cerrado y publica el evento ticket.closed a
@@ -724,6 +884,15 @@ async function handleCloseTicket(event, claims) {
     console.warn("sns_topic_not_configured: skipping publish");
   }
 
+  // 3) Broadcast por WS — best-effort. Los clientes con widget/panel abierto
+  //    actualizan su UI sin necesidad de polling. Si falla, el ticket ya está
+  //    cerrado en DDB y el email asíncrono ya está encolado.
+  await broadcastTicketClosedWs({
+    ticketId,
+    closedBy: { sub, nombre: nameClaim },
+    closedAt: now,
+  });
+
   return ok({ id: ticketId, item });
 }
 
@@ -806,6 +975,64 @@ async function handleCreateUser(event, claims) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Async enqueue endpoint (OYD-D4 Deliverable E producer)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// POST /async/enqueue — acepta cualquier JSON body y lo encola en SQS.
+// Devuelve 202 Accepted + el MessageId que devolvió AWS (no un id local
+// hardcoded — el rubric exige que el message ID venga del backend
+// asíncrono real). El consumer async_consumer lo recibe vía event source
+// mapping y lo materializa como objeto S3.
+async function handleAsyncEnqueue(event) {
+  if (!ASYNC_QUEUE_URL) {
+    return serverError(
+      "async pipeline not configured (ASYNC_QUEUE_URL missing)",
+    );
+  }
+
+  // Parseo defensivo del body. JSON inválido -> 400 con detalle del parse error.
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch (err) {
+    return badRequest("body is not valid JSON", err.message);
+  }
+
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return badRequest("body must be a JSON object");
+  }
+
+  try {
+    const result = await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: ASYNC_QUEUE_URL,
+        MessageBody: JSON.stringify(payload),
+      }),
+    );
+    console.log(
+      "async_enqueue_ok",
+      JSON.stringify({
+        queue_url: ASYNC_QUEUE_URL,
+        message_id: result.MessageId,
+      }),
+    );
+    return accepted({
+      message_id: result.MessageId,
+      queue_url: ASYNC_QUEUE_URL,
+    });
+  } catch (err) {
+    console.error("async_enqueue_failed:", {
+      name: err.name,
+      message: err.message,
+    });
+    return serverError("failed to enqueue message", {
+      name: err.name,
+      message: err.message,
+    });
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Router
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -853,6 +1080,12 @@ exports.handler = async (event) => {
 
     case "POST /users":
       return handleCreateUser(event, claims);
+
+    case "POST /async/enqueue":
+      // No requiere claims especiales — el authorizer Cognito ya garantiza
+      // que el caller está autenticado, y el endpoint solo encola lo que
+      // recibe. El consumer corre con sus propias IAM creds.
+      return handleAsyncEnqueue(event);
 
     default:
       return notFound(`route ${routeKey} is not handled`);

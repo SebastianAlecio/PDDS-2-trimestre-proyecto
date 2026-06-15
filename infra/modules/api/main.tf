@@ -18,9 +18,9 @@ locals {
   cors_allow_methods = "GET,POST,PUT,DELETE,OPTIONS"
   cors_allow_headers = "Authorization,Content-Type"
 
-  # ARN templated para la integración AWS_PROXY con Lambda. Sigue el formato
-  # documentado de API Gateway, no es un ARN nativo de Lambda.
-  lambda_invoke_uri = "arn:aws:apigateway:${data.aws_region.current.id}:lambda:path/2015-03-31/functions/${var.lambda_function_arn}/invocations"
+  # Mapa de invoke URIs por Lambda backend. Cada route elige su backend.
+  invoke_uri_tickets = "arn:aws:apigateway:${data.aws_region.current.id}:lambda:path/2015-03-31/functions/${var.tickets_lambda_invoke_arn}/invocations"
+  invoke_uri_chat_ws = "arn:aws:apigateway:${data.aws_region.current.id}:lambda:path/2015-03-31/functions/${var.chat_ws_lambda_invoke_arn}/invocations"
 
   # Mapa de las rutas autenticadas. Cada entrada se materializa como un
   # aws_api_gateway_method + aws_api_gateway_integration.
@@ -28,38 +28,66 @@ locals {
     "POST /tickets" = {
       resource_id = aws_api_gateway_resource.tickets.id
       http_method = "POST"
+      invoke_uri  = local.invoke_uri_tickets
     }
     "GET /tickets/me" = {
       resource_id = aws_api_gateway_resource.tickets_me.id
       http_method = "GET"
+      invoke_uri  = local.invoke_uri_tickets
     }
     "GET /tickets/queue" = {
       resource_id = aws_api_gateway_resource.tickets_queue.id
       http_method = "GET"
+      invoke_uri  = local.invoke_uri_tickets
     }
     "PUT /tickets/{id}/assign" = {
       resource_id = aws_api_gateway_resource.tickets_id_assign.id
       http_method = "PUT"
+      invoke_uri  = local.invoke_uri_tickets
     }
     "PUT /tickets/{id}/status" = {
       resource_id = aws_api_gateway_resource.tickets_id_status.id
       http_method = "PUT"
+      invoke_uri  = local.invoke_uri_tickets
     }
     "POST /users" = {
       resource_id = aws_api_gateway_resource.users.id
       http_method = "POST"
+      invoke_uri  = local.invoke_uri_tickets
+    }
+    "GET /tickets/{id}/messages" = {
+      resource_id = aws_api_gateway_resource.tickets_id_messages.id
+      http_method = "GET"
+      invoke_uri  = local.invoke_uri_chat_ws
+    }
+    "POST /tickets/{id}/messages/attachments" = {
+      resource_id = aws_api_gateway_resource.tickets_id_messages_attachments.id
+      http_method = "POST"
+      invoke_uri  = local.invoke_uri_chat_ws
+    }
+    "POST /async/enqueue" = {
+      # Endpoint del Deliverable E del rubric OYD-D4: encola un mensaje
+      # arbitrario en la cola del módulo async/. Backend = tickets Lambda,
+      # auth = Cognito User Pools (igual que el resto del API — el
+      # evidence curl del rubric va a pasar Bearer token).
+      resource_id = aws_api_gateway_resource.async_enqueue.id
+      http_method = "POST"
+      invoke_uri  = local.invoke_uri_tickets
     }
   }
 
   # Recursos que aceptan requests cross-origin desde el browser y por tanto
   # necesitan método OPTIONS para responder el CORS preflight.
   cors_resources = {
-    "tickets"           = aws_api_gateway_resource.tickets.id
-    "tickets-me"        = aws_api_gateway_resource.tickets_me.id
-    "tickets-queue"     = aws_api_gateway_resource.tickets_queue.id
-    "tickets-id-assign" = aws_api_gateway_resource.tickets_id_assign.id
-    "tickets-id-status" = aws_api_gateway_resource.tickets_id_status.id
-    "users"             = aws_api_gateway_resource.users.id
+    "tickets"                         = aws_api_gateway_resource.tickets.id
+    "tickets-me"                      = aws_api_gateway_resource.tickets_me.id
+    "tickets-queue"                   = aws_api_gateway_resource.tickets_queue.id
+    "tickets-id-assign"               = aws_api_gateway_resource.tickets_id_assign.id
+    "tickets-id-status"               = aws_api_gateway_resource.tickets_id_status.id
+    "users"                           = aws_api_gateway_resource.users.id
+    "tickets-id-messages"             = aws_api_gateway_resource.tickets_id_messages.id
+    "tickets-id-messages-attachments" = aws_api_gateway_resource.tickets_id_messages_attachments.id
+    "async-enqueue"                   = aws_api_gateway_resource.async_enqueue.id
   }
 }
 
@@ -129,6 +157,35 @@ resource "aws_api_gateway_resource" "tickets_id_status" {
   path_part   = "status"
 }
 
+resource "aws_api_gateway_resource" "tickets_id_messages" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id.id
+  path_part   = "messages"
+}
+
+resource "aws_api_gateway_resource" "tickets_id_messages_attachments" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id_messages.id
+  path_part   = "attachments"
+}
+
+# ─── /async/enqueue (OYD-D4 Deliverable E producer endpoint) ───────────────
+# Tree separado de /tickets/* para que el endpoint async sea conceptualmente
+# distinto del CRUD de tickets. Sigue colgando del mismo REST API porque
+# vive detrás del mismo authorizer Cognito + mismo WAF.
+
+resource "aws_api_gateway_resource" "async" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "async"
+}
+
+resource "aws_api_gateway_resource" "async_enqueue" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.async.id
+  path_part   = "enqueue"
+}
+
 # ─── Methods + Integrations (autenticados con Cognito) ──────────────────────
 
 resource "aws_api_gateway_method" "endpoints" {
@@ -149,7 +206,7 @@ resource "aws_api_gateway_integration" "endpoints" {
   http_method             = aws_api_gateway_method.endpoints[each.key].http_method
   integration_http_method = "POST" # AWS_PROXY siempre invoca a Lambda con POST internamente
   type                    = "AWS_PROXY"
-  uri                     = local.lambda_invoke_uri
+  uri                     = each.value.invoke_uri
 }
 
 # ─── CORS preflight (OPTIONS con MOCK integration) ──────────────────────────
@@ -257,6 +314,10 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_resource.tickets_id_assign.id,
       aws_api_gateway_resource.tickets_id_status.id,
       aws_api_gateway_resource.users.id,
+      aws_api_gateway_resource.tickets_id_messages.id,
+      aws_api_gateway_resource.tickets_id_messages_attachments.id,
+      aws_api_gateway_resource.async.id,
+      aws_api_gateway_resource.async_enqueue.id,
       [for k, m in aws_api_gateway_method.endpoints : m.id],
       [for k, i in aws_api_gateway_integration.endpoints : i.id],
       [for k, m in aws_api_gateway_method.options : m.id],
@@ -294,10 +355,18 @@ resource "aws_api_gateway_stage" "this" {
 # Permiso para que API Gateway invoque la Lambda. source_arn restringe a
 # cualquier método/ruta DENTRO de esta API específica. Sin esto, AWS rechaza
 # las invocaciones del API a la Lambda con 502.
-resource "aws_lambda_permission" "apigw_invoke" {
-  statement_id  = "AllowAPIGatewayInvoke"
+resource "aws_lambda_permission" "apigw_invoke_tickets" {
+  statement_id  = "AllowAPIGatewayInvokeTickets"
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda_function_name
+  function_name = var.tickets_lambda_function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "apigw_invoke_chat_ws" {
+  statement_id  = "AllowAPIGatewayInvokeChatWs"
+  action        = "lambda:InvokeFunction"
+  function_name = var.chat_ws_lambda_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
 }
@@ -335,7 +404,7 @@ resource "aws_api_gateway_integration" "health" {
   http_method             = aws_api_gateway_method.health.http_method
   integration_http_method = "POST" # AWS_PROXY invoca a Lambda con POST internamente
   type                    = "AWS_PROXY"
-  uri                     = local.lambda_invoke_uri
+  uri                     = local.invoke_uri_tickets
 }
 
 # ─── Resource policy del API (ingress restriction) ─────────────────────────

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppHeader } from "../../../shared/ui/AppHeader";
 import type {
+  Ticket,
   TicketPriority,
   TicketStatus,
 } from "../domain/ticket";
@@ -82,16 +83,22 @@ export function MyTicketsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {state.tickets.map((t) => (
+                  {sortTickets(state.tickets).map((t) => (
                     <tr key={t.id}>
-                      <td className={styles.idCell}>{shortId(t.id)}</td>
+                      <td className={styles.idCell}>
+                        <Link to={`/mis-tickets/${t.id}`} className={styles.ticketLink}>
+                          {shortId(t.id)}
+                        </Link>
+                      </td>
                       <td>
-                        <div className={styles.titleCell}>
-                          <span className={styles.titleMain}>{t.title}</span>
-                          <span className={styles.titleMeta}>
-                            {capitalize(t.category)}
-                          </span>
-                        </div>
+                        <Link to={`/mis-tickets/${t.id}`} className={styles.titleCellLink}>
+                          <div className={styles.titleCell}>
+                            <span className={styles.titleMain}>{t.title}</span>
+                            <span className={styles.titleMeta}>
+                              {capitalize(t.category)}
+                            </span>
+                          </div>
+                        </Link>
                       </td>
                       <td className={styles.cellMuted}>{t.area}</td>
                       <td>
@@ -155,6 +162,25 @@ function classForStatus(status: TicketStatus): string {
     default:
       return styles.stateOpen ?? "";
   }
+}
+
+// Orden por estado: activos arriba, archivados abajo. Dentro de cada grupo
+// se preserva el orden que ya viene del backend (más recientes primero).
+const STATUS_RANK: Record<TicketStatus, number> = {
+  Abierto: 0,
+  "En progreso": 0,
+  "Esperando colaborador": 0,
+  Vencido: 1,
+  Resuelto: 2,
+  Cerrado: 3,
+};
+
+function sortTickets(tickets: readonly Ticket[]): Ticket[] {
+  return tickets.slice().sort((a, b) => {
+    const ra = STATUS_RANK[a.status] ?? 0;
+    const rb = STATUS_RANK[b.status] ?? 0;
+    return ra - rb;
+  });
 }
 
 function capitalize(s: string): string {

@@ -8,6 +8,16 @@ output "compute_function_name" {
   value       = module.compute.function_name
 }
 
+output "watchdog_function_arn" {
+  description = "ARN de la función Lambda del watchdog"
+  value       = module.watchdog.function_arn
+}
+
+output "watchdog_function_name" {
+  description = "Nombre de la función Lambda del watchdog"
+  value       = module.watchdog.function_name
+}
+
 output "attachments_bucket_name" {
   description = "Name of the attachments bucket provisioned by the storage module."
   value       = module.storage.bucket_name
@@ -92,4 +102,63 @@ output "domain_name" {
 output "hosted_zone_id" {
   description = "ID de la hosted zone Route 53 (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
   value       = length(module.dns) > 0 ? module.dns[0].hosted_zone_id : ""
+}
+
+output "ws_default_endpoint" {
+  description = "URL wss del WebSocket API en el endpoint execute-api default. Útil para debug con wscat antes de propagar el custom domain."
+  value       = module.realtime.default_endpoint
+}
+
+output "ws_custom_domain_endpoint" {
+  description = "URL wss del WebSocket custom domain (ej. wss://ws.ticke-t.lumenchat.app). Vacío hasta que dns_enable_ws_custom_domain = true y el A-alias propague."
+  value       = module.realtime.custom_domain_endpoint
+}
+
+output "ws_management_endpoint" {
+  description = "Endpoint https para PostToConnection (lo consume @aws-sdk/client-apigatewaymanagementapi). Inyectado a las Lambdas chat-ws y tickets como env var WEBSOCKET_API_ENDPOINT."
+  value       = module.realtime.management_endpoint
+}
+
+# ─── Async messaging outputs (OYD-D4 Deliverable A evidence) ─────────────
+# Estos outputs los va a leer `terraform output` para generar
+# infra/evidence/async-foundation.txt (requisito del rubric).
+
+output "async_queue_url" {
+  description = "URL de la cola principal del módulo async/. Útil para AWS CLI: aws sqs send-message --queue-url <output>."
+  value       = module.async.queue_url
+}
+
+output "async_queue_arn" {
+  description = "ARN de la cola principal del módulo async/. Scope de las IAM policies del producer y consumer."
+  value       = module.async.queue_arn
+}
+
+output "async_queue_name" {
+  description = "Nombre canónico de la cola principal del módulo async/ (sin region/account)."
+  value       = module.async.queue_name
+}
+
+output "async_dlq_url" {
+  description = "URL de la DLQ del módulo async/. Para inspección manual de mensajes que cayeron tras max_receive_count fallos."
+  value       = module.async.dlq_url
+}
+
+output "async_dlq_arn" {
+  description = "ARN de la DLQ del módulo async/. Para CloudWatch alarms sobre ApproximateNumberOfMessagesVisible."
+  value       = module.async.dlq_arn
+}
+
+output "async_dlq_name" {
+  description = "Nombre canónico de la DLQ del módulo async/ (sin region/account)."
+  value       = module.async.dlq_name
+}
+
+output "async_consumer_function_name" {
+  description = "Nombre de la Lambda consumer del módulo async_consumer. Útil para AWS CLI: aws logs tail /aws/lambda/<output>."
+  value       = module.async_consumer.function_name
+}
+
+output "async_consumer_function_arn" {
+  description = "ARN de la Lambda consumer del módulo async_consumer. Se inyecta como target del aws_lambda_event_source_mapping."
+  value       = module.async_consumer.function_arn
 }

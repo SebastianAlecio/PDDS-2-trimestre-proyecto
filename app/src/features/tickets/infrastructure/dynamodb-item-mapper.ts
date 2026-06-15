@@ -10,6 +10,15 @@ import type {
 // Shape "crudo" del item single-table como sale de DynamoDB (atributos en
 // español, según el handler de la Lambda). No lo exportamos: solo se usa
 // para mapear al type Ticket que ve el resto de la app.
+type RawAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  // Snake_case: backend lo envía como `download_url` (presigned GET S3 de 5 min).
+  download_url?: string;
+};
+
 type RawTicketItem = {
   ticket_id: string;
   titulo: string;
@@ -28,7 +37,7 @@ type RawTicketItem = {
     area: string;
     user_id: string;
   };
-  adjuntos: AttachmentMetadata[];
+  adjuntos: RawAttachment[];
 };
 
 export function mapDynamoItemToTicket(raw: unknown): Ticket {
@@ -54,7 +63,17 @@ export function mapDynamoItemToTicket(raw: unknown): Ticket {
       area: item.solicitante?.area ?? "",
       userId: item.solicitante?.user_id ?? "",
     },
-    attachments: Array.isArray(item.adjuntos) ? item.adjuntos : [],
+    attachments: Array.isArray(item.adjuntos) ? item.adjuntos.map(mapAttachment) : [],
+  };
+}
+
+function mapAttachment(raw: RawAttachment): AttachmentMetadata {
+  return {
+    id: raw.id,
+    name: raw.name,
+    size: raw.size,
+    type: raw.type,
+    downloadUrl: raw.download_url,
   };
 }
 

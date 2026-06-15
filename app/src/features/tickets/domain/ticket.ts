@@ -17,6 +17,10 @@ export type AttachmentMetadata = {
   name: string;
   size: number;
   type: string;
+  // Presigned GET URL del S3 (5 min). Opcional: solo presente en respuestas
+  // de listing que enriquecen los adjuntos del ticket. Vacío al crear el
+  // ticket localmente.
+  downloadUrl?: string;
 };
 
 export type Requester = {

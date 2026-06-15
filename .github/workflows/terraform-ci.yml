@@ -1,8 +1,23 @@
 name: Terraform CI
 
+# PR validation workflow. Corre fmt / validate / plan como tres JOBS
+# SEPARADOS para que cada uno reporte un status check independiente a
+# GitHub. Eso es necesario porque el branch protection ruleset
+# (Settings → Rules) referencia los checks por nombre exacto del job:
+#   - "Terraform fmt"
+#   - "Terraform validate"
+#   - "Terraform plan (dev)"
+#
+# Si renombramos algún job, hay que actualizar el ruleset en GitHub o
+# el merge gate queda silenciosamente roto (rubric OYD-D4 pitfall named:
+# "Required check name mismatch").
+
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
 
 permissions:
   contents: read
@@ -13,8 +28,58 @@ defaults:
     working-directory: infra
 
 jobs:
-  terraform:
-    name: Terraform fmt / init / validate / plan
+  # ─── fmt ────────────────────────────────────────────────────────────────
+  # Solo necesita el código TF, no la dependencia de provider plugins ni
+  # acceso al state. Rápido (~5s).
+  terraform-fmt:
+    name: Terraform fmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+  # ─── validate ───────────────────────────────────────────────────────────
+  # Necesita providers (terraform init) pero NO el remote state — usamos
+  # init sin -backend-config para que la validación sea offline-friendly.
+  # Si init contra el backend real fallara por permisos, validate aún corre.
+  terraform-validate:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  # ─── plan ──────────────────────────────────────────────────────────────
+  # Necesita providers + backend (lee state) + AWS creds (porque algunos
+  # data sources hacen API calls — ej. aws_region, aws_caller_identity).
+  # Genera el tfplan y lo sube como artifact para que el apply-on-merge
+  # use el plan EXACTO en vez de re-planear contra state potencialmente
+  # cambiado (rubric pitfall named: "Apply re-plans on merge").
+  terraform-plan:
+    name: Terraform plan (dev)
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +87,8 @@ jobs:
         uses: actions/checkout@v4
 
       # Node.js es requerido por null_resource.npm_install (módulo compute)
-      # que corre `npm install --omit=dev` para empaquetar la dep
-      # @aws-sdk/s3-request-presigner que el runtime de Node 22 Lambda no trae.
+      # que corre `npm install --omit=dev` para empaquetar deps que el
+      # runtime de Node 22 Lambda no trae.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -35,27 +100,36 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (dev)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Terraform fmt
-        run: terraform fmt -check -recursive
-
-      - name: Terraform init
-        run: terraform init -input=false
-
-      - name: Terraform validate
-        run: terraform validate
+      - name: Terraform init (backend-dev.hcl)
+        run: terraform init -backend-config=envs/dev/backend-dev.hcl -input=false
 
       - name: Terraform plan
         id: plan
         run: |
           set -o pipefail
-          terraform plan -var-file=envs/dev/dev.tfvars -no-color -input=false 2>&1 | tee plan.txt
+          terraform plan \
+            -var-file=envs/dev/dev.tfvars \
+            -out=tfplan \
+            -no-color \
+            -input=false 2>&1 | tee plan.txt
+
+      # Upload del plan artifact — descargado por terraform-apply.yml en
+      # el job apply-dev. El nombre "tfplan" es referenciado por el otro
+      # workflow; si cambia acá, cambia allá.
+      - name: Upload tfplan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/tfplan
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Post plan as PR comment
         if: always() && steps.plan.outcome != 'skipped'
@@ -73,7 +147,10 @@ jobs:
             }
             const status = '${{ steps.plan.outcome }}';
             const body = [
-              `### Terraform Plan — \`${status}\``,
+              `### Terraform Plan (dev) — \`${status}\``,
+              '',
+              'Plan saved as `tfplan` artifact. The apply-on-merge workflow downloads',
+              'this exact artifact and runs `terraform apply tfplan` — no re-plan.',
               '',
               '<details><summary>Show plan output</summary>',
               '',

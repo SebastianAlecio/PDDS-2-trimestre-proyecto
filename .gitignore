@@ -15,9 +15,11 @@ crash.*.log
 .terraform/
 .terraform.tfstate.lock.info
 
-# Terraform planfiles (binary)
+# Terraform planfiles (binary) — generados por `terraform plan -out=...`,
+# son ephemerals y voluminosos, no van al repo.
 tfplan
 *.tfplan
+tfplan*.bin
 
 # Lambda zip artifacts produced by data "archive_file" at plan/apply time
 infra/modules/compute/build/
@@ -25,15 +27,20 @@ infra/modules/compute/build/
 # node_modules dentro de la Lambda src: se reinstalan en cada apply via
 # null_resource.npm_install. Necesarios en el zip pero no en git.
 infra/modules/compute/src/node_modules/
+infra/modules/compute/src/*/node_modules/
 
 # Terraform output captures used in CI
 plan.txt
 
 # Ignore all *.tfvars by default — they may contain secrets.
-# Whitelist the dev tfvars so the grader and CI can use it.
+# Whitelist los tfvars per-env (dev + staging) para que el grader y los
+# workflows de CI/CD puedan usarlos. Los secrets reales viven en GitHub
+# Actions environment secrets inyectados como TF_VAR_* en runtime — los
+# .tfvars solo cargan config no-sensible.
 *.tfvars
 *.tfvars.json
 !infra/envs/dev/dev.tfvars
+!infra/envs/staging/staging.tfvars
 
 # Override files (often used for local dev)
 override.tf

@@ -141,6 +141,62 @@ variable "sqs_batch_size" {
   default     = 1
 }
 
+variable "maximum_batching_window_in_seconds" {
+  description = "Tiempo (segundos) que SQS espera para acumular hasta sqs_batch_size mensajes antes de invocar la Lambda. 0 = invoca apenas hay un mensaje (latencia mínima). > 0 = agrupa para ahorrar invocaciones a costa de latencia adicional. Requerido por el rubric OYD-D4 Deliverable B como input variable."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.maximum_batching_window_in_seconds >= 0 && var.maximum_batching_window_in_seconds <= 300
+    error_message = "maximum_batching_window_in_seconds tiene que estar entre 0 y 300 segundos."
+  }
+}
+
+variable "bisect_batch_on_function_error" {
+  description = "Si es true, cuando el handler de la Lambda tira un error con un batch, SQS divide el batch en dos sub-batches y reintenta. Aísla el record envenenado sin re-procesar todo el batch original. Requerido por el rubric OYD-D4 Deliverable B como input variable."
+  type        = bool
+  default     = false
+}
+
+# ─── SQS SendMessage (producer) ──────────────────────────────────────────
+# Para Lambdas que ENCOLAN mensajes a una cola, no que la consumen. Producer
+# tipo POST /enqueue del Deliverable E del rubric OYD-D4.
+
+variable "sqs_send_queue_arn" {
+  description = "ARN de la cola SQS donde la Lambda envía mensajes (sqs:SendMessage). Read por la policy cuando attach_sqs_send_policy = true. Scoped al ARN exacto — no wildcards."
+  type        = string
+  default     = ""
+}
+
+variable "attach_sqs_send_policy" {
+  description = "Si es true, adjunta IAM policy con sqs:SendMessage / sqs:GetQueueAttributes scoped al sqs_send_queue_arn. Separada de attach_sqs_consume_policy porque envío y consumo son flows distintos con consumidores y permisos diferentes."
+  type        = bool
+  default     = false
+}
+
+# ─── S3 PutObject para async events (least-privilege scoped a prefix) ────
+# Separada de attach_attachments_bucket_policy porque el async consumer
+# escribe bajo un prefix distinto (ej. async-events/*) y queremos que los
+# permisos sean exactos al prefix, no a todo el bucket.
+
+variable "async_bucket_arn" {
+  description = "ARN del bucket S3 donde el async consumer escribe objetos. Read por la policy cuando attach_async_bucket_policy = true. Combinado con async_bucket_key_prefix forma el Resource de la policy: \"$${arn}/$${prefix}*\"."
+  type        = string
+  default     = ""
+}
+
+variable "async_bucket_key_prefix" {
+  description = "Prefix de keys en el bucket S3 donde el async consumer está autorizado a escribir (ej. \"async-events/\" — IMPORTANTE: incluir el slash final). La policy se scoped a \"$${async_bucket_arn}/$${prefix}*\" — fuera del prefix, los s3:PutObject fallan con AccessDenied."
+  type        = string
+  default     = ""
+}
+
+variable "attach_async_bucket_policy" {
+  description = "Si es true, adjunta IAM policy con s3:PutObject scoped a async_bucket_arn/async_bucket_key_prefix*. Separada de attach_attachments_bucket_policy (que vive en otro prefix) para mantener least-privilege real por consumidor."
+  type        = bool
+  default     = false
+}
+
 # ─── SES SendEmail (para notifier Lambda) ─────────────────────────────────
 
 variable "ses_from_address" {
@@ -153,4 +209,70 @@ variable "attach_ses_send_policy" {
   description = "Si es true, adjunta IAM policy con ses:SendEmail / SendRawEmail con condition StringEquals ses:FromAddress = ses_from_address."
   type        = bool
   default     = false
+}
+
+# ─── WebSocket Management API (para PostToConnection) ─────────────────────
+
+variable "websocket_api_execution_arn" {
+  description = "Execution ARN del WebSocket API. Read por la policy y por el lambda_permission cuando attach_websocket_management_policy = true."
+  type        = string
+  default     = ""
+}
+
+variable "attach_websocket_management_policy" {
+  description = "Si es true, adjunta IAM policy con execute-api:ManageConnections scoped al websocket_api_execution_arn. Necesario para que la Lambda pueda hacer PostToConnection a clientes WS conectados."
+  type        = bool
+  default     = false
+}
+
+# ─── Cognito (para verificación JWT en chat-ws Lambda) ───────────────────
+
+variable "cognito_user_pool_id" {
+  description = "ID del Cognito User Pool. Se expone como env var COGNITO_USER_POOL_ID al runtime. La Lambda chat-ws lo usa con aws-jwt-verify para validar el JWT recibido en $connect query string."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_client_id" {
+  description = "Client ID del Cognito User Pool. Se expone como env var COGNITO_APP_CLIENT_ID al runtime. aws-jwt-verify lo necesita para validar el claim audience del JWT."
+  type        = string
+  default     = ""
+}
+
+# ─── EventBridge Scheduler (OYD-D4 Deliverable C) ─────────────────────────
+# Variables del nuevo aws_scheduler_schedule. El attach_scheduler flag
+# desacopla la creación del recurso del schedule_expression (que también
+# usa el viejo aws_cloudwatch_event_rule durante la transición).
+
+variable "attach_scheduler" {
+  description = "Si es true, crea aws_scheduler_schedule (EventBridge Scheduler — API nueva del rubric OYD-D4 Deliverable C) + IAM role dedicado + policy lambda:InvokeFunction scoped al ARN exacto del target Lambda. NO wildcards."
+  type        = bool
+  default     = false
+}
+
+variable "scheduler_timezone" {
+  description = "IANA timezone para schedule_expression (ej. \"America/Guatemala\", \"UTC\"). Solo aplica cuando attach_scheduler = true — EventBridge Scheduler soporta timezones nativos; la API legacy de Events solo soportaba UTC."
+  type        = string
+  default     = "UTC"
+}
+
+variable "scheduler_state" {
+  description = "Estado inicial del schedule: ENABLED (dispara según schedule_expression) o DISABLED (recurso creado pero pausado). Útil para crear el schedule sin que arranque hasta tener handler y permisos confirmados."
+  type        = string
+  default     = "ENABLED"
+
+  validation {
+    condition     = contains(["ENABLED", "DISABLED"], var.scheduler_state)
+    error_message = "scheduler_state tiene que ser ENABLED o DISABLED."
+  }
+}
+
+# ─── EventBridge Schedule LEGACY (aws_cloudwatch_event_rule) ──────────────
+# Coexiste con aws_scheduler_schedule durante la transición. En la próxima
+# limpieza se removerá: el rubric OYD-D4 exige específicamente
+# aws_scheduler_schedule (API nueva), no la legacy.
+variable "schedule_expression" {
+  description = "Expresión cron o rate para invocar la Lambda periódicamente (ej. 'rate(5 minutes)'). Si se especifica, crea una regla de EventBridge y el permiso asociado."
+  type        = string
+  default     = ""
 }
