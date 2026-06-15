@@ -191,7 +191,8 @@ Todos los archivos en `infra/evidence/`. Renderizados en `infra/README.md` bajo 
 | `async-object.png` | Deliverable E — S3 console mostrando `async-events/<messageId>.json` |
 | `github-environments.png` | Deliverable D — Settings → Environments mostrando dev + staging |
 | `github-environments-staging.png` | Deliverable D — staging environment con required reviewer visible |
-| `ruleset-config.png` | Deliverable D — branch ruleset activo en main |
+| `ruleset-config.png` | Deliverable D — branch ruleset activo en main (status + target + rules generales) |
+| `ruleset-config-checks.png` | Deliverable D — required status checks del ruleset (fmt / validate / plan dev) |
 | `ruleset-blocked-merge.png` | Deliverable D — PR mostrando merge bloqueado por check fallando |
 | `ci-apply-dev.png` | Deliverable D — apply-dev verde post-merge |
 | `ci-apply-staging.png` | Deliverable D — apply-staging pausado en approval gate |
