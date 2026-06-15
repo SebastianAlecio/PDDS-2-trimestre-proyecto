@@ -1,0 +1,42 @@
+api_endpoint = "https://df6jdxf8ob.execute-api.us-east-1.amazonaws.com/api"
+api_id = "df6jdxf8ob"
+async_consumer_function_arn = "arn:aws:lambda:us-east-1:544341949288:function:pdds-oyd-async-consumer-dev"
+async_consumer_function_name = "pdds-oyd-async-consumer-dev"
+async_dlq_arn = "arn:aws:sqs:us-east-1:544341949288:ticke-t-async-dev-dlq"
+async_dlq_name = "ticke-t-async-dev-dlq"
+async_dlq_url = "https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev-dlq"
+async_queue_arn = "arn:aws:sqs:us-east-1:544341949288:ticke-t-async-dev"
+async_queue_name = "ticke-t-async-dev"
+async_queue_url = "https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev"
+attachments_bucket_arn = "arn:aws:s3:::pdds-oyd-attachments-dev-b16b7b45"
+attachments_bucket_name = "pdds-oyd-attachments-dev-b16b7b45"
+cognito_region = "us-east-1"
+cognito_user_group_names = [
+  "colaborador",
+  "agente-n1",
+  "agente-n2",
+  "gerente",
+]
+cognito_user_pool_arn = "arn:aws:cognito-idp:us-east-1:544341949288:userpool/us-east-1_0sgRp2iI0"
+cognito_user_pool_client_id = "j6ccjop37hh4oi5tpn6r59pj8"
+cognito_user_pool_endpoint = "cognito-idp.us-east-1.amazonaws.com/us-east-1_0sgRp2iI0"
+cognito_user_pool_id = "us-east-1_0sgRp2iI0"
+compute_function_arn = "arn:aws:lambda:us-east-1:544341949288:function:chat-message-handler-dev"
+compute_function_name = "chat-message-handler-dev"
+dns_api_url = "https://api.ticke-t.lumenchat.app"
+dns_zone_nameservers = tolist([
+  "ns-1495.awsdns-58.org",
+  "ns-1841.awsdns-38.co.uk",
+  "ns-383.awsdns-47.com",
+  "ns-516.awsdns-00.net",
+])
+domain_name = "api.ticke-t.lumenchat.app"
+hosted_zone_id = "Z0749253Z6TOL9I58TBW"
+tickets_table_arn = "arn:aws:dynamodb:us-east-1:544341949288:table/tickets-dev"
+tickets_table_name = "tickets-dev"
+waf_web_acl_arn = "arn:aws:wafv2:us-east-1:544341949288:regional/webacl/ticke-t-waf-dev/5eefff5a-1464-4ec2-8a98-017135dc85cc"
+watchdog_function_arn = "arn:aws:lambda:us-east-1:544341949288:function:pdds-oyd-watchdog-dev"
+watchdog_function_name = "pdds-oyd-watchdog-dev"
+ws_custom_domain_endpoint = "wss://ws.ticke-t.lumenchat.app"
+ws_default_endpoint = "wss://uw67ohtj22.execute-api.us-east-1.amazonaws.com/chat"
+ws_management_endpoint = "https://uw67ohtj22.execute-api.us-east-1.amazonaws.com/chat"

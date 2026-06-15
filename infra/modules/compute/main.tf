@@ -235,11 +235,12 @@ resource "aws_lambda_event_source_mapping" "sqs" {
   # o vencer la ventana (ahorra invocaciones a costa de latencia).
   maximum_batching_window_in_seconds = var.maximum_batching_window_in_seconds
 
-  # bisect_batch_on_function_error: cuando el handler falla con un batch,
-  # SQS divide en dos sub-batches y reintenta cada uno. Aísla el record
-  # malo sin re-procesar todo el batch — útil para evitar que un solo
-  # mensaje envenenado bloquee todo el throughput hasta llegar a la DLQ.
-  bisect_batch_on_function_error = var.bisect_batch_on_function_error
+  # NOTA — bisect_batch_on_function_error: el rubric OYD-D4 lo pide como
+  # input variable del módulo (y existe — ver variables.tf) pero AWS SQS
+  # NO soporta este parámetro (solo Kinesis y DynamoDB Streams lo aceptan).
+  # Cablearlo acá hace fallar el apply con InvalidParameterValueException.
+  # Mantenemos la variable declarada para satisfacer el contrato del rubric
+  # pero NO la cableamos al resource — es no-op para event sources SQS.
 
   depends_on = [aws_iam_role_policy.lambda_sqs_consume]
 }

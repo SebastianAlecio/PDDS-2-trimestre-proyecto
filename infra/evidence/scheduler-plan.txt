@@ -1,0 +1,23 @@
+{
+    "ActionAfterCompletion": "NONE",
+    "Arn": "arn:aws:scheduler:us-east-1:544341949288:schedule/default/pdds-oyd-watchdog-dev-schedule-v2",
+    "CreationDate": "2026-06-15T16:13:30.752000-06:00",
+    "Description": "EventBridge Scheduler que invoca pdds-oyd-watchdog-dev periódicamente",
+    "FlexibleTimeWindow": {
+        "Mode": "OFF"
+    },
+    "GroupName": "default",
+    "LastModificationDate": "2026-06-15T16:13:30.752000-06:00",
+    "Name": "pdds-oyd-watchdog-dev-schedule-v2",
+    "ScheduleExpression": "rate(1 hour)",
+    "ScheduleExpressionTimezone": "America/Guatemala",
+    "State": "ENABLED",
+    "Target": {
+        "Arn": "arn:aws:lambda:us-east-1:544341949288:function:pdds-oyd-watchdog-dev",
+        "RetryPolicy": {
+            "MaximumEventAgeInSeconds": 3600,
+            "MaximumRetryAttempts": 3
+        },
+        "RoleArn": "arn:aws:iam::544341949288:role/pdds-oyd-watchdog-dev-scheduler-role"
+    }
+}
