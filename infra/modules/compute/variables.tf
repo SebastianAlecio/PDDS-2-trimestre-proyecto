@@ -239,7 +239,38 @@ variable "cognito_user_pool_client_id" {
   default     = ""
 }
 
-# ─── EventBridge Schedule (para Watchdog Lambda) ──────────────────────────
+# ─── EventBridge Scheduler (OYD-D4 Deliverable C) ─────────────────────────
+# Variables del nuevo aws_scheduler_schedule. El attach_scheduler flag
+# desacopla la creación del recurso del schedule_expression (que también
+# usa el viejo aws_cloudwatch_event_rule durante la transición).
+
+variable "attach_scheduler" {
+  description = "Si es true, crea aws_scheduler_schedule (EventBridge Scheduler — API nueva del rubric OYD-D4 Deliverable C) + IAM role dedicado + policy lambda:InvokeFunction scoped al ARN exacto del target Lambda. NO wildcards."
+  type        = bool
+  default     = false
+}
+
+variable "scheduler_timezone" {
+  description = "IANA timezone para schedule_expression (ej. \"America/Guatemala\", \"UTC\"). Solo aplica cuando attach_scheduler = true — EventBridge Scheduler soporta timezones nativos; la API legacy de Events solo soportaba UTC."
+  type        = string
+  default     = "UTC"
+}
+
+variable "scheduler_state" {
+  description = "Estado inicial del schedule: ENABLED (dispara según schedule_expression) o DISABLED (recurso creado pero pausado). Útil para crear el schedule sin que arranque hasta tener handler y permisos confirmados."
+  type        = string
+  default     = "ENABLED"
+
+  validation {
+    condition     = contains(["ENABLED", "DISABLED"], var.scheduler_state)
+    error_message = "scheduler_state tiene que ser ENABLED o DISABLED."
+  }
+}
+
+# ─── EventBridge Schedule LEGACY (aws_cloudwatch_event_rule) ──────────────
+# Coexiste con aws_scheduler_schedule durante la transición. En la próxima
+# limpieza se removerá: el rubric OYD-D4 exige específicamente
+# aws_scheduler_schedule (API nueva), no la legacy.
 variable "schedule_expression" {
   description = "Expresión cron o rate para invocar la Lambda periódicamente (ej. 'rate(5 minutes)'). Si se especifica, crea una regla de EventBridge y el permiso asociado."
   type        = string

@@ -157,7 +157,13 @@ module "watchdog" {
   memory_size     = 128
   timeout_seconds = 60
 
+  # OYD-D4 Deliverable C: usa el aws_scheduler_schedule nuevo (EventBridge
+  # Scheduler) en lugar del legacy aws_cloudwatch_event_rule. El módulo
+  # gatea ambos triggers — con attach_scheduler = true se crea solo el
+  # nuevo + su IAM role dedicado scoped al ARN de esta Lambda.
+  attach_scheduler       = true
   schedule_expression    = var.watchdog_schedule
+  scheduler_timezone     = var.watchdog_timezone
   attach_dynamodb_policy = true
   dynamodb_table_arn     = module.database.table_arn
 

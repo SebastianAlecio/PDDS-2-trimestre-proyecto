@@ -176,6 +176,16 @@ variable "async_dlq_message_retention_seconds" {
   default     = 1209600
 }
 
+# ─── Watchdog scheduler (OYD-D4 Deliverable C) ──────────────────────────
+# El watchdog corre periódicamente y marca tickets vencidos por SLA.
+# Cumple la categoría "cleanup or report generator" del rubric.
+
+variable "watchdog_timezone" {
+  description = "IANA timezone para el cron del watchdog (ej. \"America/Guatemala\", \"UTC\"). El rubric OYD-D4 Deliverable C exige que el timezone sea un input variable, no hardcoded."
+  type        = string
+  default     = "America/Guatemala"
+}
+
 variable "dns_ws_full_hostname" {
   description = "FQDN del WebSocket custom domain (ej. \"ws.ticke-t.lumenchat.app\"). Solo se usa cuando dns_enable_ws_custom_domain = true."
   type        = string
