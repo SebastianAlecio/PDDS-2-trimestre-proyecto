@@ -1,0 +1,70 @@
+Note: Unnecessary use of -X or --request, POST is already inferred.
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 44.199.148.128, 100.48.166.34, 98.95.209.210
+*   Trying 44.199.148.128:443...
+* Connected to api.ticke-t.lumenchat.app (44.199.148.128) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [330 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [3809 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://api.ticke-t.lumenchat.app/async/enqueue
+* [HTTP/2] [1] [:method: POST]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: api.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /async/enqueue]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiI0NDc4YzQ4OC1iMGIxLTcwN2YtMDMyOC1iMDVkZGUyZDM2ODgiLCJjb2duaXRvOmdyb3VwcyI6WyJhZ2VudGUtbjEiXSwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xXzBzZ1JwMmlJMCIsImNvZ25pdG86dXNlcm5hbWUiOiI0NDc4YzQ4OC1iMGIxLTcwN2YtMDMyOC1iMDVkZGUyZDM2ODgiLCJvcmlnaW5fanRpIjoiMjcwZWE3YWQtMTIxMC00OTRiLWI2YWMtY2U0OGM0MmZmODA0IiwiYXVkIjoiajZjY2pvcDM3aGg0b2k1dHBuNnI1OXBqOCIsImV2ZW50X2lkIjoiYWM2NTQyZmYtN2Q3OS00MmJjLWI3NjItOGI4YTM1MDc5MGNjIiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODE1NjE3OTksIm5hbWUiOiJTb2ZpYSBBZ2VudGVOMSIsImV4cCI6MTc4MTU2NTM5OSwiaWF0IjoxNzgxNTYxNzk5LCJqdGkiOiJhMzliNTAwMS1jZmRkLTQ1YTMtYmFkNi0wZTA2MzlmNjVjYmYiLCJlbWFpbCI6ImFnZW50ZS5uMUB0aWNrZS10LmxvY2FsIn0.mDuOCyvw5_48gnINbXDpi0HpXJy0wv9q36GFc1iOXBlMW2dZbNYJDCR0MeacDlkZdkYtfp8rFyPNFMnuxQNXDWekF1ycBGWRR5j2tzYtQpt7OlEe7oyDmOx4Lmz3wgE-Fm1AU1f9Mhx89ys7VN98y9CSyghPPnsq-qCcagnn7NsnW1EYQz8kGOx8wz1KEAJa18ZNwP2HQyUopE_YmtbesCFXtrF_JBFTWfHFPrmanbmH_jso9niz8xskSoBzLFlLjJBwLij1TUvZTXY3GP9A4jndOr7SG7aTyI2pG4DlgpNOWhOiqaz0nXa6oQO0w9sxfW7dhwhUvfoYgfK1PiUJAg]
+* [HTTP/2] [1] [content-type: application/json]
+* [HTTP/2] [1] [content-length: 60]
+> POST /async/enqueue HTTP/2
+> Host: api.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Authorization: Bearer eyJraWQiOiJkb1paZ2xyQWJCQ3hiQW1LQnFaeUZpMFk3cVRyRHhkSU9NT2JubXVDYW5nPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiI0NDc4YzQ4OC1iMGIxLTcwN2YtMDMyOC1iMDVkZGUyZDM2ODgiLCJjb2duaXRvOmdyb3VwcyI6WyJhZ2VudGUtbjEiXSwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xXzBzZ1JwMmlJMCIsImNvZ25pdG86dXNlcm5hbWUiOiI0NDc4YzQ4OC1iMGIxLTcwN2YtMDMyOC1iMDVkZGUyZDM2ODgiLCJvcmlnaW5fanRpIjoiMjcwZWE3YWQtMTIxMC00OTRiLWI2YWMtY2U0OGM0MmZmODA0IiwiYXVkIjoiajZjY2pvcDM3aGg0b2k1dHBuNnI1OXBqOCIsImV2ZW50X2lkIjoiYWM2NTQyZmYtN2Q3OS00MmJjLWI3NjItOGI4YTM1MDc5MGNjIiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODE1NjE3OTksIm5hbWUiOiJTb2ZpYSBBZ2VudGVOMSIsImV4cCI6MTc4MTU2NTM5OSwiaWF0IjoxNzgxNTYxNzk5LCJqdGkiOiJhMzliNTAwMS1jZmRkLTQ1YTMtYmFkNi0wZTA2MzlmNjVjYmYiLCJlbWFpbCI6ImFnZW50ZS5uMUB0aWNrZS10LmxvY2FsIn0.mDuOCyvw5_48gnINbXDpi0HpXJy0wv9q36GFc1iOXBlMW2dZbNYJDCR0MeacDlkZdkYtfp8rFyPNFMnuxQNXDWekF1ycBGWRR5j2tzYtQpt7OlEe7oyDmOx4Lmz3wgE-Fm1AU1f9Mhx89ys7VN98y9CSyghPPnsq-qCcagnn7NsnW1EYQz8kGOx8wz1KEAJa18ZNwP2HQyUopE_YmtbesCFXtrF_JBFTWfHFPrmanbmH_jso9niz8xskSoBzLFlLjJBwLij1TUvZTXY3GP9A4jndOr7SG7aTyI2pG4DlgpNOWhOiqaz0nXa6oQO0w9sxfW7dhwhUvfoYgfK1PiUJAg
+> Content-Type: application/json
+> Content-Length: 60
+> 
+} [60 bytes data]
+* upload completely sent off: 60 bytes
+100    60    0     0  100    60      0     45  0:00:01  0:00:01 --:--:--    45< HTTP/2 202 
+< date: Mon, 15 Jun 2026 22:16:41 GMT
+< content-type: application/json
+< content-length: 134
+< x-amzn-requestid: 606ffb7d-ec4c-4e83-bbb1-031a635f1d72
+< access-control-allow-origin: *
+< access-control-allow-headers: Authorization,Content-Type
+< x-amz-apigw-id: fBf3TGI9oAMEU6A=
+< access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS
+< x-amzn-trace-id: Root=1-6a3079c7-6891d0dc236fd80d5da6fdbb;Parent=2e980af45cd504ea;Sampled=0;Lineage=1:72ec4815:0
+< 
+{ [134 bytes data]
+100   194  100   134  100    60     63     28  0:00:02  0:00:02 --:--:--    91100   194  100   134  100    60     63     28  0:00:02  0:00:02 --:--:--    91
+* Connection #0 to host api.ticke-t.lumenchat.app left intact
+{"message_id":"e99d08b7-10cb-4c12-a913-05ff2009f40e","queue_url":"https://sqs.us-east-1.amazonaws.com/544341949288/ticke-t-async-dev"}

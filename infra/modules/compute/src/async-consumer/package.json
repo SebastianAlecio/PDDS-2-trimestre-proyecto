@@ -1,0 +1,6 @@
+{
+  "name": "async-consumer-handler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Handler de la Lambda consumer disparada por SQS event source mapping (Deliverable B + E de OYD-D4). Sin deps externas — usa solo @aws-sdk/client-s3 que ya viene en el runtime Node 22 de Lambda."
+}

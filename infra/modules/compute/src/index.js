@@ -35,6 +35,7 @@ const {
 const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
+const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 const {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
@@ -75,9 +76,14 @@ const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN || "";
 // con module.realtime.management_endpoint. Si está vacío, el broadcast de
 // ticket.closed por WS se skipea — útil en envs sin WS API desplegado.
 const WS_ENDPOINT = process.env.WEBSOCKET_API_ENDPOINT || "";
+// URL de la cola SQS del módulo async/. Si está vacía, el endpoint
+// POST /async/enqueue responde 503 — eso evita silent failures cuando la
+// Lambda se deploya sin la env var correctamente seteada por Terraform.
+const ASYNC_QUEUE_URL = process.env.ASYNC_QUEUE_URL || "";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 const sns = new SNSClient({});
+const sqs = new SQSClient({});
 const wsClient = WS_ENDPOINT
   ? new ApiGatewayManagementApiClient({ endpoint: WS_ENDPOINT })
   : null;
@@ -111,6 +117,10 @@ function ok(payload) {
 
 function created(payload) {
   return jsonResponse(201, payload);
+}
+
+function accepted(payload) {
+  return jsonResponse(202, payload);
 }
 
 function badRequest(message, details) {
@@ -965,6 +975,64 @@ async function handleCreateUser(event, claims) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Async enqueue endpoint (OYD-D4 Deliverable E producer)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// POST /async/enqueue — acepta cualquier JSON body y lo encola en SQS.
+// Devuelve 202 Accepted + el MessageId que devolvió AWS (no un id local
+// hardcoded — el rubric exige que el message ID venga del backend
+// asíncrono real). El consumer async_consumer lo recibe vía event source
+// mapping y lo materializa como objeto S3.
+async function handleAsyncEnqueue(event) {
+  if (!ASYNC_QUEUE_URL) {
+    return serverError(
+      "async pipeline not configured (ASYNC_QUEUE_URL missing)",
+    );
+  }
+
+  // Parseo defensivo del body. JSON inválido -> 400 con detalle del parse error.
+  let payload;
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch (err) {
+    return badRequest("body is not valid JSON", err.message);
+  }
+
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return badRequest("body must be a JSON object");
+  }
+
+  try {
+    const result = await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: ASYNC_QUEUE_URL,
+        MessageBody: JSON.stringify(payload),
+      }),
+    );
+    console.log(
+      "async_enqueue_ok",
+      JSON.stringify({
+        queue_url: ASYNC_QUEUE_URL,
+        message_id: result.MessageId,
+      }),
+    );
+    return accepted({
+      message_id: result.MessageId,
+      queue_url: ASYNC_QUEUE_URL,
+    });
+  } catch (err) {
+    console.error("async_enqueue_failed:", {
+      name: err.name,
+      message: err.message,
+    });
+    return serverError("failed to enqueue message", {
+      name: err.name,
+      message: err.message,
+    });
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Router
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1012,6 +1080,12 @@ exports.handler = async (event) => {
 
     case "POST /users":
       return handleCreateUser(event, claims);
+
+    case "POST /async/enqueue":
+      // No requiere claims especiales — el authorizer Cognito ya garantiza
+      // que el caller está autenticado, y el endpoint solo encola lo que
+      // recibe. El consumer corre con sus propias IAM creds.
+      return handleAsyncEnqueue(event);
 
     default:
       return notFound(`route ${routeKey} is not handled`);

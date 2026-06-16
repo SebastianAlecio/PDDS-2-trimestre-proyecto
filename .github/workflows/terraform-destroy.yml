@@ -1,0 +1,88 @@
+name: Terraform Destroy (gated)
+
+# Gated destroy — único trigger es workflow_dispatch. No corre en push,
+# pull_request, ni schedule. Eso es requisito del rubric OYD-D4
+# Deliverable D ("gated destroy workflow"): destroy es una operación
+# irreversible y debe requerir intervención humana explícita.
+#
+# Para correr: GitHub UI → Actions → "Terraform Destroy (gated)" →
+# Run workflow → elegir environment → Run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment a destruir"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+      confirm:
+        description: "Tipear 'destroy' para confirmar (case-sensitive)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: infra
+
+jobs:
+  destroy:
+    name: Destroy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      # Checkout antes que los steps de validación/echo — el default
+      # working-directory: infra requiere que el repo esté checked out
+      # primero, sino bash falla con "No such file or directory" al
+      # tratar de chdir a infra/.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate confirm input
+        if: inputs.confirm != 'destroy'
+        run: |
+          echo "::error::Confirmación faltante o inválida. Tipear 'destroy' (case-sensitive) en el input 'confirm'."
+          exit 1
+
+      - name: Echo target
+        run: |
+          echo "::notice::Destroying environment: ${{ inputs.environment }}"
+          echo "Target tfvars: infra/envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars"
+          echo "Target backend: infra/envs/${{ inputs.environment }}/backend-${{ inputs.environment }}.hcl"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config=envs/${{ inputs.environment }}/backend-${{ inputs.environment }}.hcl \
+            -input=false
+
+      - name: Terraform destroy
+        run: |
+          terraform destroy \
+            -var-file=envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars \
+            -input=false \
+            -auto-approve

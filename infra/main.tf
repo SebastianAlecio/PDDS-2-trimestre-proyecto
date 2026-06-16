@@ -25,6 +25,11 @@ module "compute" {
   attach_websocket_management_policy = true
   websocket_api_execution_arn        = module.realtime.api_execution_arn
 
+  # SQS SendMessage: producer del endpoint POST /async/enqueue (OYD-D4
+  # Deliverable E). Scoped al ARN exacto de la cola async, no wildcard.
+  attach_sqs_send_policy = true
+  sqs_send_queue_arn     = module.async.queue_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
     ATTACHMENTS_BUCKET_NAME = module.storage.bucket_name
@@ -32,6 +37,49 @@ module "compute" {
     HEALTH_CHECK_PATH       = var.api_health_check_path
     SNS_TOPIC_ARN           = module.notifications.sns_topic_arn
     WEBSOCKET_API_ENDPOINT  = module.realtime.management_endpoint
+    ASYNC_QUEUE_URL         = module.async.queue_url
+  }
+}
+
+# Async consumer Lambda — consumer del flow Deliverable E del rubric
+# OYD-D4. Recibe records vía aws_lambda_event_source_mapping desde la
+# cola del módulo async/. Por cada mensaje escribe UN objeto a S3 bajo el
+# prefix async-events/<message_id>.json y loggea el messageId.
+module "async_consumer" {
+  source = "./modules/compute"
+
+  environment     = var.environment
+  name            = "${var.project_name}-async-consumer"
+  source_dir      = "${path.module}/modules/compute/src/async-consumer"
+  timeout_seconds = 30
+  memory_size     = 128
+
+  # SQS consume: event source mapping + IAM (sqs:Receive/Delete/GetQueue
+  # scoped al queue ARN exacto, no wildcard).
+  attach_sqs_consume_policy          = true
+  sqs_queue_arn                      = module.async.queue_arn
+  sqs_batch_size                     = 1
+  maximum_batching_window_in_seconds = 0
+  bisect_batch_on_function_error     = true
+
+  # S3 PutObject scoped al prefix async-events/* del bucket de attachments
+  # (reusamos el bucket de D2 sin duplicar resources — la separación es
+  # por prefix, no por bucket).
+  attach_async_bucket_policy = true
+  async_bucket_arn           = module.storage.bucket_arn
+  async_bucket_key_prefix    = "async-events/"
+
+  # SES SendEmail con condition StringEquals ses:FromAddress. Cuando el
+  # consumer procesa un evento `ticket.expired`, manda email al solicitante.
+  # Misma from-address que el notifier (soporte@lumenchat.app) para que el
+  # destinatario perciba un único remitente del sistema.
+  attach_ses_send_policy = true
+  ses_from_address       = var.ses_from_address
+
+  environment_variables = {
+    ASYNC_BUCKET_NAME       = module.storage.bucket_name
+    ASYNC_BUCKET_KEY_PREFIX = "async-events/"
+    SES_FROM_ADDRESS        = var.ses_from_address
   }
 }
 
@@ -117,16 +165,26 @@ module "watchdog" {
   memory_size     = 128
   timeout_seconds = 60
 
+  # OYD-D4 Deliverable C: usa el aws_scheduler_schedule nuevo (EventBridge
+  # Scheduler) en lugar del legacy aws_cloudwatch_event_rule. El módulo
+  # gatea ambos triggers — con attach_scheduler = true se crea solo el
+  # nuevo + su IAM role dedicado scoped al ARN de esta Lambda.
+  attach_scheduler       = true
   schedule_expression    = var.watchdog_schedule
+  scheduler_timezone     = var.watchdog_timezone
   attach_dynamodb_policy = true
   dynamodb_table_arn     = module.database.table_arn
 
-  attach_sns_publish_policy = true
-  sns_topic_arn             = module.notifications.sns_topic_arn
+  # Publica eventos `ticket.expired` al async queue (módulo async/). El
+  # async_consumer toma el mensaje, escribe audit log a S3 y manda email
+  # al solicitante vía SES. Flow distinto del notifier (que vive en el
+  # pipeline SNS+SQS de Cloud E4 y maneja `ticket.closed`).
+  attach_sqs_send_policy = true
+  sqs_send_queue_arn     = module.async.queue_arn
 
   environment_variables = {
     TICKETS_TABLE_NAME = module.database.table_name
-    SNS_TOPIC_ARN      = module.notifications.sns_topic_arn
+    ASYNC_QUEUE_URL    = module.async.queue_url
   }
 }
 
@@ -207,6 +265,26 @@ module "notifications" {
   environment       = var.environment
   name_prefix       = var.notifications_name_prefix
   max_receive_count = var.notifications_max_receive_count
+}
+
+# Async messaging module — Deliverable A del rubric OYD-D4. SQS queue
+# principal + DLQ con redrive_policy. Distinto del módulo notifications
+# (que carga SNS + SQS específicos al dominio tickets); este es genérico
+# y reusable para cualquier flow de message-passing en el repo.
+#
+# Consumido por:
+#   - module.compute (tickets Lambda) como producer — POST /async/enqueue.
+#   - module.async_consumer como consumer — event source mapping + S3 PutObject.
+module "async" {
+  source = "./modules/async"
+
+  environment       = var.environment
+  queue_name_prefix = var.async_queue_name_prefix
+
+  visibility_timeout_seconds    = var.async_visibility_timeout_seconds
+  message_retention_seconds     = var.async_message_retention_seconds
+  max_receive_count             = var.async_max_receive_count
+  dlq_message_retention_seconds = var.async_dlq_message_retention_seconds
 }
 
 # DNS administrado por Terraform. Solo se instancia si var.dns_parent_domain

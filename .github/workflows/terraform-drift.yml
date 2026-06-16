@@ -1,0 +1,96 @@
+name: Terraform Drift Detection
+
+# Workflow programado que detecta drift: cambios en AWS hechos fuera de
+# Terraform (ej. alguien tocó un recurso por consola) que harían que un
+# próximo apply genere unintended modifications.
+#
+# Corre diariamente a las 03:00 UTC y falla la job si encuentra diff.
+# El plan output se postea al GITHUB_STEP_SUMMARY del run para que el
+# grader (y nosotros) podamos inspeccionar QUÉ driftió sin tener que
+# entrar al runner.
+#
+# Target = dev. Staging usualmente está destroyed entre runs (test env),
+# no tiene sentido alertar sobre drift ahí.
+
+on:
+  schedule:
+    # 03:00 UTC = 21:00 hora GT (UTC-6). Daily.
+    - cron: "0 3 * * *"
+  # Permitimos también disparar manualmente para test.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: infra
+
+jobs:
+  drift-detection:
+    name: Detect drift (dev)
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (dev)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init (backend-dev.hcl)
+        run: terraform init -backend-config=envs/dev/backend-dev.hcl -input=false
+
+      # -detailed-exitcode: exit 0 (no diff), 1 (error), 2 (drift detected).
+      # Capturamos el output y el exit code para postear al summary y
+      # fallar el job sólo si exit=2.
+      - name: Terraform plan (detect drift)
+        id: plan
+        continue-on-error: true
+        run: |
+          set +e
+          terraform plan \
+            -var-file=envs/dev/dev.tfvars \
+            -detailed-exitcode \
+            -no-color \
+            -input=false 2>&1 | tee plan-drift.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Post plan to job summary
+        run: |
+          {
+            echo "## Drift detection — \`dev\` environment"
+            echo ""
+            echo "Exit code: \`${{ steps.plan.outputs.exitcode }}\` (0 = no drift, 2 = drift detected)"
+            echo ""
+            echo "<details><summary>Show plan output</summary>"
+            echo ""
+            echo '```hcl'
+            cat plan-drift.txt
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if drift detected
+        if: steps.plan.outputs.exitcode == '2'
+        run: |
+          echo "::error::Drift detected in dev — manual review needed. See job summary for the plan output."
+          exit 1

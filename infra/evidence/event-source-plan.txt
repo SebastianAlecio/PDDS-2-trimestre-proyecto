@@ -1,0 +1,12 @@
+{
+    "UUID": "845786fa-ff69-47e7-bb76-f1cd33cc8c3b",
+    "BatchSize": 1,
+    "MaximumBatchingWindowInSeconds": 0,
+    "EventSourceArn": "arn:aws:sqs:us-east-1:544341949288:ticke-t-async-dev",
+    "FunctionArn": "arn:aws:lambda:us-east-1:544341949288:function:pdds-oyd-async-consumer-dev",
+    "LastModified": "2026-06-15T16:15:10.346000-06:00",
+    "State": "Enabled",
+    "StateTransitionReason": "USER_INITIATED",
+    "FunctionResponseTypes": [],
+    "EventSourceMappingArn": "arn:aws:lambda:us-east-1:544341949288:event-source-mapping:845786fa-ff69-47e7-bb76-f1cd33cc8c3b"
+}

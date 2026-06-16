@@ -1,10 +1,10 @@
 variable "environment" {
-  description = "Deployment environment. Drives resource naming and per-environment overrides."
+  description = "Deployment environment. Drives resource naming and per-environment overrides. Acepta dev / staging / prod — staging se agregó en OYD-D4 para el multi-env pipeline."
   type        = string
 
   validation {
-    condition     = contains(["dev", "prod"], var.environment)
-    error_message = "environment must be either \"dev\" or \"prod\"."
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of \"dev\", \"staging\", or \"prod\"."
   }
 }
 
@@ -41,7 +41,7 @@ variable "compute_memory_size" {
 variable "watchdog_schedule" {
   description = "Frecuencia de ejecución para la Lambda del Watchdog"
   type        = string
-  default     = "rate(1 hour)"
+  default     = "rate(5 minutes)"
 }
 
 variable "tickets_table_name" {
@@ -138,6 +138,52 @@ variable "notifications_max_receive_count" {
   description = "Cantidad de intentos del notifier Lambda sobre un mensaje SQS antes de moverlo a la DLQ. Default 3 es estándar."
   type        = number
   default     = 3
+}
+
+# ─── Async messaging (OYD-D4 Deliverable A) ────────────────────────────────
+# Estas vars cablean los inputs del módulo async/ desde root. Cada env (dev,
+# staging) puede sobrescribirlas en su tfvars — el rubric exige al menos 3
+# valores distintos entre dev y staging y estas son candidatas naturales
+# para diferenciar (retención y reintentos pueden ser más agresivos en dev).
+
+variable "async_queue_name_prefix" {
+  description = "Prefijo para los nombres de la cola principal + DLQ del módulo async/. Combinado con environment forma el name final (ej. ticke-t-async-dev, ticke-t-async-dev-dlq)."
+  type        = string
+  default     = "ticke-t-async"
+}
+
+variable "async_visibility_timeout_seconds" {
+  description = "Visibility timeout (segundos) para la cola principal del módulo async/. Debe ser >= al timeout del consumer Lambda (30s en el module.async_consumer) — caso contrario SQS reentrega antes de que termine el procesamiento."
+  type        = number
+  default     = 60
+}
+
+variable "async_message_retention_seconds" {
+  description = "Retención de mensajes en la cola principal del módulo async/. Default 4 días — suficiente para sobrevivir un outage prolongado del consumer."
+  type        = number
+  default     = 345600
+}
+
+variable "async_max_receive_count" {
+  description = "Intentos antes de mover un mensaje a la DLQ del módulo async/. Default 3 — alineado con notifications_max_receive_count pero independiente."
+  type        = number
+  default     = 3
+}
+
+variable "async_dlq_message_retention_seconds" {
+  description = "Retención de mensajes en la DLQ del módulo async/. Default 14 días (máximo de SQS) — la DLQ es para inspección post-incidente y queremos ventana amplia."
+  type        = number
+  default     = 1209600
+}
+
+# ─── Watchdog scheduler (OYD-D4 Deliverable C) ──────────────────────────
+# El watchdog corre periódicamente y marca tickets vencidos por SLA.
+# Cumple la categoría "cleanup or report generator" del rubric.
+
+variable "watchdog_timezone" {
+  description = "IANA timezone para el cron del watchdog (ej. \"America/Guatemala\", \"UTC\"). El rubric OYD-D4 Deliverable C exige que el timezone sea un input variable, no hardcoded."
+  type        = string
+  default     = "America/Guatemala"
 }
 
 variable "dns_ws_full_hostname" {
