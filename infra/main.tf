@@ -121,8 +121,12 @@ module "watchdog" {
   attach_dynamodb_policy = true
   dynamodb_table_arn     = module.database.table_arn
 
+  attach_sns_publish_policy = true
+  sns_topic_arn             = module.notifications.sns_topic_arn
+
   environment_variables = {
     TICKETS_TABLE_NAME = module.database.table_name
+    SNS_TOPIC_ARN      = module.notifications.sns_topic_arn
   }
 }
 

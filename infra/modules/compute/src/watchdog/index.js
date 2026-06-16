@@ -18,7 +18,7 @@ exports.handler = async (event) => {
     // Asumiendo que GSI4 agrupa por estado en "GSI4-PK" = "STATUS#<estado>"
     const queryParams = {
       TableName: tableName,
-      IndexName: "GSI4", // Reemplazar por el nombre real del índice de estado si es diferente
+      IndexName: "GSI4",
       KeyConditionExpression: "#gsi_pk = :estado_abierto",
       FilterExpression: "fecha_limite <= :now",
       ExpressionAttributeNames: {
@@ -70,12 +70,16 @@ exports.handler = async (event) => {
           expired_at: now
         };
 
-        await snsClient.send(new PublishCommand({
-          TopicArn: snsTopicArn,
-          Message: JSON.stringify(payload)
-        }));
+        if (snsTopicArn) {
+          await snsClient.send(new PublishCommand({
+            TopicArn: snsTopicArn,
+            Message: JSON.stringify(payload)
+          }));
+          console.log(`Ticket ${ticket.PK} marcado como Vencido y evento publicado en SNS.`);
+        } else {
+          console.warn(`Ticket ${ticket.PK} marcado como Vencido. SNS_TOPIC_ARN no configurado, omitiendo evento.`);
+        }
 
-        console.log(`Ticket ${ticket.PK} marcado como Vencido y evento publicado en SNS.`);
       } catch (err) {
         if (err.name === "ConditionalCheckFailedException") {
           console.warn(`El ticket ${ticket.PK} ya no está Abierto. Saltando...`);
