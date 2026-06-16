@@ -9,7 +9,7 @@
 # con `terraform init -migrate-state -force-copy` el día de la migración
 # inicial de OYD-D4. Backup: infra/terraform.tfstate.backup-pre-d4.
 
-bucket         = "pdds-oyd-tfstate-d0d13937"
+bucket         = "pdds-oyd-tfstate-58814d50"
 key            = "infra/envs/dev/terraform.tfstate"
 region         = "us-east-1"
 dynamodb_table = "pdds-oyd-tflock"
