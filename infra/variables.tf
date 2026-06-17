@@ -203,3 +203,25 @@ variable "chat_ws_function_name" {
   type        = string
   default     = "chat-ws"
 }
+
+# ─── OIDC federation (OYD-D5 Deliverable C) ──────────────────────────────
+# Vars de configuración del provider OIDC de GitHub Actions + ci_runner role.
+# Se setean en cada env tfvars (dev y staging apuntan al mismo repo).
+
+variable "enable_github_oidc" {
+  description = "Si es true, el módulo iam/ crea el aws_iam_openid_connect_provider de GitHub Actions + el ci_runner role. El provider OIDC es por-cuenta — solo un env tiene que crearlo (típicamente dev). Cuando enable_github_oidc=true, github_owner y github_repo son requeridos."
+  type        = bool
+  default     = false
+}
+
+variable "github_owner" {
+  description = "Org/usuario dueño del repo en GitHub (ej. SebastianAlecio). Usado en el sub claim del trust policy del ci_runner. Solo aplica cuando enable_github_oidc = true."
+  type        = string
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "Nombre del repo en GitHub (ej. PDDS-2-trimestre-proyecto). Usado en el sub claim del trust policy del ci_runner. Solo aplica cuando enable_github_oidc = true."
+  type        = string
+  default     = ""
+}
