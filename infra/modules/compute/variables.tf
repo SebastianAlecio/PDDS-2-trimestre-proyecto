@@ -71,78 +71,45 @@ variable "environment_variables" {
   default     = {}
 }
 
-variable "dynamodb_table_arn" {
-  description = "ARN of a DynamoDB table that the Lambda role should be granted PutItem access on. Read by the policy when attach_dynamodb_policy = true. Includes the table's GSI ARNs (\"$${arn}/index/*\") so future Query calls don't require a Terraform change."
+# ─── Role ARNs — vienen del módulo iam/ (Deliverable A del rubric OYD-D5) ──
+# Hasta D4 los roles se creaban inline acá. Ahora viven en infra/modules/iam/
+# y se pasan como inputs. Cumple "All role ARNs must be exposed as module
+# outputs and consumed by the modules that reference them — no role ARN may
+# be hardcoded in any module call".
+
+variable "execution_role_arn" {
+  description = "ARN del IAM role assumido por la Lambda en runtime. Viene del módulo iam/ (un rol por función — tickets, chat_ws, notifier, async_consumer, watchdog)."
+  type        = string
+}
+
+variable "scheduler_role_arn" {
+  description = "ARN del IAM role assumido por EventBridge Scheduler para invocar esta Lambda. Solo se usa cuando attach_scheduler = true. Vacío cuando no aplica."
   type        = string
   default     = ""
 }
 
-variable "attach_dynamodb_policy" {
-  description = "Whether to attach the DynamoDB access policy to the Lambda role. Must be a static value so Terraform can plan when dynamodb_table_arn references a resource that may be replaced."
+# ─── SQS event source mapping (sin policy — la policy vive en iam/) ──────
+
+variable "attach_sqs_event_source_mapping" {
+  description = "Si es true, crea el aws_lambda_event_source_mapping que conecta sqs_event_source_queue_arn con esta Lambda. La IAM policy sqs:ReceiveMessage/etc vive en el rol del módulo iam/."
   type        = bool
   default     = false
 }
 
-variable "attachments_bucket_arn" {
-  description = "ARN of the S3 bucket where the Lambda will write attachment metadata objects. Read by the policy when attach_attachments_bucket_policy = true. The policy is scoped to the attachments/* prefix only."
+variable "sqs_event_source_queue_arn" {
+  description = "ARN de la cola SQS que dispara esta Lambda via event source mapping. Solo se usa cuando attach_sqs_event_source_mapping = true."
   type        = string
   default     = ""
-}
-
-variable "attach_attachments_bucket_policy" {
-  description = "Whether to attach the S3 PutObject policy (scoped to attachments/*) to the Lambda role. Must be a static value so Terraform can plan when attachments_bucket_arn references a resource that may be replaced."
-  type        = bool
-  default     = false
-}
-
-variable "cognito_user_pool_arn" {
-  description = "ARN of the Cognito User Pool. Read by the policy when attach_cognito_policy = true."
-  type        = string
-  default     = ""
-}
-
-variable "attach_cognito_policy" {
-  description = "Whether to attach the Cognito User Pool admin access policy to the Lambda role."
-  type        = bool
-  default     = false
-}
-
-# ─── SNS publish (para tickets Lambda que publica eventos ticket.closed) ───
-
-variable "sns_topic_arn" {
-  description = "ARN del topic SNS donde la Lambda publica eventos. Read por la policy cuando attach_sns_publish_policy = true."
-  type        = string
-  default     = ""
-}
-
-variable "attach_sns_publish_policy" {
-  description = "Si es true, adjunta una policy con sns:Publish scoped al sns_topic_arn."
-  type        = bool
-  default     = false
-}
-
-# ─── SQS consume (para notifier Lambda con event source mapping) ──────────
-
-variable "sqs_queue_arn" {
-  description = "ARN de la cola SQS de la que la Lambda consume mensajes. Read por la policy y por aws_lambda_event_source_mapping cuando attach_sqs_consume_policy = true."
-  type        = string
-  default     = ""
-}
-
-variable "attach_sqs_consume_policy" {
-  description = "Si es true, adjunta IAM policy con sqs:ReceiveMessage / DeleteMessage / GetQueueAttributes scoped al sqs_queue_arn, Y crea el aws_lambda_event_source_mapping que conecta la cola con la Lambda."
-  type        = bool
-  default     = false
 }
 
 variable "sqs_batch_size" {
-  description = "Cantidad de mensajes SQS que el event source mapping entrega por invocación de la Lambda. 1 = un mensaje por invocación (fácil debuggear, retry granular). 10 = mejor throughput. Default 1 para MVP."
+  description = "Cantidad de mensajes SQS que el event source mapping entrega por invocación. 1 = un mensaje por invocación (debug granular, retry granular). 10 = throughput. Default 1 para MVP."
   type        = number
   default     = 1
 }
 
 variable "maximum_batching_window_in_seconds" {
-  description = "Tiempo (segundos) que SQS espera para acumular hasta sqs_batch_size mensajes antes de invocar la Lambda. 0 = invoca apenas hay un mensaje (latencia mínima). > 0 = agrupa para ahorrar invocaciones a costa de latencia adicional. Requerido por el rubric OYD-D4 Deliverable B como input variable."
+  description = "Tiempo (segundos) que SQS espera para acumular hasta sqs_batch_size mensajes antes de invocar la Lambda. 0 = latencia mínima. > 0 = ahorra invocaciones a costa de latencia. Requerido por el rubric OYD-D4 Deliverable B como input variable."
   type        = number
   default     = 0
 
@@ -153,111 +120,27 @@ variable "maximum_batching_window_in_seconds" {
 }
 
 variable "bisect_batch_on_function_error" {
-  description = "Si es true, cuando el handler de la Lambda tira un error con un batch, SQS divide el batch en dos sub-batches y reintenta. Aísla el record envenenado sin re-procesar todo el batch original. Requerido por el rubric OYD-D4 Deliverable B como input variable."
+  description = "Si es true, cuando el handler tira un error con un batch, SQS divide en sub-batches y reintenta. NOTA: AWS SQS NO soporta este parámetro (solo Kinesis/DDB Streams) — la var queda declarada por contrato del rubric OYD-D4 Deliverable B pero NO se cablea al resource event_source_mapping."
   type        = bool
   default     = false
-}
-
-# ─── SQS SendMessage (producer) ──────────────────────────────────────────
-# Para Lambdas que ENCOLAN mensajes a una cola, no que la consumen. Producer
-# tipo POST /enqueue del Deliverable E del rubric OYD-D4.
-
-variable "sqs_send_queue_arn" {
-  description = "ARN de la cola SQS donde la Lambda envía mensajes (sqs:SendMessage). Read por la policy cuando attach_sqs_send_policy = true. Scoped al ARN exacto — no wildcards."
-  type        = string
-  default     = ""
-}
-
-variable "attach_sqs_send_policy" {
-  description = "Si es true, adjunta IAM policy con sqs:SendMessage / sqs:GetQueueAttributes scoped al sqs_send_queue_arn. Separada de attach_sqs_consume_policy porque envío y consumo son flows distintos con consumidores y permisos diferentes."
-  type        = bool
-  default     = false
-}
-
-# ─── S3 PutObject para async events (least-privilege scoped a prefix) ────
-# Separada de attach_attachments_bucket_policy porque el async consumer
-# escribe bajo un prefix distinto (ej. async-events/*) y queremos que los
-# permisos sean exactos al prefix, no a todo el bucket.
-
-variable "async_bucket_arn" {
-  description = "ARN del bucket S3 donde el async consumer escribe objetos. Read por la policy cuando attach_async_bucket_policy = true. Combinado con async_bucket_key_prefix forma el Resource de la policy: \"$${arn}/$${prefix}*\"."
-  type        = string
-  default     = ""
-}
-
-variable "async_bucket_key_prefix" {
-  description = "Prefix de keys en el bucket S3 donde el async consumer está autorizado a escribir (ej. \"async-events/\" — IMPORTANTE: incluir el slash final). La policy se scoped a \"$${async_bucket_arn}/$${prefix}*\" — fuera del prefix, los s3:PutObject fallan con AccessDenied."
-  type        = string
-  default     = ""
-}
-
-variable "attach_async_bucket_policy" {
-  description = "Si es true, adjunta IAM policy con s3:PutObject scoped a async_bucket_arn/async_bucket_key_prefix*. Separada de attach_attachments_bucket_policy (que vive en otro prefix) para mantener least-privilege real por consumidor."
-  type        = bool
-  default     = false
-}
-
-# ─── SES SendEmail (para notifier Lambda) ─────────────────────────────────
-
-variable "ses_from_address" {
-  description = "Dirección remitente que la Lambda usa para SendEmail. La policy condiciona ses:FromAddress a este valor — la Lambda no puede mandar como cualquier otro address aunque el dominio entero esté verificado."
-  type        = string
-  default     = ""
-}
-
-variable "attach_ses_send_policy" {
-  description = "Si es true, adjunta IAM policy con ses:SendEmail / SendRawEmail con condition StringEquals ses:FromAddress = ses_from_address."
-  type        = bool
-  default     = false
-}
-
-# ─── WebSocket Management API (para PostToConnection) ─────────────────────
-
-variable "websocket_api_execution_arn" {
-  description = "Execution ARN del WebSocket API. Read por la policy y por el lambda_permission cuando attach_websocket_management_policy = true."
-  type        = string
-  default     = ""
-}
-
-variable "attach_websocket_management_policy" {
-  description = "Si es true, adjunta IAM policy con execute-api:ManageConnections scoped al websocket_api_execution_arn. Necesario para que la Lambda pueda hacer PostToConnection a clientes WS conectados."
-  type        = bool
-  default     = false
-}
-
-# ─── Cognito (para verificación JWT en chat-ws Lambda) ───────────────────
-
-variable "cognito_user_pool_id" {
-  description = "ID del Cognito User Pool. Se expone como env var COGNITO_USER_POOL_ID al runtime. La Lambda chat-ws lo usa con aws-jwt-verify para validar el JWT recibido en $connect query string."
-  type        = string
-  default     = ""
-}
-
-variable "cognito_user_pool_client_id" {
-  description = "Client ID del Cognito User Pool. Se expone como env var COGNITO_APP_CLIENT_ID al runtime. aws-jwt-verify lo necesita para validar el claim audience del JWT."
-  type        = string
-  default     = ""
 }
 
 # ─── EventBridge Scheduler (OYD-D4 Deliverable C) ─────────────────────────
-# Variables del nuevo aws_scheduler_schedule. El attach_scheduler flag
-# desacopla la creación del recurso del schedule_expression (que también
-# usa el viejo aws_cloudwatch_event_rule durante la transición).
 
 variable "attach_scheduler" {
-  description = "Si es true, crea aws_scheduler_schedule (EventBridge Scheduler — API nueva del rubric OYD-D4 Deliverable C) + IAM role dedicado + policy lambda:InvokeFunction scoped al ARN exacto del target Lambda. NO wildcards."
+  description = "Si es true, crea aws_scheduler_schedule + asigna scheduler_role_arn como invoker. NO crea el rol — viene del módulo iam/."
   type        = bool
   default     = false
 }
 
 variable "scheduler_timezone" {
-  description = "IANA timezone para schedule_expression (ej. \"America/Guatemala\", \"UTC\"). Solo aplica cuando attach_scheduler = true — EventBridge Scheduler soporta timezones nativos; la API legacy de Events solo soportaba UTC."
+  description = "IANA timezone para schedule_expression (ej. \"America/Guatemala\", \"UTC\"). Solo aplica cuando attach_scheduler = true."
   type        = string
   default     = "UTC"
 }
 
 variable "scheduler_state" {
-  description = "Estado inicial del schedule: ENABLED (dispara según schedule_expression) o DISABLED (recurso creado pero pausado). Útil para crear el schedule sin que arranque hasta tener handler y permisos confirmados."
+  description = "Estado inicial del schedule: ENABLED o DISABLED. Útil para crear el schedule sin que arranque hasta tener handler/permisos confirmados."
   type        = string
   default     = "ENABLED"
 
@@ -267,12 +150,8 @@ variable "scheduler_state" {
   }
 }
 
-# ─── EventBridge Schedule LEGACY (aws_cloudwatch_event_rule) ──────────────
-# Coexiste con aws_scheduler_schedule durante la transición. En la próxima
-# limpieza se removerá: el rubric OYD-D4 exige específicamente
-# aws_scheduler_schedule (API nueva), no la legacy.
 variable "schedule_expression" {
-  description = "Expresión cron o rate para invocar la Lambda periódicamente (ej. 'rate(5 minutes)'). Si se especifica, crea una regla de EventBridge y el permiso asociado."
+  description = "Expresión cron o rate para invocar la Lambda periódicamente (ej. 'rate(1 hour)'). Si es \"\" no se crea ni el legacy event rule ni el scheduler v2."
   type        = string
   default     = ""
 }

@@ -1,3 +1,44 @@
+# ─── IAM — Deliverable A del rubric OYD-D5 ─────────────────────────────────
+# Centraliza los 6 roles runtime (5 Lambdas + 1 Scheduler) + el ci_runner role
+# (OIDC) cuando enable_oidc = true. Ningún módulo abajo crea roles inline —
+# todos consumen los ARNs como inputs.
+#
+# OIDC se mantiene en false acá (Task 3 lo activa). Cuando se active, hay que
+# proveer github_owner y github_repo (vienen de root vars).
+module "iam" {
+  source = "./modules/iam"
+
+  environment  = var.environment
+  project_name = var.project_name
+
+  # ARNs de recursos consumidos por las policies.
+  tickets_table_arn           = module.database.table_arn
+  attachments_bucket_arn      = module.storage.bucket_arn
+  cognito_user_pool_arn       = module.security.user_pool_arn
+  notifications_sns_topic_arn = module.notifications.sns_topic_arn
+  notifications_sqs_queue_arn = module.notifications.sqs_queue_arn
+  async_sqs_queue_arn         = module.async.queue_arn
+  websocket_api_execution_arn = module.realtime.api_execution_arn
+  ses_domain                  = var.dns_parent_domain
+  ses_from_address            = var.ses_from_address
+
+  # Function base names — iam construye los log group ARNs y el watchdog
+  # function ARN por convención ($${base}-$${environment}). Evita ciclo
+  # iam ↔ compute.
+  tickets_function_base_name        = var.compute_function_name
+  chat_ws_function_base_name        = var.chat_ws_function_name
+  notifier_function_base_name       = "ticket-notifier"
+  async_consumer_function_base_name = "${var.project_name}-async-consumer"
+  watchdog_function_base_name       = "${var.project_name}-watchdog"
+
+  # OIDC: se activa en Task 3 — cuando enable_oidc = true se necesitan los
+  # 2 inputs de github_*. Mientras tanto, valores vacíos por default.
+  enable_oidc  = var.enable_github_oidc
+  github_owner = var.github_owner
+  github_repo  = var.github_repo
+}
+
+# ─── Tickets Lambda (REST API handler) ─────────────────────────────────────
 module "compute" {
   source = "./modules/compute"
 
@@ -5,30 +46,7 @@ module "compute" {
   name        = var.compute_function_name
   memory_size = var.compute_memory_size
 
-  attach_dynamodb_policy = true
-  dynamodb_table_arn     = module.database.table_arn
-
-  attach_attachments_bucket_policy = true
-  attachments_bucket_arn           = module.storage.bucket_arn
-
-  attach_cognito_policy = true
-  cognito_user_pool_arn = module.security.user_pool_arn
-
-  # SNS publish para eventos del dominio tickets (ticket.closed). El topic se
-  # crea en el módulo notifications; la Lambda lo consume vía env var.
-  attach_sns_publish_policy = true
-  sns_topic_arn             = module.notifications.sns_topic_arn
-
-  # WebSocket Management: la tickets Lambda necesita PostToConnection para
-  # hacer broadcast del evento ticket.closed a todas las conexiones del
-  # ticket (colaborador con widget abierto + agente con panel abierto).
-  attach_websocket_management_policy = true
-  websocket_api_execution_arn        = module.realtime.api_execution_arn
-
-  # SQS SendMessage: producer del endpoint POST /async/enqueue (OYD-D4
-  # Deliverable E). Scoped al ARN exacto de la cola async, no wildcard.
-  attach_sqs_send_policy = true
-  sqs_send_queue_arn     = module.async.queue_arn
+  execution_role_arn = module.iam.tickets_lambda_role_arn
 
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
@@ -41,10 +59,10 @@ module "compute" {
   }
 }
 
-# Async consumer Lambda — consumer del flow Deliverable E del rubric
-# OYD-D4. Recibe records vía aws_lambda_event_source_mapping desde la
-# cola del módulo async/. Por cada mensaje escribe UN objeto a S3 bajo el
-# prefix async-events/<message_id>.json y loggea el messageId.
+# ─── Async consumer Lambda — OYD-D4 Deliverable E ─────────────────────────
+# Recibe records via event source mapping desde el async queue. Por cada
+# mensaje escribe UN objeto a S3 bajo async-events/<message_id>.json y, si
+# el evento es ticket.expired, manda email vía SES al solicitante.
 module "async_consumer" {
   source = "./modules/compute"
 
@@ -54,27 +72,14 @@ module "async_consumer" {
   timeout_seconds = 30
   memory_size     = 128
 
-  # SQS consume: event source mapping + IAM (sqs:Receive/Delete/GetQueue
-  # scoped al queue ARN exacto, no wildcard).
-  attach_sqs_consume_policy          = true
-  sqs_queue_arn                      = module.async.queue_arn
+  execution_role_arn = module.iam.async_consumer_lambda_role_arn
+
+  # SQS event source mapping (la policy de consume vive en iam/).
+  attach_sqs_event_source_mapping    = true
+  sqs_event_source_queue_arn         = module.async.queue_arn
   sqs_batch_size                     = 1
   maximum_batching_window_in_seconds = 0
   bisect_batch_on_function_error     = true
-
-  # S3 PutObject scoped al prefix async-events/* del bucket de attachments
-  # (reusamos el bucket de D2 sin duplicar resources — la separación es
-  # por prefix, no por bucket).
-  attach_async_bucket_policy = true
-  async_bucket_arn           = module.storage.bucket_arn
-  async_bucket_key_prefix    = "async-events/"
-
-  # SES SendEmail con condition StringEquals ses:FromAddress. Cuando el
-  # consumer procesa un evento `ticket.expired`, manda email al solicitante.
-  # Misma from-address que el notifier (soporte@lumenchat.app) para que el
-  # destinatario perciba un único remitente del sistema.
-  attach_ses_send_policy = true
-  ses_from_address       = var.ses_from_address
 
   environment_variables = {
     ASYNC_BUCKET_NAME       = module.storage.bucket_name
@@ -83,10 +88,9 @@ module "async_consumer" {
   }
 }
 
-# Notifier Lambda: consumer de la cola SQS que recibe los eventos publicados
-# al SNS topic. Por cada mensaje, manda un email vía SES a solicitante.correo.
-# Es una segunda instancia del módulo compute con source_dir distinto y
-# perms IAM distintos (SQS consume + SES send en vez de DDB + S3).
+# ─── Notifier Lambda — Cloud E4 ────────────────────────────────────────────
+# Consumer de la SQS suscripta al topic SNS. Por cada mensaje (ticket.closed)
+# manda email vía SES al solicitante.correo, con record de idempotencia en DDB.
 module "notifier" {
   source = "./modules/compute"
 
@@ -95,19 +99,10 @@ module "notifier" {
   source_dir      = "${path.module}/modules/compute/src/notifier"
   timeout_seconds = 15
 
-  attach_sqs_consume_policy = true
-  sqs_queue_arn             = module.notifications.sqs_queue_arn
+  execution_role_arn = module.iam.notifier_lambda_role_arn
 
-  attach_ses_send_policy = true
-  ses_from_address       = var.ses_from_address
-
-  # Acceso a DynamoDB para registros de idempotencia (IDEMPOTENCY#<message_id>
-  # en la misma tabla tickets-dev). Necesita GetItem (check pre-send) y
-  # PutItem (mark post-send). La policy del módulo compute incluye también
-  # Query y UpdateItem que no usamos acá — el scope sigue siendo el ARN
-  # exacto de la tabla, así que el blast radius está acotado.
-  attach_dynamodb_policy = true
-  dynamodb_table_arn     = module.database.table_arn
+  attach_sqs_event_source_mapping = true
+  sqs_event_source_queue_arn      = module.notifications.sqs_queue_arn
 
   environment_variables = {
     SES_FROM_ADDRESS   = var.ses_from_address
@@ -115,9 +110,7 @@ module "notifier" {
   }
 }
 
-# Lambda chat-ws: handler para el WebSocket API (3 routes WS) + 2 endpoints
-# HTTP en REST API (history + presigned upload URLs). Reutiliza el módulo
-# compute. Source en infra/modules/compute/src/chat-ws/.
+# ─── chat-ws Lambda — WebSocket API handler + HTTP chat endpoints ─────────
 module "chat_ws" {
   source = "./modules/compute"
 
@@ -126,23 +119,7 @@ module "chat_ws" {
   source_dir      = "${path.module}/modules/compute/src/chat-ws"
   timeout_seconds = 15
 
-  # DynamoDB: leer/escribir mensajes, conexiones, ticket metadata.
-  attach_dynamodb_policy = true
-  dynamodb_table_arn     = module.database.table_arn
-
-  # S3: GetObject (presigned GET para descargas) + PutObject (presigned PUT
-  # para uploads). La policy del módulo cubre ambas operaciones.
-  attach_attachments_bucket_policy = true
-  attachments_bucket_arn           = module.storage.bucket_arn
-
-  # WebSocket Management: PostToConnection requerida para broadcast.
-  attach_websocket_management_policy = true
-  websocket_api_execution_arn        = module.realtime.api_execution_arn
-
-  # Cognito: ID + ClientID inyectados como env vars para aws-jwt-verify
-  # validar JWT en $connect.
-  cognito_user_pool_id        = module.security.user_pool_id
-  cognito_user_pool_client_id = module.security.user_pool_client_id
+  execution_role_arn = module.iam.chat_ws_lambda_role_arn
 
   environment_variables = {
     TICKETS_TABLE_NAME      = module.database.table_name
@@ -153,8 +130,9 @@ module "chat_ws" {
   }
 }
 
-# Watchdog Lambda: Trabajo automático en segundo plano que revisa periódicamente
-# los tickets para marcar como "Vencido" aquellos que excedieron su SLA.
+# ─── Watchdog Lambda — barrido periódico de SLA ───────────────────────────
+# Trigger: aws_scheduler_schedule (EventBridge Scheduler v2 — OYD-D4 Del C).
+# Por cada ticket vencido, publica ticket.expired al async queue.
 module "watchdog" {
   source = "./modules/compute"
 
@@ -165,22 +143,12 @@ module "watchdog" {
   memory_size     = 128
   timeout_seconds = 60
 
-  # OYD-D4 Deliverable C: usa el aws_scheduler_schedule nuevo (EventBridge
-  # Scheduler) en lugar del legacy aws_cloudwatch_event_rule. El módulo
-  # gatea ambos triggers — con attach_scheduler = true se crea solo el
-  # nuevo + su IAM role dedicado scoped al ARN de esta Lambda.
-  attach_scheduler       = true
-  schedule_expression    = var.watchdog_schedule
-  scheduler_timezone     = var.watchdog_timezone
-  attach_dynamodb_policy = true
-  dynamodb_table_arn     = module.database.table_arn
+  execution_role_arn = module.iam.watchdog_lambda_role_arn
+  scheduler_role_arn = module.iam.scheduler_invoke_role_arn
 
-  # Publica eventos `ticket.expired` al async queue (módulo async/). El
-  # async_consumer toma el mensaje, escribe audit log a S3 y manda email
-  # al solicitante vía SES. Flow distinto del notifier (que vive en el
-  # pipeline SNS+SQS de Cloud E4 y maneja `ticket.closed`).
-  attach_sqs_send_policy = true
-  sqs_send_queue_arn     = module.async.queue_arn
+  attach_scheduler    = true
+  schedule_expression = var.watchdog_schedule
+  scheduler_timezone  = var.watchdog_timezone
 
   environment_variables = {
     TICKETS_TABLE_NAME = module.database.table_name
@@ -188,11 +156,27 @@ module "watchdog" {
   }
 }
 
+# ─── KMS — Deliverable B del rubric OYD-D5 ─────────────────────────────────
+# CMK que encripta S3 (attachments + async-events) y DynamoDB. Reemplaza:
+#   - SSE-S3 (AES256) que estaba activo en storage/ desde D2
+#   - DynamoDB AWS-managed default key
+# La key policy autoriza al service principal correspondiente vía kms:ViaService
+# y a las 5 Lambda execution roles para Decrypt/GenerateDataKey en lecturas.
+module "kms" {
+  source = "./modules/kms"
+
+  environment        = var.environment
+  project_name       = var.project_name
+  consumer_role_arns = module.iam.all_lambda_role_arns
+}
+
+# ─── Capa de almacenamiento ──────────────────────────────────────────────
 module "storage" {
   source = "./modules/storage"
 
   environment        = var.environment
   bucket_name_prefix = var.attachments_bucket_name_prefix
+  kms_key_arn        = module.kms.key_arn
 }
 
 module "database" {
@@ -201,6 +185,7 @@ module "database" {
   environment  = var.environment
   name         = var.tickets_table_name
   billing_mode = var.db_billing_mode
+  kms_key_arn  = module.kms.key_arn
 }
 
 module "security" {
@@ -210,6 +195,7 @@ module "security" {
   name        = var.cognito_name
 }
 
+# ─── API Gateway REST + WebSocket ────────────────────────────────────────
 module "api" {
   source = "./modules/api"
 
@@ -228,10 +214,6 @@ module "api" {
   health_check_path  = var.api_health_check_path
 }
 
-# WebSocket API: provee las 3 routes $connect, $disconnect, sendMessage
-# integradas a la Lambda chat-ws. Custom domain wss://ws.ticke-t.lumenchat.app
-# habilitado cuando dns_enable_ws_custom_domain = true (reutiliza el cert
-# wildcard del módulo dns).
 module "realtime" {
   source = "./modules/realtime"
 
@@ -254,11 +236,7 @@ module "waf" {
   rate_limit_per_5min   = var.waf_rate_limit_per_5min
 }
 
-# Pipeline async de notificaciones: SNS topic + SQS queue principal + DLQ.
-# La tickets Lambda publica eventos al topic; el notifier Lambda los consume
-# desde la SQS y manda emails vía SES. Mensajes con 3 fallos consecutivos
-# (recipient inválido, SES sandbox restrictivo, etc.) van a la DLQ para
-# inspección manual.
+# ─── Pipeline async de notificaciones (Cloud E4) ─────────────────────────
 module "notifications" {
   source = "./modules/notifications"
 
@@ -267,14 +245,7 @@ module "notifications" {
   max_receive_count = var.notifications_max_receive_count
 }
 
-# Async messaging module — Deliverable A del rubric OYD-D4. SQS queue
-# principal + DLQ con redrive_policy. Distinto del módulo notifications
-# (que carga SNS + SQS específicos al dominio tickets); este es genérico
-# y reusable para cualquier flow de message-passing en el repo.
-#
-# Consumido por:
-#   - module.compute (tickets Lambda) como producer — POST /async/enqueue.
-#   - module.async_consumer como consumer — event source mapping + S3 PutObject.
+# ─── Async messaging module (OYD-D4 Deliverable A) ───────────────────────
 module "async" {
   source = "./modules/async"
 
@@ -287,15 +258,7 @@ module "async" {
   dlq_message_retention_seconds = var.async_dlq_message_retention_seconds
 }
 
-# DNS administrado por Terraform. Solo se instancia si var.dns_parent_domain
-# está seteado. Esta versión maneja la HOSTED ZONE COMPLETA del dominio
-# (lumenchat.app): los nameservers del registrador apuntan acá y todos los
-# records de la zona se gestionan como código.
-#
-# Los records inline cubren el inventario completo del dominio (apex A/AAAA,
-# MX para email, TXT para SPF/DMARC, CNAMEs para www/ftp/correo/DKIM). Si en
-# algún momento se agregue un record en Route 53 que no esté acá, hay que
-# sumarlo a esta lista o se perderá en el próximo apply.
+# ─── DNS (Route 53 + ACM + SES identity) ─────────────────────────────────
 module "dns" {
   source = "./modules/dns"
   count  = var.dns_parent_domain != "" ? 1 : 0
@@ -308,7 +271,6 @@ module "dns" {
   api_gateway_id             = module.api.api_id
   api_gateway_stage_name     = var.api_stage_name
 
-  # Records DNS de la zona (apex + subdominios).
   apex_a_record    = "82.25.83.178"
   apex_aaaa_record = "2a02:4780:2b:2099:0:1692:2e5b:2"
   apex_mx_records = [

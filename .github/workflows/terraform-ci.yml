@@ -22,6 +22,10 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  # OIDC token exchange — D5 Deliverable C. Sin este permission el step de
+  # configure-aws-credentials no puede pedir un token JWT a GitHub OIDC y
+  # falla con "Could not assume role with OIDC".
+  id-token: write
 
 defaults:
   run:
@@ -100,12 +104,16 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials (dev)
+      # OIDC federation — D5 Deliverable C. role-to-assume es el ci_runner
+      # ARN provisionado por module.iam (terraform output iam_ci_runner_role_arn).
+      # Trust policy acepta sub claims pull_request, environment:dev,
+      # environment:staging y ref:refs/heads/main — todas scopeadas al repo.
+      # AWS_ROLE_ARN_DEV se setea como GH var en Settings → Variables.
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
 
       - name: Terraform init (backend-dev.hcl)
         run: terraform init -backend-config=envs/dev/backend-dev.hcl -input=false

@@ -29,3 +29,12 @@ ses_from_address = "soporte@lumenchat.app"
 # (reusa el cert wildcard de dns).
 dns_ws_full_hostname        = "ws.ticke-t.lumenchat.app"
 dns_enable_ws_custom_domain = true
+
+# ─── OIDC federation con GitHub Actions (OYD-D5 Deliverable C) ────────────
+# Provisiona el OIDC provider de GitHub Actions + ci_runner role assumable
+# vía sts:AssumeRoleWithWebIdentity. Reemplaza las access keys long-lived
+# (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) que se borran de GH Secrets
+# despues de validar que los workflows funcionan con OIDC.
+enable_github_oidc = true
+github_owner       = "SebastianAlecio"
+github_repo        = "PDDS-2-trimestre-proyecto"

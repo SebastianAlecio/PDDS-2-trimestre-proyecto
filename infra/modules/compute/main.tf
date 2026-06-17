@@ -3,39 +3,16 @@ locals {
   source_dir    = var.source_dir != "" ? var.source_dir : "${path.module}/src"
 }
 
-resource "aws_iam_role" "lambda_exec" {
-  name = "${local.function_name}-exec"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
+# CloudWatch log group de la función. Naming matchea el log group ARN que el
+# módulo iam construye por convención (arn:aws:logs:...:log-group:/aws/lambda/${function_name}).
+# Si cambia el path o el formato, hay que actualizar el local correspondiente
+# en iam/ para que las policies de logs sigan scopeando al ARN correcto.
+#
+# NOTA D5 Task 5: este recurso se va a mover al módulo observability/ en una
+# task posterior; mientras tanto convive acá para preservar el state.
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.function_name}"
   retention_in_days = var.log_retention_days
-}
-
-resource "aws_iam_role_policy" "lambda_logs" {
-  name = "${local.function_name}-logs"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents",
-      ]
-      Resource = "${aws_cloudwatch_log_group.lambda.arn}:*"
-    }]
-  })
 }
 
 # Si la Lambda tiene package.json (depende de paquetes npm como
@@ -67,9 +44,13 @@ data "archive_file" "lambda" {
   depends_on = [null_resource.npm_install]
 }
 
+# Función Lambda. El role viene del módulo iam/ como input — este módulo ya
+# no crea su propio rol (D5 Deliverable A). El log group debe existir antes
+# de que Lambda registre su primer invocación (sino AWS auto-crea uno con
+# retention=Never, y el resource TF se queda huérfano).
 resource "aws_lambda_function" "this" {
   function_name = local.function_name
-  role          = aws_iam_role.lambda_exec.arn
+  role          = var.execution_role_arn
   handler       = var.handler
   runtime       = var.runtime
   architectures = var.architectures
@@ -86,262 +67,35 @@ resource "aws_lambda_function" "this" {
     }
   }
 
-  depends_on = [
-    aws_cloudwatch_log_group.lambda,
-    aws_iam_role_policy.lambda_logs,
-  ]
+  depends_on = [aws_cloudwatch_log_group.lambda]
 }
 
-resource "aws_iam_role_policy" "lambda_dynamodb" {
-  count = var.attach_dynamodb_policy ? 1 : 0
-
-  name = "${local.function_name}-dynamodb"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      # PutItem/Query/GetItem/UpdateItem para tickets domain. DeleteItem
-      # agregado para chat-ws Lambda: limpiar CONN# items en $disconnect y
-      # reactivamente cuando PostToConnection devuelve GoneException.
-      Action = [
-        "dynamodb:PutItem",
-        "dynamodb:Query",
-        "dynamodb:GetItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-      ]
-      Resource = [
-        var.dynamodb_table_arn,
-        "${var.dynamodb_table_arn}/index/*",
-      ]
-    }]
-  })
-}
-
-# Permite a la Lambda escribir objetos al bucket de adjuntos, scoped al
-# prefix attachments/* (no a la raíz del bucket). En esta tanda escribimos
-# solo metadata JSON; cuando agreguemos presigned URLs el contenido cambia
-# pero el scope IAM permanece igual.
-resource "aws_iam_role_policy" "lambda_attachments_bucket" {
-  count = var.attach_attachments_bucket_policy ? 1 : 0
-
-  name = "${local.function_name}-attachments-bucket"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      # PutObject: el handler de crear ticket escribe metadata + el chat-ws
-      # firma presigned PUT URLs (la URL hereda los permisos del firmante).
-      # GetObject: chat-ws firma presigned GET URLs para que el frontend
-      # descargue/renderice adjuntos del chat.
-      Action   = ["s3:PutObject", "s3:GetObject"]
-      Resource = ["${var.attachments_bucket_arn}/attachments/*"]
-    }]
-  })
-}
-
-# Permite a la Lambda administrar usuarios y grupos en Cognito
-resource "aws_iam_role_policy" "lambda_cognito" {
-  count = var.attach_cognito_policy ? 1 : 0
-
-  name = "${local.function_name}-cognito"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "cognito-idp:AdminCreateUser",
-        "cognito-idp:AdminDeleteUser",
-        "cognito-idp:AdminUpdateUserAttributes",
-        "cognito-idp:AdminDisableUser",
-        "cognito-idp:AdminEnableUser",
-        "cognito-idp:AdminAddUserToGroup",
-        "cognito-idp:AdminRemoveUserFromGroup"
-      ]
-      Resource = [var.cognito_user_pool_arn]
-    }]
-  })
-}
-
-# ─── SNS publish ─────────────────────────────────────────────────────────
+# ─── SQS event source mapping ────────────────────────────────────────────
+# Conecta una cola SQS con la Lambda (long-polling + entrega de batches). La
+# IAM policy que permite sqs:ReceiveMessage/DeleteMessage/etc vive en el
+# módulo iam/ (en el rol correspondiente). Acá solo se crea el resource del
+# mapping cuando attach_sqs_event_source_mapping = true.
 #
-# Permite a la Lambda publicar mensajes al topic SNS específico. Scoped al
-# ARN del topic (no permite publicar a otros topics de la cuenta).
-resource "aws_iam_role_policy" "lambda_sns_publish" {
-  count = var.attach_sns_publish_policy ? 1 : 0
-
-  name = "${local.function_name}-sns-publish"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sns:Publish"]
-      Resource = [var.sns_topic_arn]
-    }]
-  })
-}
-
-# ─── SQS consume ─────────────────────────────────────────────────────────
-#
-# Permisos requeridos por el aws_lambda_event_source_mapping para que el
-# servicio de Lambda haga long-polling sobre la cola y entregue mensajes a
-# la función. Scoped al ARN exacto de la cola.
-resource "aws_iam_role_policy" "lambda_sqs_consume" {
-  count = var.attach_sqs_consume_policy ? 1 : 0
-
-  name = "${local.function_name}-sqs-consume"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "sqs:ReceiveMessage",
-        "sqs:DeleteMessage",
-        "sqs:GetQueueAttributes",
-        "sqs:ChangeMessageVisibility",
-      ]
-      Resource = [var.sqs_queue_arn]
-    }]
-  })
-}
-
-# Event source mapping: conecta la cola con la Lambda. El servicio Lambda
-# hace long-polling y entrega batches de mensajes al handler. batch_size
-# controla el throughput vs facilidad de debug (1 = un mensaje por
-# invocación, retry granular). Si el handler tira un error, el batch
-# completo vuelve a la cola y el receive_count se incrementa — eso es lo
-# que mueve mensajes a la DLQ después de max_receive_count intentos.
+# batch_size, maximum_batching_window_in_seconds, bisect_batch_on_function_error
+# vienen como inputs del rubric OYD-D4 Deliverable B. NOTA: AWS SQS no soporta
+# bisect_batch_on_function_error (solo Kinesis/DDB Streams) — la variable
+# queda declarada en variables.tf por compatibilidad de contrato del rubric
+# pero NO se cablea al resource.
 resource "aws_lambda_event_source_mapping" "sqs" {
-  count = var.attach_sqs_consume_policy ? 1 : 0
+  count = var.attach_sqs_event_source_mapping ? 1 : 0
 
-  event_source_arn = var.sqs_queue_arn
-  function_name    = aws_lambda_function.this.arn
-  batch_size       = var.sqs_batch_size
-  enabled          = true
-
-  # maximum_batching_window_in_seconds: cuánto espera SQS para acumular
-  # mensajes antes de mandar el batch al Lambda. 0 = enviar apenas haya
-  # uno disponible (latencia mínima). > 0 = agrupa hasta llenar batch_size
-  # o vencer la ventana (ahorra invocaciones a costa de latencia).
+  event_source_arn                   = var.sqs_event_source_queue_arn
+  function_name                      = aws_lambda_function.this.arn
+  batch_size                         = var.sqs_batch_size
   maximum_batching_window_in_seconds = var.maximum_batching_window_in_seconds
-
-  # NOTA — bisect_batch_on_function_error: el rubric OYD-D4 lo pide como
-  # input variable del módulo (y existe — ver variables.tf) pero AWS SQS
-  # NO soporta este parámetro (solo Kinesis y DynamoDB Streams lo aceptan).
-  # Cablearlo acá hace fallar el apply con InvalidParameterValueException.
-  # Mantenemos la variable declarada para satisfacer el contrato del rubric
-  # pero NO la cableamos al resource — es no-op para event sources SQS.
-
-  depends_on = [aws_iam_role_policy.lambda_sqs_consume]
+  enabled                            = true
 }
 
-# ─── SQS SendMessage (producer) ────────────────────────────────────────────
-#
-# Para Lambdas que ENCOLAN mensajes a una SQS (no que las consumen). Útil
-# para los handlers tipo POST /<resource>/enqueue del Deliverable E del
-# rubric OYD-D4. Scoped al ARN exacto de la cola — sin wildcard.
-resource "aws_iam_role_policy" "lambda_sqs_send" {
-  count = var.attach_sqs_send_policy ? 1 : 0
-
-  name = "${local.function_name}-sqs-send"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
-      Resource = [var.sqs_send_queue_arn]
-    }]
-  })
-}
-
-# ─── S3 PutObject scoped a un prefix configurable ──────────────────────────
-#
-# Separada de attach_attachments_bucket_policy (que ya está scoped a
-# attachments/*) porque el async consumer del rubric OYD-D4 Deliverable E
-# escribe bajo un prefix distinto (ej. async-events/*) y queremos
-# least-privilege real, no un permiso que cubra todo el bucket.
-resource "aws_iam_role_policy" "lambda_async_bucket" {
-  count = var.attach_async_bucket_policy ? 1 : 0
-
-  name = "${local.function_name}-async-bucket"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject"]
-      Resource = ["${var.async_bucket_arn}/${var.async_bucket_key_prefix}*"]
-    }]
-  })
-}
-
-# ─── SES SendEmail ───────────────────────────────────────────────────────
-#
-# Permite a la Lambda mandar emails vía SES. La condition StringEquals sobre
-# ses:FromAddress restringe el remitente: aunque el dominio entero esté
-# verificado en SES, esta Lambda solo puede mandar desde la dirección
-# específica configurada (ej. soporte@lumenchat.app). Sin esta condition,
-# cualquier address verificado del dominio podría usarse.
-resource "aws_iam_role_policy" "lambda_ses_send" {
-  count = var.attach_ses_send_policy ? 1 : 0
-
-  name = "${local.function_name}-ses-send"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-      Resource = "*"
-      Condition = {
-        StringEquals = {
-          "ses:FromAddress" = var.ses_from_address
-        }
-      }
-    }]
-  })
-}
-
-# ─── WebSocket Management ────────────────────────────────────────────────
-# Necesario para PostToConnection. Scope: solo este WebSocket API específico.
-resource "aws_iam_role_policy" "lambda_websocket_management" {
-  count = var.attach_websocket_management_policy ? 1 : 0
-
-  name = "${local.function_name}-ws-mgmt"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["execute-api:ManageConnections"]
-      Resource = ["${var.websocket_api_execution_arn}/*/POST/@connections/*"]
-    }]
-  })
-}
-
-# ─── EventBridge Schedule (para Watchdog) ────────────────────────────────
-#
-# Si se proporciona schedule_expression, configura una regla de EventBridge
-# para invocar esta Lambda periódicamente de forma automática.
-# LEGACY: aws_cloudwatch_event_rule + lambda_permission para schedule.
-# Solo se crea si attach_scheduler = false (transición). Cuando
-# attach_scheduler = true el nuevo aws_scheduler_schedule lo reemplaza
-# completamente — no se quiere que ambos triggers se ejecuten en paralelo.
+# ─── EventBridge Schedule LEGACY (aws_cloudwatch_event_rule) ──────────────
+# Solo se crea si attach_scheduler = false y schedule_expression != "" (modo
+# legacy puro). Cuando attach_scheduler = true se usa el aws_scheduler_schedule
+# nuevo (OYD-D4 Deliverable C exige el API nuevo). Mantenido por backwards-
+# compatibility de la transición; no se usa en dev/staging actualmente.
 resource "aws_cloudwatch_event_rule" "schedule" {
   count               = var.schedule_expression != "" && !var.attach_scheduler ? 1 : 0
   name                = "${local.function_name}-schedule"
@@ -364,62 +118,15 @@ resource "aws_lambda_permission" "eventbridge_invoke" {
   source_arn    = aws_cloudwatch_event_rule.schedule[0].arn
 }
 
-# ─── EventBridge Scheduler (OYD-D4 Deliverable C) ─────────────────────────
-# API NUEVA de scheduling (aws_scheduler_schedule, namespace "scheduler").
-# Distinto del API legacy de EventBridge Rules (aws_cloudwatch_event_rule)
-# que también soporta cron — el rubric exige específicamente
-# aws_scheduler_schedule. Diferencias clave:
-#   - Schedule corre con un IAM role dedicado (no con principal del service)
-#     → permite least-privilege real scoped al target ARN.
-#   - Soporta timezones nativos (legacy es solo UTC).
-#   - Capacidad de schedules one-off además de recurrentes.
-#
-# Flag attach_scheduler controla si este recurso se crea — desacoplado del
-# schedule_expression para permitir migración incremental: por un período
-# pueden coexistir ambos triggers (legacy + scheduler) si fuera necesario,
-# aunque por default solo se usa el nuevo cuando attach_scheduler = true.
-
-resource "aws_iam_role" "scheduler_invoke" {
-  count = var.attach_scheduler ? 1 : 0
-
-  name = "${local.function_name}-scheduler-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "scheduler.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
-  count = var.attach_scheduler ? 1 : 0
-
-  name = "${local.function_name}-scheduler-invoke"
-  role = aws_iam_role.scheduler_invoke[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["lambda:InvokeFunction"]
-      Resource = [aws_lambda_function.this.arn]
-    }]
-  })
-}
-
+# ─── EventBridge Scheduler (OYD-D4 Deliverable C — API nueva) ─────────────
+# El role asumido por el scheduler para invocar la Lambda viene del módulo
+# iam/ como var.scheduler_role_arn — ya no se crea inline acá.
 resource "aws_scheduler_schedule" "this" {
   count = var.attach_scheduler ? 1 : 0
 
   name        = "${local.function_name}-schedule-v2"
   description = "EventBridge Scheduler que invoca ${local.function_name} periódicamente"
-
-  # OFF mientras no haya schedule_expression seteado, ON cuando hay valor.
-  # Esto permite "instalar" el recurso sin que dispare hasta que tengamos
-  # la expression definitiva.
-  state = var.scheduler_state
+  state       = var.scheduler_state
 
   flexible_time_window {
     mode = "OFF"
@@ -430,17 +137,11 @@ resource "aws_scheduler_schedule" "this" {
 
   target {
     arn      = aws_lambda_function.this.arn
-    role_arn = aws_iam_role.scheduler_invoke[0].arn
+    role_arn = var.scheduler_role_arn
 
-    # retry_policy ayuda a sobrevivir glitches transitorios del Lambda
-    # (cold start lento, throttling). Si el handler tira un error
-    # business-logic, igual los reintentos lo van a ver — el handler
-    # debe ser idempotente.
     retry_policy {
       maximum_event_age_in_seconds = 3600
       maximum_retry_attempts       = 3
     }
   }
-
-  depends_on = [aws_iam_role_policy.scheduler_invoke_lambda]
 }

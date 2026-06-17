@@ -36,3 +36,9 @@ variable "deletion_protection_enabled" {
   type        = bool
   default     = false
 }
+
+variable "kms_key_arn" {
+  description = "ARN del CMK que encripta la tabla. Si está vacío, DynamoDB usa la AWS-managed default key. Si está seteado, usa la CMK del módulo kms/ — requerido para D5 Deliverable B."
+  type        = string
+  default     = ""
+}

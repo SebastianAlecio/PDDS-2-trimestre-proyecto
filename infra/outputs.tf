@@ -162,3 +162,62 @@ output "async_consumer_function_arn" {
   description = "ARN de la Lambda consumer del módulo async_consumer. Se inyecta como target del aws_lambda_event_source_mapping."
   value       = module.async_consumer.function_arn
 }
+
+# ─── Security outputs (OYD-D5) ────────────────────────────────────────────
+
+output "kms_key_id" {
+  description = "ID corto de la CMK que encripta S3 + DynamoDB (D5 Deliverable B)."
+  value       = module.kms.key_id
+}
+
+output "kms_key_arn" {
+  description = "ARN de la CMK. Referenciado en aws_s3_bucket_server_side_encryption_configuration y en aws_dynamodb_table.server_side_encryption."
+  value       = module.kms.key_arn
+}
+
+output "kms_alias_name" {
+  description = "Alias amigable de la CMK (ej. alias/pdds-oyd-dev). Útil para queries con AWS CLI: aws kms describe-key --key-id alias/..."
+  value       = module.kms.alias_name
+}
+
+# ─── IAM role outputs (OYD-D5 Deliverable A — exposed for auditability) ──
+
+output "iam_tickets_lambda_role_arn" {
+  description = "ARN del execution role del tickets Lambda. Consumido por module.compute como execution_role_arn."
+  value       = module.iam.tickets_lambda_role_arn
+}
+
+output "iam_chat_ws_lambda_role_arn" {
+  description = "ARN del execution role del chat-ws Lambda."
+  value       = module.iam.chat_ws_lambda_role_arn
+}
+
+output "iam_notifier_lambda_role_arn" {
+  description = "ARN del execution role del notifier Lambda."
+  value       = module.iam.notifier_lambda_role_arn
+}
+
+output "iam_async_consumer_lambda_role_arn" {
+  description = "ARN del execution role del async_consumer Lambda."
+  value       = module.iam.async_consumer_lambda_role_arn
+}
+
+output "iam_watchdog_lambda_role_arn" {
+  description = "ARN del execution role del watchdog Lambda."
+  value       = module.iam.watchdog_lambda_role_arn
+}
+
+output "iam_scheduler_invoke_role_arn" {
+  description = "ARN del role asumido por EventBridge Scheduler para invocar el watchdog."
+  value       = module.iam.scheduler_invoke_role_arn
+}
+
+output "iam_ci_runner_role_arn" {
+  description = "ARN del role assumable via OIDC desde GitHub Actions. Vacío hasta que enable_github_oidc = true (Task 3)."
+  value       = module.iam.ci_runner_role_arn
+}
+
+output "iam_github_oidc_provider_arn" {
+  description = "ARN del provider OIDC de GitHub Actions. Vacío hasta que enable_github_oidc = true (Task 3)."
+  value       = module.iam.github_oidc_provider_arn
+}

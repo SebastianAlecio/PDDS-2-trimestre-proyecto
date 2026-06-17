@@ -2,9 +2,17 @@
   "name": "tickets-handler",
   "version": "1.0.0",
   "private": true,
-  "description": "Lambda handler for Ticke-T REST API + WebSocket chat. Deps que no vienen en el runtime de Node 22: @aws-sdk/s3-request-presigner (presigned URLs para crear ticket con adjuntos) y @aws-sdk/client-apigatewaymanagementapi (PostToConnection para broadcast del evento ticket.closed por WS al cerrar un ticket).",
+  "description": "Lambda handler for Ticke-T REST API + WebSocket chat. Deps que no vienen en el runtime de Node 22: @aws-sdk/s3-request-presigner (presigned URLs para crear ticket con adjuntos) y @aws-sdk/client-apigatewaymanagementapi (PostToConnection para broadcast del evento ticket.closed por WS al cerrar un ticket). Tests con Vitest + aws-sdk-client-mock (devDeps, npm install --omit=dev del modulo compute las excluye del zip de deploy).",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "dependencies": {
-    "@aws-sdk/s3-request-presigner": "^3.700.0",
-    "@aws-sdk/client-apigatewaymanagementapi": "^3.700.0"
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0"
+  },
+  "devDependencies": {
+    "aws-sdk-client-mock": "^4.1.0",
+    "vitest": "^4.1.8"
   }
 }

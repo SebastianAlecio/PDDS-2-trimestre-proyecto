@@ -1,0 +1,47 @@
+# IAM Resources — Deliverable A evidence
+
+Generated: 2026-06-17T22:16:01Z
+
+## terraform state list output (filtered to module.iam.*)
+
+module.iam.data.aws_caller_identity.current
+module.iam.data.aws_iam_policy_document.lambda_assume
+module.iam.data.aws_iam_policy_document.scheduler_assume
+module.iam.data.aws_region.current
+module.iam.aws_iam_role.async_consumer_lambda
+module.iam.aws_iam_role.chat_ws_lambda
+module.iam.aws_iam_role.notifier_lambda
+module.iam.aws_iam_role.scheduler_invoke
+module.iam.aws_iam_role.tickets_lambda
+module.iam.aws_iam_role.watchdog_lambda
+module.iam.aws_iam_role_policy.async_consumer_lambda_logs
+module.iam.aws_iam_role_policy.async_consumer_lambda_s3
+module.iam.aws_iam_role_policy.async_consumer_lambda_ses_send
+module.iam.aws_iam_role_policy.async_consumer_lambda_sqs_consume
+module.iam.aws_iam_role_policy.chat_ws_lambda_ddb
+module.iam.aws_iam_role_policy.chat_ws_lambda_logs
+module.iam.aws_iam_role_policy.chat_ws_lambda_s3_attachments
+module.iam.aws_iam_role_policy.chat_ws_lambda_ws_manage
+module.iam.aws_iam_role_policy.notifier_lambda_ddb
+module.iam.aws_iam_role_policy.notifier_lambda_logs
+module.iam.aws_iam_role_policy.notifier_lambda_ses_send
+module.iam.aws_iam_role_policy.notifier_lambda_sqs_consume
+module.iam.aws_iam_role_policy.scheduler_invoke_lambda
+module.iam.aws_iam_role_policy.tickets_lambda_cognito
+module.iam.aws_iam_role_policy.tickets_lambda_ddb
+module.iam.aws_iam_role_policy.tickets_lambda_logs
+module.iam.aws_iam_role_policy.tickets_lambda_s3_attachments
+module.iam.aws_iam_role_policy.tickets_lambda_sns_publish
+module.iam.aws_iam_role_policy.tickets_lambda_sqs_send
+module.iam.aws_iam_role_policy.tickets_lambda_ws_manage
+module.iam.aws_iam_role_policy.watchdog_lambda_ddb
+module.iam.aws_iam_role_policy.watchdog_lambda_logs
+module.iam.aws_iam_role_policy.watchdog_lambda_sqs_send
+
+## terraform plan -detailed-exitcode (idempotency check)
+
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.

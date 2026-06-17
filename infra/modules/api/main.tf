@@ -281,6 +281,14 @@ resource "aws_api_gateway_gateway_response" "default_4xx" {
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'${local.cors_allow_headers}'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'${local.cors_allow_methods}'"
   }
+
+  # AWS API Gateway auto-inyecta un response_template default ({"message":$context.error.messageString})
+  # cuando no se especifica uno. Ignorar ese campo evita un diff infinito en
+  # cada plan ("Plan: 0 to add, 2 to change") que no se puede resolver sin
+  # romper el comportamiento default de los error responses.
+  lifecycle {
+    ignore_changes = [response_templates]
+  }
 }
 
 resource "aws_api_gateway_gateway_response" "default_5xx" {
@@ -291,6 +299,10 @@ resource "aws_api_gateway_gateway_response" "default_5xx" {
     "gatewayresponse.header.Access-Control-Allow-Origin"  = "'${local.cors_allow_origin}'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'${local.cors_allow_headers}'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'${local.cors_allow_methods}'"
+  }
+
+  lifecycle {
+    ignore_changes = [response_templates]
   }
 }
 
