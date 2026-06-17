@@ -28,3 +28,22 @@ dns_enable_ws_custom_domain = false
 # Notificaciones — staging usa retries más conservadores y retención más
 # corta porque el costo y la presión operativa son distintos a dev.
 notifications_max_receive_count = 5
+
+# ─── OIDC (OYD-D5 Deliverable C) ─────────────────────────────────────────
+# El OIDC provider de GitHub Actions ya se crea en dev (es uno por cuenta AWS).
+# En staging NO lo recreamos — el ci_runner role del dev cubre sub claim
+# environment:staging gracias a la trust policy con 4 conditions.
+enable_github_oidc = false
+
+# ─── Frontend CDN (D5 D) ─────────────────────────────────────────────────
+# Sin DNS administrado en staging, no se monta el CloudFront ni custom domain.
+enable_frontend_cdn    = false
+frontend_full_hostname = ""
+
+# ─── Observability (D5 E) ────────────────────────────────────────────────
+# Mismo email que dev — un solo inbox concentra alarmas de ambos envs.
+# Budget más bajo y retention más corta porque staging se prende solo para
+# demos/pruebas (costo esperado < 10 USD/mes).
+notification_email = "sebastianalecio@gmail.com"
+monthly_budget_usd = 10
+log_retention_days = 7
