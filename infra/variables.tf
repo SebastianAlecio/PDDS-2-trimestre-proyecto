@@ -225,3 +225,37 @@ variable "github_repo" {
   type        = string
   default     = ""
 }
+
+# ─── CDN / Frontend hosting (OYD-D5 Deliverable D) ────────────────────────
+
+variable "frontend_full_hostname" {
+  description = "FQDN del frontend (ej. \"app.ticke-t.lumenchat.app\"). Va al alias de la CloudFront distribution y al A-alias de Route 53. Vacío en envs sin DNS administrado (no se crea el módulo cdn)."
+  type        = string
+  default     = ""
+}
+
+variable "enable_frontend_cdn" {
+  description = "Si es true, provisiona el módulo cdn/ (S3 + CloudFront + Route 53 alias) que hostea el frontend de Vite. Requiere frontend_full_hostname seteado, dns_parent_domain != \"\" y dns_enable_api_custom_domain = true (para que el cert wildcard esté disponible)."
+  type        = bool
+  default     = false
+}
+
+# ─── Observability (OYD-D5 Deliverable E) ──────────────────────────────────
+
+variable "notification_email" {
+  description = "Email que recibe alarmas de CloudWatch + notificaciones del AWS Budget al 80%. SNS manda un email de \"Confirm subscription\" que hay que aceptar manualmente para activar el subscription."
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_usd" {
+  description = "Limite mensual del AWS Budget en USD. Cuando spend del mes supera el 80% del limite, llega notificación al notification_email + SNS topic."
+  type        = number
+  default     = 20
+}
+
+variable "log_retention_days" {
+  description = "Retención de logs en días para el API Gateway access log group (del módulo observability). Los log groups de las Lambdas usan su propia variable en el módulo compute (default 14)."
+  type        = number
+  default     = 14
+}

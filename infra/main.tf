@@ -258,6 +258,57 @@ module "async" {
   dlq_message_retention_seconds = var.async_dlq_message_retention_seconds
 }
 
+# ─── Observability (OYD-D5 Deliverable E) ──────────────────────────────────
+# Log group del API access log, SNS topic + email subscription, 3 metric alarms
+# (Lambda Errors x5 funciones, SQS DLQ depth x2 colas, API GW 5XX), dashboard
+# con 3 widgets via jsonencode, budget mensual con 80% threshold.
+module "observability" {
+  source = "./modules/observability"
+
+  environment        = var.environment
+  project_name       = var.project_name
+  log_retention_days = var.log_retention_days
+  notification_email = var.notification_email
+  monthly_budget_usd = var.monthly_budget_usd
+
+  api_name       = "${var.api_name}-${var.environment}"
+  api_stage_name = var.api_stage_name
+
+  lambda_function_names = [
+    module.compute.function_name,
+    module.chat_ws.function_name,
+    module.notifier.function_name,
+    module.async_consumer.function_name,
+    module.watchdog.function_name,
+  ]
+
+  sqs_main_queue_names = [
+    module.notifications.sqs_queue_name,
+    module.async.queue_name,
+  ]
+
+  sqs_dlq_names = [
+    module.notifications.dlq_name,
+    module.async.dlq_name,
+  ]
+}
+
+# ─── CDN / Frontend (OYD-D5 Deliverable D) ─────────────────────────────────
+# CloudFront + S3 privado + Route 53 alias para `app.ticke-t.lumenchat.app`.
+# Cierra el último endpoint público con TLS + 301 redirect explicit desde
+# port 80. Reutiliza el cert wildcard ACM del módulo dns (sin duplicar).
+module "cdn" {
+  source = "./modules/cdn"
+  count  = var.enable_frontend_cdn && length(module.dns) > 0 ? 1 : 0
+
+  environment         = var.environment
+  project_name        = var.project_name
+  full_hostname       = var.frontend_full_hostname
+  acm_certificate_arn = module.dns[0].api_certificate_arn
+  hosted_zone_id      = module.dns[0].hosted_zone_id
+  create_dns_record   = true
+}
+
 # ─── DNS (Route 53 + ACM + SES identity) ─────────────────────────────────
 module "dns" {
   source = "./modules/dns"

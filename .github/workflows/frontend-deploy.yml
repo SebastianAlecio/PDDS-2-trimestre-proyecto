@@ -1,0 +1,91 @@
+name: Frontend Deploy
+
+# Build del frontend Vite + sync al bucket S3 frontend + invalidación de
+# CloudFront. Trigger por push a main que toque app/** (cambios reales del
+# código UI) o el workflow YAML (cambios al pipeline mismo). También por
+# workflow_dispatch para deploys manuales sin commit.
+#
+# Auth: OIDC vs el ci_runner role (mismo que terraform-*.yml). El role
+# tiene AdministratorAccess así que cubre s3:PutObject y
+# cloudfront:CreateInvalidation sin policy adicional.
+#
+# Env vars (VITE_*): inyectadas al build via Settings → Variables (no
+# secrets — son public en el bundle JS final, no tienen valor sensitive).
+# El cambio de algún VITE_* requiere RE-build, no basta con re-deploy del
+# mismo bundle.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/frontend-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    working-directory: app
+
+concurrency:
+  group: frontend-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build + sync + invalidate
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build de producción con las VITE_* vars inyectadas como env. Vite
+      # las inlinea como string literals en el bundle JS (process.env...
+      # se reemplaza en build time). Si alguna falta o está vacía, la app
+      # se buildeo pero falla en runtime con un mensaje claro.
+      - name: Build Vite bundle
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_WS_ENDPOINT: ${{ vars.VITE_WS_ENDPOINT }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+          VITE_COGNITO_REGION: ${{ vars.VITE_COGNITO_REGION }}
+
+      - name: Configure AWS credentials (OIDC dev)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
+
+      # --delete remueve del bucket los objetos que ya no existen en dist/
+      # (limpia bundles viejos de chunks renombrados por hash). Sin esto,
+      # acumulan archivos huérfanos sin servirse a nadie.
+      - name: Sync to S3
+        working-directory: .
+        run: aws s3 sync app/dist/ s3://${{ vars.FRONTEND_BUCKET_NAME }}/ --delete
+
+      # Invalidación global ("/*") fuerza a CloudFront a refrescar todos los
+      # edge caches inmediatamente. Sin esto, los usuarios pueden ver versiones
+      # cached del bundle viejo hasta que el TTL expire (default 24h).
+      - name: Invalidate CloudFront cache
+        working-directory: .
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"

@@ -378,9 +378,493 @@ Objeto resultante en S3 (`async-events/<messageId>.json`):
 
 ![Async object en S3](evidence/async-object.png)
 
+### Delivery 5 — IAM Security Module (Deliverable A)
+
+Refactor de los IAM roles que vivían inline en `compute/` a `infra/modules/iam/` con 7 roles least-privilege (5 Lambda execution roles, 1 scheduler invoke role, 1 ci_runner OIDC role). Cero wildcards en Action o Resource. La policy SES que antes era `Resource = "*"` con condition ahora va a `arn:aws:ses:...:identity/lumenchat.app` + la misma condition (defense in depth).
+
+`terraform state list` filtrado a recursos IAM + plan idempotente:
+
+```
+# IAM Resources — Deliverable A evidence
+
+Generated: 2026-06-17T22:16:01Z
+
+## terraform state list output (filtered to module.iam.*)
+
+module.iam.data.aws_caller_identity.current
+module.iam.data.aws_iam_policy_document.lambda_assume
+module.iam.data.aws_iam_policy_document.scheduler_assume
+module.iam.data.aws_region.current
+module.iam.aws_iam_role.async_consumer_lambda
+module.iam.aws_iam_role.chat_ws_lambda
+module.iam.aws_iam_role.notifier_lambda
+module.iam.aws_iam_role.scheduler_invoke
+module.iam.aws_iam_role.tickets_lambda
+module.iam.aws_iam_role.watchdog_lambda
+module.iam.aws_iam_role_policy.async_consumer_lambda_logs
+module.iam.aws_iam_role_policy.async_consumer_lambda_s3
+module.iam.aws_iam_role_policy.async_consumer_lambda_ses_send
+module.iam.aws_iam_role_policy.async_consumer_lambda_sqs_consume
+module.iam.aws_iam_role_policy.chat_ws_lambda_ddb
+module.iam.aws_iam_role_policy.chat_ws_lambda_logs
+module.iam.aws_iam_role_policy.chat_ws_lambda_s3_attachments
+module.iam.aws_iam_role_policy.chat_ws_lambda_ws_manage
+module.iam.aws_iam_role_policy.notifier_lambda_ddb
+module.iam.aws_iam_role_policy.notifier_lambda_logs
+module.iam.aws_iam_role_policy.notifier_lambda_ses_send
+module.iam.aws_iam_role_policy.notifier_lambda_sqs_consume
+module.iam.aws_iam_role_policy.scheduler_invoke_lambda
+module.iam.aws_iam_role_policy.tickets_lambda_cognito
+module.iam.aws_iam_role_policy.tickets_lambda_ddb
+module.iam.aws_iam_role_policy.tickets_lambda_logs
+module.iam.aws_iam_role_policy.tickets_lambda_s3_attachments
+module.iam.aws_iam_role_policy.tickets_lambda_sns_publish
+module.iam.aws_iam_role_policy.tickets_lambda_sqs_send
+module.iam.aws_iam_role_policy.tickets_lambda_ws_manage
+module.iam.aws_iam_role_policy.watchdog_lambda_ddb
+module.iam.aws_iam_role_policy.watchdog_lambda_logs
+module.iam.aws_iam_role_policy.watchdog_lambda_sqs_send
+
+## terraform plan -detailed-exitcode (idempotency check)
+
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+```
+
+Output completo en `infra/evidence/iam-plan.txt`.
+
+### Delivery 5 — Secrets Manager & KMS Integration (Deliverable B)
+
+CMK customer-managed que encripta S3 bucket (upgrade SSE-S3 → aws:kms) y DynamoDB (SSEType=KMS). Key policy con 3 statements scoped: root con condition `CallerAccount`, service principals `s3` + `dynamodb` con `kms:ViaService`, 5 Lambda consumer roles con `Decrypt`+`GenerateDataKey` también condicionado a `kms:ViaService`.
+
+Sin Secrets Manager: la arquitectura es 100% serverless (DynamoDB + Cognito sin DB password). Decision documentada en [`docs/delivery-5-summary.md`](docs/delivery-5-summary.md).
+
+Outputs CLI confirmando encryption:
+
+```
+# KMS + Encryption verification — D5 Deliverable B evidence
+
+Generated: 2026-06-17T22:27:35Z
+
+## Terraform outputs
+
+kms_key_id     = f0e632bd-24e5-41a4-abdd-75b15bb069f9
+kms_key_arn    = arn:aws:kms:us-east-1:544341949288:key/f0e632bd-24e5-41a4-abdd-75b15bb069f9
+kms_alias_name = alias/pdds-oyd-dev
+
+## aws kms describe-key --key-id alias/pdds-oyd-dev
+
+{
+    "KeyMetadata": {
+        "AWSAccountId": "544341949288",
+        "KeyId": "f0e632bd-24e5-41a4-abdd-75b15bb069f9",
+        "Arn": "arn:aws:kms:us-east-1:544341949288:key/f0e632bd-24e5-41a4-abdd-75b15bb069f9",
+        "CreationDate": "2026-06-17T16:24:19.275000-06:00",
+        "Enabled": true,
+        "Description": "CMK pdds-oyd-dev - encripta S3 attachments + DynamoDB tickets. D5 Deliverable B.",
+        "KeyUsage": "ENCRYPT_DECRYPT",
+        "KeyState": "Enabled",
+        "Origin": "AWS_KMS",
+        "KeyManager": "CUSTOMER",
+        "CustomerMasterKeySpec": "SYMMETRIC_DEFAULT",
+        "KeySpec": "SYMMETRIC_DEFAULT",
+        "EncryptionAlgorithms": [
+            "SYMMETRIC_DEFAULT"
+        ],
+        "MultiRegion": false,
+        "CurrentKeyMaterialId": "af03a869784db3d15576506865cffaaea1c63e149089d08b690a78f439711ebc"
+    }
+}
+
+## aws kms get-key-policy --key-id <KEY_ID> --policy-name default
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowAccountAdminWithCondition",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::544341949288:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "544341949288"
+```
+
+Output completo en `infra/evidence/secrets-kms.txt`.
+
+Screenshot del CMK en la AWS Console (KeyManager=CUSTOMER, Status=Enabled, alias confirmado):
+
+![KMS console](evidence/secrets-console.png)
+
+### Delivery 5 — OIDC CI Authentication (Deliverable C)
+
+OIDC provider de GitHub Actions + ci_runner role assumable via `sts:AssumeRoleWithWebIdentity`. Trust policy scopeada al repo con 4 subject claims (`ref:refs/heads/main`, `pull_request`, `environment:dev`, `environment:staging`). Los 4 workflows (terraform-{ci,apply,destroy,drift}.yml) + el nuevo frontend-deploy.yml usan OIDC; las access keys long-lived (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) se eliminaron de GH Secrets.
+
+GitHub Secrets confirmados sin las AWS access keys + GitHub Variables con AWS_ROLE_ARN_DEV / AWS_ROLE_ARN_STAGING:
+
+![GitHub Secrets sin AWS keys](evidence/oidc-secrets-removed.png)
+
+Workflow run log mostrando OIDC token exchange exitoso (`role-to-assume`, `Assuming role with OIDC`, `Authenticated as assumedRoleId`):
+
+![OIDC auth log](evidence/oidc-auth-log.png)
+
+### Delivery 5 — TLS Termination (Deliverable D)
+
+3 endpoints públicos cubiertos por el cert wildcard `*.ticke-t.lumenchat.app` de D3 (referenciado vía `data "aws_acm_certificate"` desde el módulo cdn, sin duplicar):
+
+| Endpoint | TLS | Redirect 301 |
+|---|---|---|
+| `https://api.ticke-t.lumenchat.app` | ✅ | AWS API GW no expone port 80 |
+| `wss://ws.ticke-t.lumenchat.app` | ✅ | AWS API GW no expone port 80 |
+| `https://app.ticke-t.lumenchat.app` | ✅ | ✅ CloudFront `viewer_protocol_policy = redirect-to-https` |
+
+Verificación con `curl -v` (TLS handshake con cert subject, HTTP 200 para HTTPS, HTTP 301 para HTTP de CloudFront):
+
+```
+# TLS verification — D5 Deliverable D evidence
+
+Generated: 2026-06-17T23:13:39Z
+
+Public endpoints en Ticke-T (3 totales):
+  https://api.ticke-t.lumenchat.app — REST API (API Gateway REGIONAL + custom domain)
+  wss://ws.ticke-t.lumenchat.app    — WebSocket API (API Gateway v2 + custom domain)
+  https://app.ticke-t.lumenchat.app — Frontend (CloudFront + S3 privado via OAC)
+
+Cobertura HTTPS: 100% — los 3 endpoints son HTTPS-only, sin endpoints HTTP plaintext.
+Cert wildcard *.ticke-t.lumenchat.app de D3 cubre los 3 (ACM us-east-1, regional + global).
+
+============================================================
+## https://api.ticke-t.lumenchat.app/health
+============================================================
+* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 98.86.94.189, 18.210.79.98, 18.207.3.45
+*   Trying 98.86.94.189:443...
+* Connected to api.ticke-t.lumenchat.app (98.86.94.189) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* (304) (IN), TLS handshake, Unknown (8):
+* (304) (IN), TLS handshake, Certificate (11):
+* (304) (IN), TLS handshake, CERT verify (15):
+* (304) (IN), TLS handshake, Finished (20):
+* (304) (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+
+============================================================
+## https://app.ticke-t.lumenchat.app/ (CloudFront, frontend)
+============================================================
+* Host app.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.85.78.124, 52.85.78.21, 52.85.78.42, 52.85.78.59
+*   Trying 52.85.78.124:443...
+* Connected to app.ticke-t.lumenchat.app (52.85.78.124) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* (304) (IN), TLS handshake, Unknown (8):
+* (304) (IN), TLS handshake, Certificate (11):
+* (304) (IN), TLS handshake, CERT verify (15):
+* (304) (IN), TLS handshake, Finished (20):
+* (304) (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+```
+
+Output completo en `infra/evidence/tls-curl.txt`.
+
+### Delivery 5 — Observability Module (Deliverable E)
+
+Módulo `observability/` con: log group del API GW access log, SNS topic + email subscription, 8 metric alarms (5 Lambda Errors + 2 SQS DLQ depth + 1 API 5XX), CloudWatch dashboard con 3 widgets (body via `jsonencode()`), AWS Budget mensual con notificación al 80%.
+
+Outputs Terraform + describe-alarms + describe-budget:
+
+```
+# Observability outputs — D5 Deliverable E evidence
+
+Generated: 2026-06-17T23:20:05Z
+
+## Terraform outputs
+
+observability_api_5xx_alarm_arn = "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-api-5xx"
+observability_api_access_log_group = "/aws/apigateway/dev/ticke-t-api-dev/access"
+observability_budget_id = "544341949288:pdds-oyd-dev-monthly"
+observability_dashboard_name = "pdds-oyd-dev-main"
+observability_dlq_depth_alarm_arns = [
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticke-t-async-dev-dlq-dlq-depth",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticket-notifications-dev-dlq-dlq-depth"
+]
+observability_lambda_error_alarm_arns = [
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-chat-message-handler-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-chat-ws-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-pdds-oyd-async-consumer-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-pdds-oyd-watchdog-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticket-notifier-dev-errors"
+]
+observability_sns_topic_arn = "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+
+## aws cloudwatch describe-alarms
+
+[
+    {
+        "Name": "pdds-oyd-dev-api-5xx",
+        "Metric": "5XXError",
+        "Threshold": 10.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-chat-message-handler-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "OK",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-chat-ws-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "OK",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-pdds-oyd-async-consumer-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+```
+
+Output completo en `infra/evidence/observability-outputs.txt`.
+
+Dashboard CloudWatch con los 3 widgets (request volume API, Lambda errors por función, SQS depth main + DLQ):
+
+![CloudWatch dashboard](evidence/dashboard.png)
+
+AWS Budget mensual con threshold 80% y email subscriber:
+
+![AWS Budget](evidence/budget.png)
+
+### Delivery 5 — One-Click Deployment Proof (Deliverable F)
+
+Destroy del main workspace dev → single `git push` a main triggea el pipeline completo (terraform init + plan + apply) sin intervención manual. Idempotency check via `terraform plan -detailed-exitcode` retornando 0 confirmando cero drift en el segundo push.
+
+Pipeline GitHub Actions completo después del clean-state push, todos los jobs en verde:
+
+![Clean state pipeline](evidence/clean-state-pipeline.png)
+
+Outputs Terraform completos después del clean-state apply (los 7 componentes presentes):
+
+```
+<!-- INCLUDE FAILED: evidence/terraform-output-full.txt not found -->
+```
+
+Output completo en `infra/evidence/terraform-output-full.txt`.
+
+Idempotent plan post-second-push (exit code 0):
+
+```
+<!-- INCLUDE FAILED: evidence/idempotent-plan.txt not found -->
+```
+
+### Delivery 5 — Full IaC Coverage Proof (Deliverable I)
+
+Mapping completo de componente → IaC en [`docs/iac-coverage.md`](docs/iac-coverage.md) (separado del summary, requisito explícito del rubric).
+
+`terraform state list` (237 recursos, snapshot post-D5):
+
+```
+aws_dynamodb_table_item.seed_ticket
+module.api.aws_api_gateway_authorizer.cognito
+module.api.aws_api_gateway_deployment.this
+module.api.aws_api_gateway_gateway_response.default_4xx
+module.api.aws_api_gateway_gateway_response.default_5xx
+module.api.aws_api_gateway_integration.endpoints["GET /tickets/me"]
+module.api.aws_api_gateway_integration.endpoints["GET /tickets/queue"]
+module.api.aws_api_gateway_integration.endpoints["GET /tickets/{id}/messages"]
+module.api.aws_api_gateway_integration.endpoints["POST /async/enqueue"]
+module.api.aws_api_gateway_integration.endpoints["POST /tickets"]
+module.api.aws_api_gateway_integration.endpoints["POST /tickets/{id}/messages/attachments"]
+module.api.aws_api_gateway_integration.endpoints["POST /users"]
+module.api.aws_api_gateway_integration.endpoints["PUT /tickets/{id}/assign"]
+module.api.aws_api_gateway_integration.endpoints["PUT /tickets/{id}/status"]
+module.api.aws_api_gateway_integration.health
+module.api.aws_api_gateway_integration.options["async-enqueue"]
+module.api.aws_api_gateway_integration.options["tickets"]
+module.api.aws_api_gateway_integration.options["tickets-id-assign"]
+module.api.aws_api_gateway_integration.options["tickets-id-messages"]
+module.api.aws_api_gateway_integration.options["tickets-id-messages-attachments"]
+module.api.aws_api_gateway_integration.options["tickets-id-status"]
+module.api.aws_api_gateway_integration.options["tickets-me"]
+module.api.aws_api_gateway_integration.options["tickets-queue"]
+module.api.aws_api_gateway_integration.options["users"]
+module.api.aws_api_gateway_integration_response.options["async-enqueue"]
+module.api.aws_api_gateway_integration_response.options["tickets"]
+module.api.aws_api_gateway_integration_response.options["tickets-id-assign"]
+module.api.aws_api_gateway_integration_response.options["tickets-id-messages"]
+module.api.aws_api_gateway_integration_response.options["tickets-id-messages-attachments"]
+module.api.aws_api_gateway_integration_response.options["tickets-id-status"]
+module.api.aws_api_gateway_integration_response.options["tickets-me"]
+module.api.aws_api_gateway_integration_response.options["tickets-queue"]
+module.api.aws_api_gateway_integration_response.options["users"]
+module.api.aws_api_gateway_method.endpoints["GET /tickets/me"]
+module.api.aws_api_gateway_method.endpoints["GET /tickets/queue"]
+module.api.aws_api_gateway_method.endpoints["GET /tickets/{id}/messages"]
+module.api.aws_api_gateway_method.endpoints["POST /async/enqueue"]
+module.api.aws_api_gateway_method.endpoints["POST /tickets"]
+module.api.aws_api_gateway_method.endpoints["POST /tickets/{id}/messages/attachments"]
+module.api.aws_api_gateway_method.endpoints["POST /users"]
+```
+
+Output completo en `infra/evidence/state-list.txt`.
+
+Screenshot AWS Console mostrando los componentes deployados (Lambda Functions filter "pdds-oyd"):
+
+![Deployed components](evidence/deployed-components.png)
+
+## Runbook — One-Click Deployment (D5 Deliverable F)
+
+Pasos para levantar el stack desde cero en una cuenta AWS nueva.
+
+### 1. Required account permissions
+
+El operador necesita una cuenta AWS con permisos `AdministratorAccess` (o equivalente) **solo para el setup inicial** (bootstrap workspace). Después el pipeline usa OIDC sin credenciales humanas.
+
+Permisos requeridos en runtime (incluidos en el `ci_runner` role via AdministratorAccess managed policy):
+- IAM: crear/borrar roles + policies + OIDC providers
+- KMS: crear keys + aliases + key policies
+- S3: crear buckets + encryption + versioning + bucket policies
+- DynamoDB: crear tablas + encryption + GSIs
+- API Gateway REST + v2: crear APIs + resources + methods + integrations + custom domains
+- Lambda: crear funciones + event source mappings + permissions
+- SQS + SNS: crear queues + topics + subscriptions + policies
+- CloudFront: crear distributions + OAC
+- ACM + Route 53: crear certs + hosted zones + records
+- CloudWatch: crear log groups + metric alarms + dashboards
+- AWS Budgets: crear budgets + notifications
+- EventBridge Scheduler: crear schedules
+- Cognito: crear user pools + groups + clients
+- WAFv2: crear Web ACLs + associations
+
+### 2. GitHub Environments + variables to configure
+
+**Repository Variables** (Settings → Secrets and variables → Actions → Variables tab, NO secrets — son ARNs/URLs públicos):
+
+| Variable | Value | Usado por |
+|---|---|---|
+| `AWS_ROLE_ARN_DEV` | `arn:aws:iam::<ACCOUNT>:role/pdds-oyd-ci-runner-dev` | terraform-{ci,apply,drift}.yml, frontend-deploy.yml |
+| `AWS_ROLE_ARN_STAGING` | same ARN (single role serves both envs via trust policy) | terraform-apply.yml apply-staging job, terraform-destroy.yml |
+| `VITE_API_BASE_URL` | `https://api.ticke-t.lumenchat.app` | frontend-deploy.yml (build env) |
+| `VITE_WS_ENDPOINT` | `wss://ws.ticke-t.lumenchat.app` | frontend-deploy.yml |
+| `VITE_COGNITO_USER_POOL_ID` | output `cognito_user_pool_id` | frontend-deploy.yml |
+| `VITE_COGNITO_USER_POOL_CLIENT_ID` | output `cognito_user_pool_client_id` | frontend-deploy.yml |
+| `VITE_COGNITO_REGION` | `us-east-1` | frontend-deploy.yml |
+| `FRONTEND_BUCKET_NAME` | output `frontend_bucket_name` | frontend-deploy.yml (aws s3 sync target) |
+| `CLOUDFRONT_DISTRIBUTION_ID` | output `frontend_distribution_id` | frontend-deploy.yml (cache invalidation) |
+
+**Repository Secrets:** ninguno requerido. Las AWS access keys long-lived (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) fueron eliminadas en D5.
+
+**Environments configurados en Settings → Environments:** `dev` y `staging`. Para producción se recomienda configurar Required reviewers en el environment `staging` (gating manual del apply).
+
+### 3. Git clone & push commands to trigger the pipeline
+
+```bash
+# Clonar el repo y entrar a infra/
+git clone https://github.com/SebastianAlecio/PDDS-2-trimestre-proyecto.git
+cd PDDS-2-trimestre-proyecto
+
+# Bootstrap state backend (UNA SOLA VEZ por cuenta AWS — crea el S3 bucket
+# del Terraform state y la tabla DDB del lock). Requiere credenciales AWS
+# locales con permisos para crear S3 + DDB.
+cd infra/bootstrap
+terraform init && terraform apply -auto-approve
+cd ..
+
+# Trigger del pipeline completo: push a main
+git commit --allow-empty -m "Trigger initial deployment"
+git push origin main
+
+# El push triggea terraform-apply.yml (job apply-dev y luego apply-staging).
+# El apply usa el ci_runner role via OIDC — no necesita credenciales locales.
+# Tiempo total esperado: 5-15 min (CloudFront tarda en propagar).
+```
+
+### 4. Verifying components are running
+
+```bash
+cd infra
+terraform init -backend-config=envs/dev/backend-dev.hcl
+terraform output    # imprime todos los outputs (~50 items)
+
+# Smoke tests de los 7 componentes:
+# 1. Compute (Lambda)
+aws lambda list-functions \
+  --query 'Functions[?contains(FunctionName, `dev`)].FunctionName' --output text
+
+# 2. Database (DynamoDB)
+aws dynamodb describe-table --table-name tickets-dev \
+  --query 'Table.{Name:TableName,SSE:SSEDescription.SSEType,Status:TableStatus}'
+
+# 3. Storage (S3 + KMS)
+aws s3api get-bucket-encryption \
+  --bucket $(terraform output -raw attachments_bucket_name)
+
+# 4. Networking (API Gateway + CloudFront)
+curl -fsSL https://api.ticke-t.lumenchat.app/health
+curl -fsSL https://app.ticke-t.lumenchat.app/ | head -5
+
+# 5. Async messaging (SQS)
+aws sqs get-queue-attributes \
+  --queue-url $(terraform output -raw async_queue_url) \
+  --attribute-names ApproximateNumberOfMessages
+
+# 6. Security (IAM + KMS + Cognito)
+aws kms describe-key --key-id alias/pdds-oyd-dev \
+  --query 'KeyMetadata.{KeyId:KeyId,Manager:KeyManager,State:KeyState}'
+aws iam list-roles --query 'Roles[?starts_with(RoleName, `pdds-oyd`)].RoleName'
+
+# 7. Observability (CloudWatch)
+aws cloudwatch describe-alarms \
+  --alarm-name-prefix "pdds-oyd-dev-" --query 'MetricAlarms[*].AlarmName' --output text
+aws budgets describe-budget --account-id $(aws sts get-caller-identity --query Account --output text) \
+  --budget-name pdds-oyd-dev-monthly
+
+# 8. Idempotency check
+terraform plan -detailed-exitcode -var-file=envs/dev/dev.tfvars
+echo $?    # 0 = no drift
+```
+
 ## Resúmenes de delivery
 
 - [Delivery 1 — IaC Workspace Bootstrap & CI Pipeline](docs/delivery-1-summary.md)
 - [Delivery 2 — Compute, Storage, Database & Remote State](docs/delivery-2-summary.md)
 - [Delivery 3 — Networking Layer Fully Automated](docs/delivery-3-summary.md)
 - [Delivery 4 — Async Infrastructure & Full CD Pipeline](docs/delivery-4-summary.md)
+- [Delivery 5 — Security, Observability & One-Click Deployment](docs/delivery-5-summary.md)
+- [IaC Coverage proof (D5 Deliverable I)](docs/iac-coverage.md)

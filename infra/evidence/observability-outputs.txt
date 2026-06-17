@@ -1,0 +1,173 @@
+# Observability outputs — D5 Deliverable E evidence
+
+Generated: 2026-06-17T23:20:05Z
+
+## Terraform outputs
+
+observability_api_5xx_alarm_arn = "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-api-5xx"
+observability_api_access_log_group = "/aws/apigateway/dev/ticke-t-api-dev/access"
+observability_budget_id = "544341949288:pdds-oyd-dev-monthly"
+observability_dashboard_name = "pdds-oyd-dev-main"
+observability_dlq_depth_alarm_arns = [
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticke-t-async-dev-dlq-dlq-depth",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticket-notifications-dev-dlq-dlq-depth"
+]
+observability_lambda_error_alarm_arns = [
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-chat-message-handler-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-chat-ws-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-pdds-oyd-async-consumer-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-pdds-oyd-watchdog-dev-errors",
+  "arn:aws:cloudwatch:us-east-1:544341949288:alarm:pdds-oyd-dev-ticket-notifier-dev-errors"
+]
+observability_sns_topic_arn = "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+
+## aws cloudwatch describe-alarms
+
+[
+    {
+        "Name": "pdds-oyd-dev-api-5xx",
+        "Metric": "5XXError",
+        "Threshold": 10.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-chat-message-handler-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "OK",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-chat-ws-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "OK",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-pdds-oyd-async-consumer-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-pdds-oyd-watchdog-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-ticke-t-async-dev-dlq-dlq-depth",
+        "Metric": "ApproximateNumberOfMessagesVisible",
+        "Threshold": 0.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-ticket-notifications-dev-dlq-dlq-depth",
+        "Metric": "ApproximateNumberOfMessagesVisible",
+        "Threshold": 0.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    },
+    {
+        "Name": "pdds-oyd-dev-ticket-notifier-dev-errors",
+        "Metric": "Errors",
+        "Threshold": 5.0,
+        "State": "INSUFFICIENT_DATA",
+        "Actions": [
+            "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms"
+        ]
+    }
+]
+
+## aws cloudwatch list-dashboards (filtered)
+
+[
+  {
+    "DashboardName": "pdds-oyd-dev-main",
+    "DashboardArn": "arn:aws:cloudwatch::544341949288:dashboard/pdds-oyd-dev-main",
+    "LastModified": "2026-06-17T17:19:18-06:00",
+    "Size": 1622
+  }
+]
+
+## aws budgets describe-budget
+
+{
+    "Budget": {
+        "BudgetName": "pdds-oyd-dev-monthly",
+        "BudgetLimit": {
+            "Amount": "20.0",
+            "Unit": "USD"
+        },
+        "CostFilters": {},
+        "CostTypes": {
+            "IncludeTax": true,
+            "IncludeSubscription": true,
+            "UseBlended": false,
+            "IncludeRefund": true,
+            "IncludeCredit": true,
+            "IncludeUpfront": true,
+            "IncludeRecurring": true,
+            "IncludeOtherSubscription": true,
+            "IncludeSupport": true,
+            "IncludeDiscount": true,
+            "UseAmortized": false
+        },
+        "TimeUnit": "MONTHLY",
+        "TimePeriod": {
+            "Start": "2026-05-31T18:00:00-06:00",
+            "End": "2087-06-14T18:00:00-06:00"
+        },
+        "CalculatedSpend": {
+            "ActualSpend": {
+                "Amount": "0.0",
+                "Unit": "USD"
+            }
+        },
+        "BudgetType": "COST",
+        "LastUpdatedTime": "2026-06-17T17:19:20.321000-06:00",
+        "HealthStatus": {
+            "Status": "HEALTHY",
+            "LastUpdatedTime": "2026-06-17T17:19:19.351000-06:00"
+        }
+    }
+}
+
+## aws sns get-topic-attributes (alarms topic)
+
+{
+    "Attributes": {
+        "Policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowBudgetsToPublish\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"budgets.amazonaws.com\"},\"Action\":\"sns:Publish\",\"Resource\":\"arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms\"}]}",
+        "LambdaSuccessFeedbackSampleRate": "0",
+        "Owner": "544341949288",
+        "SubscriptionsPending": "0",
+        "TopicArn": "arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms",
+        "EffectiveDeliveryPolicy": "{\"http\":{\"defaultHealthyRetryPolicy\":{\"minDelayTarget\":20,\"maxDelayTarget\":20,\"numRetries\":3,\"numMaxDelayRetries\":0,\"numNoDelayRetries\":0,\"numMinDelayRetries\":0,\"backoffFunction\":\"linear\"},\"disableSubscriptionOverrides\":false,\"defaultRequestPolicy\":{\"headerContentType\":\"text/plain; charset=UTF-8\"}}}",
+        "FirehoseSuccessFeedbackSampleRate": "0",
+        "SubscriptionsConfirmed": "0",
+        "SQSSuccessFeedbackSampleRate": "0",
+        "HTTPSuccessFeedbackSampleRate": "0",
+        "ApplicationSuccessFeedbackSampleRate": "0",
+        "DisplayName": "",
+        "SubscriptionsDeleted": "0"
+    }
+}
