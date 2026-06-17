@@ -38,3 +38,9 @@ dns_enable_ws_custom_domain = true
 enable_github_oidc = true
 github_owner       = "SebastianAlecio"
 github_repo        = "PDDS-2-trimestre-proyecto"
+
+# ─── Frontend CDN (OYD-D5 Deliverable D) ──────────────────────────────────
+# CloudFront + S3 privado sirviendo el frontend Vite buildeado bajo
+# app.ticke-t.lumenchat.app. Reusa el cert wildcard de D3.
+enable_frontend_cdn    = true
+frontend_full_hostname = "app.ticke-t.lumenchat.app"

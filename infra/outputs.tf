@@ -221,3 +221,25 @@ output "iam_github_oidc_provider_arn" {
   description = "ARN del provider OIDC de GitHub Actions. Vacío hasta que enable_github_oidc = true (Task 3)."
   value       = module.iam.github_oidc_provider_arn
 }
+
+# ─── CDN outputs (OYD-D5 Deliverable D) ────────────────────────────────
+
+output "frontend_bucket_name" {
+  description = "Nombre del bucket S3 que hostea el frontend. Consumido por el workflow frontend-deploy.yml para aws s3 sync."
+  value       = length(module.cdn) > 0 ? module.cdn[0].bucket_name : ""
+}
+
+output "frontend_distribution_id" {
+  description = "ID de la CloudFront distribution. Consumido por el workflow para create-invalidation post-deploy."
+  value       = length(module.cdn) > 0 ? module.cdn[0].distribution_id : ""
+}
+
+output "frontend_distribution_domain_name" {
+  description = "Dominio CloudFront (ej. d3abc.cloudfront.net). Para debug; usuarios usan frontend_url."
+  value       = length(module.cdn) > 0 ? module.cdn[0].distribution_domain_name : ""
+}
+
+output "frontend_url" {
+  description = "URL pública del frontend (https://app.ticke-t.lumenchat.app). Endpoint final para usuarios."
+  value       = length(module.cdn) > 0 ? module.cdn[0].frontend_url : ""
+}

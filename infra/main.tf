@@ -258,6 +258,22 @@ module "async" {
   dlq_message_retention_seconds = var.async_dlq_message_retention_seconds
 }
 
+# ─── CDN / Frontend (OYD-D5 Deliverable D) ─────────────────────────────────
+# CloudFront + S3 privado + Route 53 alias para `app.ticke-t.lumenchat.app`.
+# Cierra el último endpoint público con TLS + 301 redirect explicit desde
+# port 80. Reutiliza el cert wildcard ACM del módulo dns (sin duplicar).
+module "cdn" {
+  source = "./modules/cdn"
+  count  = var.enable_frontend_cdn && length(module.dns) > 0 ? 1 : 0
+
+  environment         = var.environment
+  project_name        = var.project_name
+  full_hostname       = var.frontend_full_hostname
+  acm_certificate_arn = module.dns[0].api_certificate_arn
+  hosted_zone_id      = module.dns[0].hosted_zone_id
+  create_dns_record   = true
+}
+
 # ─── DNS (Route 53 + ACM + SES identity) ─────────────────────────────────
 module "dns" {
   source = "./modules/dns"

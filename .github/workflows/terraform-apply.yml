@@ -53,10 +53,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -68,7 +68,7 @@ jobs:
 
       # OIDC — assumimos el ci_runner role (trust policy acepta environment:dev).
       - name: Configure AWS credentials (OIDC dev)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
           aws-region: us-east-1
@@ -82,7 +82,7 @@ jobs:
       # (parents[0] = main pre-merge, parents[1] = PR HEAD).
       - name: Find PR CI run
         id: find-run
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const mergeCommit = await github.rest.git.getCommit({
@@ -116,7 +116,7 @@ jobs:
             core.setOutput('run-id', runId);
 
       - name: Download tfplan artifact from PR CI run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: tfplan
           path: infra/
@@ -149,10 +149,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -166,7 +166,7 @@ jobs:
       # AWS_ROLE_ARN_STAGING puede apuntar al mismo role que DEV mientras no
       # haya separacion de permisos por env; ahora mismo es el mismo ARN.
       - name: Configure AWS credentials (OIDC staging)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_STAGING }}
           aws-region: us-east-1

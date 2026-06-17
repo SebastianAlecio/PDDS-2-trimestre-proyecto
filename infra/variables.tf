@@ -225,3 +225,17 @@ variable "github_repo" {
   type        = string
   default     = ""
 }
+
+# ─── CDN / Frontend hosting (OYD-D5 Deliverable D) ────────────────────────
+
+variable "frontend_full_hostname" {
+  description = "FQDN del frontend (ej. \"app.ticke-t.lumenchat.app\"). Va al alias de la CloudFront distribution y al A-alias de Route 53. Vacío en envs sin DNS administrado (no se crea el módulo cdn)."
+  type        = string
+  default     = ""
+}
+
+variable "enable_frontend_cdn" {
+  description = "Si es true, provisiona el módulo cdn/ (S3 + CloudFront + Route 53 alias) que hostea el frontend de Vite. Requiere frontend_full_hostname seteado, dns_parent_domain != \"\" y dns_enable_api_custom_domain = true (para que el cert wildcard esté disponible)."
+  type        = bool
+  default     = false
+}
