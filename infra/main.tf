@@ -156,12 +156,27 @@ module "watchdog" {
   }
 }
 
+# ─── KMS — Deliverable B del rubric OYD-D5 ─────────────────────────────────
+# CMK que encripta S3 (attachments + async-events) y DynamoDB. Reemplaza:
+#   - SSE-S3 (AES256) que estaba activo en storage/ desde D2
+#   - DynamoDB AWS-managed default key
+# La key policy autoriza al service principal correspondiente vía kms:ViaService
+# y a las 5 Lambda execution roles para Decrypt/GenerateDataKey en lecturas.
+module "kms" {
+  source = "./modules/kms"
+
+  environment        = var.environment
+  project_name       = var.project_name
+  consumer_role_arns = module.iam.all_lambda_role_arns
+}
+
 # ─── Capa de almacenamiento ──────────────────────────────────────────────
 module "storage" {
   source = "./modules/storage"
 
   environment        = var.environment
   bucket_name_prefix = var.attachments_bucket_name_prefix
+  kms_key_arn        = module.kms.key_arn
 }
 
 module "database" {
@@ -170,6 +185,7 @@ module "database" {
   environment  = var.environment
   name         = var.tickets_table_name
   billing_mode = var.db_billing_mode
+  kms_key_arn  = module.kms.key_arn
 }
 
 module "security" {
