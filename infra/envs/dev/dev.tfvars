@@ -44,3 +44,8 @@ github_repo        = "PDDS-2-trimestre-proyecto"
 # app.ticke-t.lumenchat.app. Reusa el cert wildcard de D3.
 enable_frontend_cdn    = true
 frontend_full_hostname = "app.ticke-t.lumenchat.app"
+
+# ─── Observability (OYD-D5 Deliverable E) ──────────────────────────────────
+notification_email = "sebastianalecio@gmail.com"
+monthly_budget_usd = 20
+log_retention_days = 14

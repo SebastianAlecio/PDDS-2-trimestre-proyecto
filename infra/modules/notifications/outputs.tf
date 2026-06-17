@@ -18,12 +18,22 @@ output "sqs_queue_url" {
   value       = aws_sqs_queue.ticket_notifications.url
 }
 
+output "sqs_queue_name" {
+  description = "Nombre canónico de la cola principal (sin region/account). Consumido por las dimensions de CloudWatch metric alarms (AWS/SQS exige QueueName, no ARN)."
+  value       = aws_sqs_queue.ticket_notifications.name
+}
+
 output "dlq_arn" {
-  description = "ARN de la Dead Letter Queue. Para alarmas de CloudWatch sobre messages stuck en la DLQ (no implementado en esta entrega)."
+  description = "ARN de la Dead Letter Queue. Para alarmas de CloudWatch sobre messages stuck en la DLQ."
   value       = aws_sqs_queue.dlq.arn
 }
 
 output "dlq_url" {
   description = "URL de la DLQ. Para inspección manual desde la consola SQS o `aws sqs receive-message`."
   value       = aws_sqs_queue.dlq.url
+}
+
+output "dlq_name" {
+  description = "Nombre canónico de la DLQ (sin region/account). Consumido por las dimensions de la metric alarm SQS DLQ depth (módulo observability)."
+  value       = aws_sqs_queue.dlq.name
 }

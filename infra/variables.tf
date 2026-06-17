@@ -239,3 +239,23 @@ variable "enable_frontend_cdn" {
   type        = bool
   default     = false
 }
+
+# ─── Observability (OYD-D5 Deliverable E) ──────────────────────────────────
+
+variable "notification_email" {
+  description = "Email que recibe alarmas de CloudWatch + notificaciones del AWS Budget al 80%. SNS manda un email de \"Confirm subscription\" que hay que aceptar manualmente para activar el subscription."
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_usd" {
+  description = "Limite mensual del AWS Budget en USD. Cuando spend del mes supera el 80% del limite, llega notificación al notification_email + SNS topic."
+  type        = number
+  default     = 20
+}
+
+variable "log_retention_days" {
+  description = "Retención de logs en días para el API Gateway access log group (del módulo observability). Los log groups de las Lambdas usan su propia variable en el módulo compute (default 14)."
+  type        = number
+  default     = 14
+}

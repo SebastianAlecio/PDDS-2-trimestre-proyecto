@@ -243,3 +243,40 @@ output "frontend_url" {
   description = "URL pública del frontend (https://app.ticke-t.lumenchat.app). Endpoint final para usuarios."
   value       = length(module.cdn) > 0 ? module.cdn[0].frontend_url : ""
 }
+
+# ─── Observability outputs (OYD-D5 Deliverable E evidence) ─────────────
+
+output "observability_sns_topic_arn" {
+  description = "ARN del SNS topic que recibe alarmas y notificaciones de budget. Email subscription al notification_email."
+  value       = module.observability.sns_topic_arn
+}
+
+output "observability_dashboard_name" {
+  description = "Nombre del CloudWatch dashboard (consola: CloudWatch -> Dashboards -> click name)."
+  value       = module.observability.dashboard_name
+}
+
+output "observability_lambda_error_alarm_arns" {
+  description = "Lista de ARNs de las alarmas de Lambda Errors (1 por funcion)."
+  value       = module.observability.lambda_error_alarm_arns
+}
+
+output "observability_dlq_depth_alarm_arns" {
+  description = "Lista de ARNs de las alarmas de SQS DLQ depth."
+  value       = module.observability.dlq_depth_alarm_arns
+}
+
+output "observability_api_5xx_alarm_arn" {
+  description = "ARN de la alarma de API Gateway 5XX errors."
+  value       = module.observability.api_5xx_alarm_arn
+}
+
+output "observability_api_access_log_group" {
+  description = "Log group del API Gateway access log."
+  value       = module.observability.api_access_log_group_name
+}
+
+output "observability_budget_id" {
+  description = "ID del AWS Budget mensual."
+  value       = module.observability.budget_id
+}
