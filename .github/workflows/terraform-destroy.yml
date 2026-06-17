@@ -25,6 +25,8 @@ on:
 
 permissions:
   contents: read
+  # OIDC — D5 Deliverable C. Requerido para AssumeRoleWithWebIdentity.
+  id-token: write
 
 defaults:
   run:
@@ -67,12 +69,17 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials
+      # OIDC — el environment se eligio via workflow_dispatch (inputs.environment),
+      # y la propiedad `environment: ${{ inputs.environment }}` del job hace que
+      # el sub claim del token JWT contenga environment:dev o environment:staging.
+      # Ambos casos estan cubiertos por la trust policy del ci_runner. El ARN del
+      # role lo elegimos por env via vars de GH (mismo role por ahora; cuando
+      # separemos permisos por env se setean ARNs distintos).
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ inputs.environment == 'staging' && vars.AWS_ROLE_ARN_STAGING || vars.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
 
       - name: Terraform init
         run: |

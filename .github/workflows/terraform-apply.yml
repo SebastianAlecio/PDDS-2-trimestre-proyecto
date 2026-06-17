@@ -30,6 +30,9 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  # OIDC — D5 Deliverable C. Requerido para que configure-aws-credentials
+  # pueda hacer sts:AssumeRoleWithWebIdentity contra el ci_runner role.
+  id-token: write
 
 defaults:
   run:
@@ -63,12 +66,12 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials (dev)
+      # OIDC — assumimos el ci_runner role (trust policy acepta environment:dev).
+      - name: Configure AWS credentials (OIDC dev)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
 
       - name: Terraform init (backend-dev.hcl)
         run: terraform init -backend-config=envs/dev/backend-dev.hcl -input=false
@@ -159,12 +162,14 @@ jobs:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials (staging)
+      # OIDC — assumimos el ci_runner role (trust policy acepta environment:staging).
+      # AWS_ROLE_ARN_STAGING puede apuntar al mismo role que DEV mientras no
+      # haya separacion de permisos por env; ahora mismo es el mismo ARN.
+      - name: Configure AWS credentials (OIDC staging)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_STAGING }}
+          aws-region: us-east-1
 
       - name: Terraform init (backend-staging.hcl)
         run: terraform init -backend-config=envs/staging/backend-staging.hcl -input=false
