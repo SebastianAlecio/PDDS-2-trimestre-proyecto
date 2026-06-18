@@ -20,6 +20,19 @@ resource "aws_route53_zone" "this" {
   tags = {
     Environment = var.environment
   }
+
+  # PROTECTION: la hosted zone es PLATAFORMA. Al destruirla AWS asigna
+  # nameservers nuevos cuando se recrea, y el registrador externo
+  # (Hostinger en nuestro caso) tiene que actualizarse a mano — eso ROMPE
+  # el one-click deployment del rubric. prevent_destroy = true bloquea el
+  # `terraform destroy` para este recurso.
+  #
+  # Para forzar destroy real (decomisar el dominio entero), hay que
+  # comentar este lifecycle block, apply, destroy. Patron documentado en
+  # delivery-5-summary.md como decisión arquitectónica.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ─── Records DNS del dominio ───────────────────────────────────────────────
