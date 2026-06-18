@@ -136,9 +136,9 @@ validar el cert. API Gateway WS responde 426 Upgrade Required (esperado).
 
 AWS API Gateway custom domains NO escuchan en port 80 por decision
 arquitectonica de AWS. Cualquier intento de conectarse en HTTP es
-rechazado a nivel TCP (no hay listener). Esto cumple el principio
-del rubric ('no plaintext alcanzable') pero NO produce un HTTP 301
-explicito verificable con curl.
+rechazado a nivel TCP (no hay listener). Resultado: cero plaintext
+alcanzable, pero NO hay un HTTP 301 redirect explicito (no hay
+listener que pueda responder con el codigo).
 
 * Host api.ticke-t.lumenchat.app:80 was resolved.
 * IPv6: (none)

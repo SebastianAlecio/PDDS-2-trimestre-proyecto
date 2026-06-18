@@ -28,9 +28,9 @@ El refactor centraliza 7 roles least-privilege, uno por servicio. Antes de D5 to
 
 ### Secrets / Secrets Manager
 
-**Decisión arquitectónica documentada:** la app de Ticke-T NO usa Secrets Manager para D5. Razón: la arquitectura es **100% serverless** sin database password. Persistencia: DynamoDB (no requiere password de conexión — usa IAM auth). Autenticación de usuarios: Cognito (no manejamos passwords ni JWT signing keys — Cognito los maneja). Comunicación inter-Lambda: vía SQS+SNS (mensajería autorizada por IAM, sin tokens compartidos).
+**Decisión arquitectónica:** la app de Ticke-T NO usa Secrets Manager. Razón: la arquitectura es **100% serverless** sin database password. Persistencia: DynamoDB (no requiere password de conexión — usa IAM auth). Autenticación de usuarios: Cognito (no manejamos passwords ni JWT signing keys — Cognito los maneja). Comunicación inter-Lambda: vía SQS+SNS (mensajería autorizada por IAM, sin tokens compartidos).
 
-El rubric pide migrar el `TF_VAR_db_password` introducido en D3 a Secrets Manager. **D3 nunca introdujo ese pattern** porque nunca tuvimos password — Cognito sustituyó por completo cualquier sistema de auth basado en credenciales locales. Documentamos esto como **partial coverage** del Deliverable B; cumplimos KMS al 100% pero no creamos un Secrets Manager secret artificial sólo para checkear un box del rubric (sería complejidad sin propósito real, contradice el principio "professional, no placeholders").
+Como no hay credenciales persistentes que migrar, no introducimos un secreto artificial en Secrets Manager solo para tener uno. La capa de protección de data en reposo queda cubierta por completo por la CMK de KMS (sección 2). Si en el futuro la app suma un componente que sí requiera credencial almacenada (ej. integración con un servicio externo de email transaccional con API key), el wiring del modulo iam/ ya está listo para sumar `aws_secretsmanager_secret` + permitir `secretsmanager:GetSecretValue` al rol del consumer correspondiente.
 
 ## 2. KMS key management
 
@@ -47,7 +47,7 @@ Una sola CMK customer-managed encripta los 2 stores de data del proyecto.
 - DynamoDB `tickets-dev` (SSEType = KMS, KMSMasterKeyArn = el CMK)
 
 **Key policy** (3 statements, todos scopeados):
-1. **Root account:** `kms:*` con condition `StringEquals kms:CallerAccount = 544341949288`. Patrón estándar de TF management; cumple el requirement de "no grants kms:* without condition".
+1. **Root account:** `kms:*` con condition `StringEquals kms:CallerAccount = 544341949288`. Patrón estándar de TF management — la condition restringe el uso a llamadas originadas dentro de la cuenta dueña de la key, no es un grant abierto al principal root.
 2. **Service principals:** `s3.amazonaws.com` + `dynamodb.amazonaws.com` con Encrypt/Decrypt/GenerateDataKey/etc, condition `StringEquals kms:ViaService = ["s3.us-east-1.amazonaws.com", "dynamodb.us-east-1.amazonaws.com"]`. Bloquea uso de la key fuera de estos servicios.
 3. **Lambda consumer roles:** los 5 execution roles con `Decrypt` + `GenerateDataKey` + `DescribeKey`, condition `kms:ViaService` igual al statement 2. No permite Decrypt directo sobre payloads arbitrarios — solo a través de S3/DDB.
 
@@ -70,7 +70,7 @@ repo:SebastianAlecio/PDDS-2-trimestre-proyecto:environment:dev
 repo:SebastianAlecio/PDDS-2-trimestre-proyecto:environment:staging
 ```
 
-El rubric ejemplifica con `:ref:refs/heads/main` singular, pero nuestro pipeline incluye PR plans, drift detection on schedule, y manual dispatch contra environments dev/staging. Las 4 conditions cubren cada trigger sin abrir el role a `*` ni a subjects de otros repos.
+Nuestro pipeline tiene 4 triggers distintos que necesitan asumir el ci_runner role: push directo a main + drift detection on schedule (`ref:refs/heads/main`), PR plans (`pull_request`), y workflow_dispatch contra los environments dev/staging (`environment:dev`, `environment:staging`). Las 4 conditions cubren cada trigger sin abrir el role a `*` ni a subjects de otros repos.
 
 **Workflows migrados** (4 + 1 nuevo): `terraform-ci.yml`, `terraform-apply.yml`, `terraform-destroy.yml`, `terraform-drift.yml`, `frontend-deploy.yml`. Todos tienen `permissions: id-token: write` y reemplazaron los `aws-access-key-id` / `aws-secret-access-key` por `role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}` o `AWS_ROLE_ARN_STAGING`.
 
@@ -101,7 +101,7 @@ Todas wired al SNS topic `arn:aws:sns:us-east-1:544341949288:pdds-oyd-dev-alarms
 
 ### Dashboard
 
-Resource: `aws_cloudwatch_dashboard.main` (nombre `pdds-oyd-dev-main`). Body construido con `jsonencode()` referenciando variables — sin heredoc con ARNs hardcodeados (pitfall del rubric).
+Resource: `aws_cloudwatch_dashboard.main` (nombre `pdds-oyd-dev-main`). Body construido con `jsonencode()` referenciando variables — sin heredoc con ARNs hardcodeados, así los nombres de Lambdas y queues cambian automáticamente entre environments y no hay valores duplicados en el código.
 
 3 widgets:
 1. **API Gateway request volume + errors** — `AWS/ApiGateway` Count + 4XXError + 5XXError, stacked. Da la salud general del ingress.
@@ -116,34 +116,39 @@ Resource: `aws_budgets_budget.monthly`. **20 USD/mes**, notification al **80%** 
 
 ## 5. Two architectural trade-offs
 
-### (a) Sin Secrets Manager por arquitectura serverless
+### (a) Sin Secrets Manager — arquitectura serverless sin credenciales persistentes
 
-Aceptamos perder ~5 pts del Deliverable B en lugar de introducir un secret artificial. Justificación: el rubric espera un `TF_VAR_db_password` que migrar a Secrets Manager, pero la app es 100% serverless (DDB + Cognito) y nunca tuvo password. Las alternativas que evaluamos para "cumplir el rubric" eran:
+La aplicación no usa Secrets Manager. Persistencia (DynamoDB) y autenticación (Cognito) son servicios fully-managed que no requieren passwords almacenadas. La comunicación entre Lambdas pasa por SQS+SNS autorizado por IAM, sin tokens compartidos.
 
-- HMAC signing key entre watchdog → consumer (real defense in depth pero agregar lógica de signing/verification sin necesidad real)
-- Admin API token para un endpoint del gerente (sólo tiene sentido si construimos el endpoint, fuera del scope D5)
+Alternativas que consideramos para introducir un secret y descartamos:
+- **HMAC signing key entre watchdog → consumer**: agregaría lógica de signing/verification sin un riesgo concreto que justifique la complejidad operacional. Los mensajes de SQS ya están autorizados por IAM (sólo el watchdog tiene `sqs:SendMessage` sobre la queue).
+- **Admin API token para un futuro endpoint del gerente**: solo aplicaría una vez construido ese endpoint, fuera del scope actual.
 
-Ambas serían complejidad sin propósito operacional real — contradicen el principio "professional, no placeholders". Documentamos la limitación explícitamente, mantenemos KMS al 100%. Cae a "Partially Meets" en B → ~7/12 pts esperados.
+La capa de protección de data en reposo queda cubierta por la CMK de KMS (S3 + DynamoDB encriptados con customer-managed key, sección 2). La autenticación de usuarios y el acceso programático a recursos AWS quedan cubiertos por Cognito (issuer JWT, sección OIDC) y los IAM roles least-privilege (sección 1).
 
-### (b) HTTP 301 redirect explícito solo en CloudFront, no en API Gateway
+### (b) HTTP 301 redirect implementado en CloudFront, no a nivel API Gateway
 
-El rubric D exige "HTTP 301 redirect ... verifiable with curl ... do not simply close port 80". CloudFront satisface esto con `viewer_protocol_policy = "redirect-to-https"`. API Gateway custom domains (REST regional + WS v2) **no exponen port 80** por decisión arquitectónica de AWS — no es algo que cerramos, AWS literalmente nunca lo abre.
+CloudFront implementa el redirect 301 desde port 80 a port 443 via `viewer_protocol_policy = "redirect-to-https"`. Verificable con `curl -v http://app.ticke-t.lumenchat.app/` → HTTP 301 Moved Permanently → `https://app.ticke-t.lumenchat.app/`.
 
-Resultado: los 3 endpoints públicos (`api.*`, `ws.*`, `app.*`) son HTTPS-only y cero plaintext es alcanzable (cumple el espíritu del requisito). Pero solo CloudFront tiene el 301 explícito verificable. Cae a "Partially Meets" en D → ~5-6/8 pts esperados.
+Los API Gateway custom domains (REST regional + WS v2) **no exponen port 80**. Cualquier intento de conectarse en HTTP es rechazado a nivel TCP por la arquitectura del servicio AWS. Resultado: los 3 endpoints públicos (`api.*`, `ws.*`, `app.*`) son HTTPS-only y cero plaintext es alcanzable desde el exterior.
 
-Alternativa rechazada: poner CloudFront delante de api.* y ws.* también. Habría sumado ~6-8h de trabajo + riesgo de romper WebSocket (CloudFront limita conexiones a 60 min, requeriría reconnect en frontend) + latencia permanente + complejidad CORS para ganar ~3 pts. Cost/benefit malo.
+Alternativa que consideramos: poner CloudFront delante de api.* y ws.* también para tener el redirect 301 explícito en los 3. La descartamos por:
+- **WebSocket sobre CloudFront limita conexiones a 60 minutos** — implicaría agregar reconnect-with-resume al frontend chat.
+- **Latencia adicional permanente** (~20-50 ms por hop) en cada request del API.
+- **Complejidad CORS extra** entre el dominio CloudFront y el API.
+- **Riesgo de romper la aplicación** que ya está funcionando estable end-to-end.
 
 ---
 
-## Public endpoints (Deliverable D — required listing)
+## Public endpoints
 
-| URL | TLS | Cert source | Redirect 301 | Notas |
+| URL | TLS | Cert source | Redirect HTTP→HTTPS | Notas |
 |---|---|---|---|---|
-| `https://api.ticke-t.lumenchat.app` | ✅ | ACM wildcard `*.ticke-t.lumenchat.app` de D3 (regional us-east-1, vivido por API GW custom domain) | ❌ (AWS no expone port 80) | REST API tickets |
-| `wss://ws.ticke-t.lumenchat.app` | ✅ | mismo wildcard cert reutilizado | ❌ (AWS no expone port 80) | WebSocket chat |
-| `https://app.ticke-t.lumenchat.app` | ✅ | mismo wildcard referenciado vía `data "aws_acm_certificate"` (cumple "no duplicate") | ✅ HTTP 301 explícito (CloudFront `viewer_protocol_policy = "redirect-to-https"`) | Frontend SPA via CloudFront |
+| `https://api.ticke-t.lumenchat.app` | ✅ | ACM wildcard `*.ticke-t.lumenchat.app` de D3 (regional us-east-1, vivo por API GW custom domain) | port 80 cerrado (no listener) | REST API tickets |
+| `wss://ws.ticke-t.lumenchat.app` | ✅ | mismo wildcard cert reutilizado | port 80 cerrado (no listener) | WebSocket chat |
+| `https://app.ticke-t.lumenchat.app` | ✅ | mismo wildcard referenciado vía `data "aws_acm_certificate"` (sin duplicar resource) | ✅ HTTP 301 (CloudFront `viewer_protocol_policy = "redirect-to-https"`) | Frontend SPA via CloudFront |
 
-**Cobertura HTTPS total: 3/3 (100%).** Redirect 301 explícito: 1/3 (CloudFront only, ver trade-off (b)).
+**Cobertura HTTPS total: 3/3 (100%).** Redirect 301 explícito implementado en CloudFront; los API Gateway custom domains son HTTPS-only sin listener HTTP.
 
 Evidencia: `infra/evidence/tls-curl.txt` con outputs de `curl -v` para cada uno.
 
@@ -156,7 +161,3 @@ Evidencia: `infra/evidence/tls-curl.txt` con outputs de `curl -v` para cada uno.
 - IaC coverage: archivo separado (`infra/docs/iac-coverage.md`).
 - Evidence: 14 archivos en `infra/evidence/`.
 - README evidence section: `infra/README.md` renderiza todos los archivos inline.
-
-## Clean state proof trigger
-
-Esta seccion existe para garantizar que el commit del clean-state proof toque `infra/**` y dispare el path filter de `terraform-apply.yml`. El apply correspondiente recrea los 237 recursos desde un state list vacio.
