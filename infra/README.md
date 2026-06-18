@@ -41,7 +41,7 @@ infra/
 ├── envs/
 │   ├── dev/dev.tfvars     # Valores no-sensibles del ambiente dev (versionado)
 │   └── prod/              # Reservado para overrides de prod en deliveries posteriores
-├── evidence/              # Evidencia de CLI/UI capturada para los criterios del rubric
+├── evidence/              # Evidencia de CLI/UI capturada por cada delivery
 │   ├── compute-deployed.txt
 │   └── state-lock-contention.png
 └── docs/                  # Resúmenes de cada delivery (delivery-N-summary.md)
@@ -205,7 +205,7 @@ Permisos del workflow: `contents: read`, `pull-requests: write`. El último perm
 
 ## Evidence
 
-Los artefactos exigidos por el rubric se materializan en `infra/evidence/` y se referencian inline a continuación.
+Los artefactos de cada delivery se materializan en `infra/evidence/` y se referencian inline a continuación.
 
 ### Compute module — Lambda function desplegada
 
@@ -777,9 +777,8 @@ completamente recreado desde clean-state (terraform destroy previo elimino
   Apply to staging:  success (0 changes)
 
 Esto demuestra que el segundo push a main NO produce drift sobre la infra
-creada por el primer push. Cumple el requisito del rubric Deliverable F:
-'Second push with no changes produces terraform plan -detailed-exitcode
-exit code 0'.
+creada por el primer push: terraform plan -detailed-exitcode = 0,
+idempotency real end-to-end via pipeline OIDC.
 
 ## Detalle: terraform plan local
 
@@ -856,7 +855,7 @@ En CI/CD pipeline (apply-on-merge run 27729558515): 0 — idempotente
 
 ### Delivery 5 — Full IaC Coverage Proof (Deliverable I)
 
-Mapping completo de componente → IaC en [`docs/iac-coverage.md`](docs/iac-coverage.md) (separado del summary, requisito explícito del rubric).
+Mapping completo de componente → IaC en [`docs/iac-coverage.md`](docs/iac-coverage.md) (archivo separado del summary).
 
 `terraform state list` (237 recursos, snapshot post-D5):
 

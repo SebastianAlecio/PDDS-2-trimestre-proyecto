@@ -12,9 +12,8 @@ completamente recreado desde clean-state (terraform destroy previo elimino
   Apply to staging:  success (0 changes)
 
 Esto demuestra que el segundo push a main NO produce drift sobre la infra
-creada por el primer push. Cumple el requisito del rubric Deliverable F:
-'Second push with no changes produces terraform plan -detailed-exitcode
-exit code 0'.
+creada por el primer push: terraform plan -detailed-exitcode = 0,
+idempotency real end-to-end via pipeline OIDC.
 
 ## Detalle: terraform plan local
 
