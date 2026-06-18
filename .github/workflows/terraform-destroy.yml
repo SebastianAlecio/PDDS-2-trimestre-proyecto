@@ -44,7 +44,7 @@ jobs:
       # primero, sino bash falla con "No such file or directory" al
       # tratar de chdir a infra/.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Validate confirm input
         if: inputs.confirm != 'destroy'
@@ -59,12 +59,12 @@ jobs:
           echo "Target backend: infra/envs/${{ inputs.environment }}/backend-${{ inputs.environment }}.hcl"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
@@ -76,7 +76,7 @@ jobs:
       # role lo elegimos por env via vars de GH (mismo role por ahora; cuando
       # separemos permisos por env se setean ARNs distintos).
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ inputs.environment == 'staging' && vars.AWS_ROLE_ARN_STAGING || vars.AWS_ROLE_ARN_DEV }}
           aws-region: us-east-1

@@ -41,10 +41,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
@@ -62,10 +62,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
@@ -88,18 +88,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       # Node.js es requerido por null_resource.npm_install (módulo compute)
       # que corre `npm install --omit=dev` para empaquetar deps que el
       # runtime de Node 22 Lambda no trae.
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
@@ -110,7 +110,7 @@ jobs:
       # environment:staging y ref:refs/heads/main — todas scopeadas al repo.
       # AWS_ROLE_ARN_DEV se setea como GH var en Settings → Variables.
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
           aws-region: us-east-1
@@ -140,7 +140,7 @@ jobs:
       # "open ...zip: no such file or directory". Subir el build/ dir
       # junto con el tfplan es la forma standard de resolver esto.
       - name: Upload tfplan + Lambda zips artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: tfplan
           path: |
@@ -152,7 +152,7 @@ jobs:
       - name: Post plan as PR comment
         if: always() && steps.plan.outcome != 'skipped'
         continue-on-error: true
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
