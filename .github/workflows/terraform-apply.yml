@@ -53,22 +53,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
       # OIDC — assumimos el ci_runner role (trust policy acepta environment:dev).
       - name: Configure AWS credentials (OIDC dev)
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_DEV }}
           aws-region: us-east-1
@@ -82,7 +82,7 @@ jobs:
       # (parents[0] = main pre-merge, parents[1] = PR HEAD).
       - name: Find PR CI run
         id: find-run
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const mergeCommit = await github.rest.git.getCommit({
@@ -116,7 +116,7 @@ jobs:
             core.setOutput('run-id', runId);
 
       - name: Download tfplan artifact from PR CI run
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: tfplan
           path: infra/
@@ -149,15 +149,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
@@ -166,7 +166,7 @@ jobs:
       # AWS_ROLE_ARN_STAGING puede apuntar al mismo role que DEV mientras no
       # haya separacion de permisos por env; ahora mismo es el mismo ARN.
       - name: Configure AWS credentials (OIDC staging)
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN_STAGING }}
           aws-region: us-east-1
