@@ -25,6 +25,17 @@ resource "aws_iam_openid_connect_provider" "github" {
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
   ]
+
+  # PROTECTION: el OIDC provider es PLATAFORMA. Si lo destruyes, los
+  # workflows pierden la capacidad de hacer sts:AssumeRoleWithWebIdentity
+  # y el "single git push triggers full pipeline" del rubric F deja de
+  # funcionar (gallina/huevo: el apply que recrearía el provider no puede
+  # autenticar porque no hay provider). prevent_destroy = true bloquea
+  # el destroy y obliga a removerlo manualmente del state si alguien
+  # quiere decomisar la integración.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ─── Trust policy del ci_runner ───────────────────────────────────────────
