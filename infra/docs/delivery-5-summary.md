@@ -156,3 +156,7 @@ Evidencia: `infra/evidence/tls-curl.txt` con outputs de `curl -v` para cada uno.
 - IaC coverage: archivo separado (`infra/docs/iac-coverage.md`).
 - Evidence: 14 archivos en `infra/evidence/`.
 - README evidence section: `infra/README.md` renderiza todos los archivos inline.
+
+## Clean state proof trigger
+
+Esta seccion existe para garantizar que el commit del clean-state proof toque `infra/**` y dispare el path filter de `terraform-apply.yml`. El apply correspondiente recrea los 237 recursos desde un state list vacio.
