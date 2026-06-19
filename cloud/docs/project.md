@@ -839,8 +839,11 @@ API Gateway REST regional con custom domain. Stage único `api`. Authorizer Cogn
 | `GET` | `/tickets/queue` | JWT | `agente-n1`, `agente-n2`, `gerente` | — | `200` con `{unassigned: [], mine: []}` |
 | `PUT` | `/tickets/{id}/assign` | JWT | `agente-n1`, `agente-n2` | `{}` (acción idempotente) | `200` · `403` ya asignado a otro · `404` no existe |
 | `PUT` | `/tickets/{id}/status` | JWT | `agente-n1`, `agente-n2` | `{"status":"Cerrado"}` | `200` · `403` no es tu ticket · `409` ya cerrado |
+| `PUT` | `/tickets/{id}/escalate` | JWT | `agente-n1` | `{"razon": "<20-1000 chars>"}` | `200` ticket en cola N2 · `400` razón inválida · `403` no es tu ticket / rol incorrecto · `409` ya escalado |
+| `GET` | `/tickets/{id}/history` | JWT | colaborador (suyo) o agentes/gerente | — | `200` con `{historial_agentes[], events[]}` (timeline asignación/escalado/cierre) · `404` no existe |
 | `GET` | `/tickets/{id}/messages` | JWT | colaborador (suyo) o agente asignado | — | `200` con `[<mensajes>]` · `403` no tienes acceso |
 | `POST` | `/tickets/{id}/messages/attachments` | JWT | mismas reglas que `/messages` | `{filename, mime_type, size_bytes}` | `200` con `{upload_url, key, expires_in}` (presigned PUT URL) |
+| `GET` | `/metrics/agents` | JWT | `gerente` | — | `200` con `{totals, agents[]}` (lista completa N1+N2 desde Cognito, agregación de tickets resueltos/vencidos/en progreso + tiempo promedio) |
 | `POST` | `/async/enqueue` | JWT | `gerente` | `{event, payload}` (libre) | `202` con `{message_id, queue_url}` |
 
 **Formato de error estándar** (todos los códigos 4xx/5xx):
