@@ -46,6 +46,7 @@ export type TicketHistory = {
 export type AgentMetrics = {
   sub: string;
   nombre: string;
+  nivel: "N1" | "N2" | null;
   tickets_resueltos: number;
   tickets_vencidos: number;
   tickets_en_progreso: number;

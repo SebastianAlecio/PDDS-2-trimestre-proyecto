@@ -42,10 +42,11 @@ const {
 } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 const crypto = require("node:crypto");
-const { 
-  CognitoIdentityProviderClient, 
-  AdminCreateUserCommand, 
-  AdminAddUserToGroupCommand 
+const {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminAddUserToGroupCommand,
+  ListUsersInGroupCommand,
 } = require("@aws-sdk/client-cognito-identity-provider");
 
 
@@ -1611,11 +1612,84 @@ async function handleListAgentMetrics(event, claims) {
     }
   }
 
-  // Final pass: calcular tiempo promedio en minutos por agente.
-  const agents = Array.from(byAgent.values())
+  // Listar todos los agentes (n1 + n2) desde Cognito para que aparezcan
+  // incluso los que aún no tomaron ningún ticket — el gerente necesita ver
+  // al equipo completo, no solo a los que tienen actividad reciente.
+  const userPoolId = process.env.COGNITO_USER_POOL_ID;
+  const cognitoAgents = [];
+  if (userPoolId) {
+    for (const groupName of ["agente-n1", "agente-n2"]) {
+      try {
+        let nextToken;
+        do {
+          const result = await cognitoClient.send(
+            new ListUsersInGroupCommand({
+              UserPoolId: userPoolId,
+              GroupName: groupName,
+              Limit: 60,
+              NextToken: nextToken,
+            }),
+          );
+          for (const user of result.Users || []) {
+            const subAttr = (user.Attributes || []).find((a) => a.Name === "sub");
+            const nameAttr = (user.Attributes || []).find((a) => a.Name === "name");
+            const emailAttr = (user.Attributes || []).find((a) => a.Name === "email");
+            const sub = subAttr?.Value;
+            if (!sub) continue;
+            cognitoAgents.push({
+              sub,
+              nombre: nameAttr?.Value || emailAttr?.Value || user.Username || "(sin nombre)",
+              nivel: groupName === "agente-n2" ? "N2" : "N1",
+            });
+          }
+          nextToken = result.NextToken;
+        } while (nextToken);
+      } catch (err) {
+        console.error("metrics_cognito_list_failed:", groupName, err);
+        // No abortamos: si Cognito falla, devolvemos al menos los agentes con
+        // actividad. El gerente verá la lista parcial pero el dashboard no rompe.
+      }
+    }
+  }
+
+  // Merge: empezamos con todos los agentes de Cognito en ceros, y luego
+  // sobreescribimos con los conteos reales de byAgent.
+  const mergedBySub = new Map();
+  for (const ca of cognitoAgents) {
+    mergedBySub.set(ca.sub, {
+      sub: ca.sub,
+      nombre: ca.nombre,
+      nivel: ca.nivel,
+      tickets_resueltos: 0,
+      tickets_vencidos: 0,
+      tickets_en_progreso: 0,
+      sum_resolucion_ms: 0,
+      count_resolucion: 0,
+    });
+  }
+  for (const [sub, entry] of byAgent.entries()) {
+    const existing = mergedBySub.get(sub);
+    if (existing) {
+      existing.tickets_resueltos = entry.tickets_resueltos;
+      existing.tickets_vencidos = entry.tickets_vencidos;
+      existing.tickets_en_progreso = entry.tickets_en_progreso;
+      existing.sum_resolucion_ms = entry.sum_resolucion_ms;
+      existing.count_resolucion = entry.count_resolucion;
+      if (entry.nombre && entry.nombre !== "(sin nombre)") existing.nombre = entry.nombre;
+    } else {
+      // Agente que tiene tickets pero no está (o ya no está) en los grupos
+      // de Cognito — lo incluimos sin nivel para no perder la métrica.
+      mergedBySub.set(sub, { ...entry, nivel: null });
+    }
+  }
+
+  // Orden: primero N1 luego N2, dentro de cada nivel alfabético por nombre.
+  // Pone al equipo visualmente agrupado por nivel, más útil que ranking puro.
+  const agents = Array.from(mergedBySub.values())
     .map((entry) => ({
       sub: entry.sub,
       nombre: entry.nombre,
+      nivel: entry.nivel,
       tickets_resueltos: entry.tickets_resueltos,
       tickets_vencidos: entry.tickets_vencidos,
       tickets_en_progreso: entry.tickets_en_progreso,
@@ -1624,7 +1698,13 @@ async function handleListAgentMetrics(event, claims) {
           ? Math.round(entry.sum_resolucion_ms / entry.count_resolucion / 60000)
           : null,
     }))
-    .sort((a, b) => b.tickets_resueltos - a.tickets_resueltos);
+    .sort((a, b) => {
+      const nivelOrder = { N1: 0, N2: 1 };
+      const an = a.nivel ? nivelOrder[a.nivel] ?? 2 : 2;
+      const bn = b.nivel ? nivelOrder[b.nivel] ?? 2 : 2;
+      if (an !== bn) return an - bn;
+      return a.nombre.localeCompare(b.nombre, "es");
+    });
 
   return ok({ totals, agents });
 }

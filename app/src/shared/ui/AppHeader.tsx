@@ -18,7 +18,7 @@ export function AppHeader() {
       <span className={styles.brand}>Ticke-T</span>
 
       <nav className={styles.nav} aria-label="Primary">
-        {(user.primaryRole === "colaborador" || user.primaryRole === "gerente") && (
+        {user.primaryRole === "colaborador" && (
           <>
             <NavLink
               to="/crear"
@@ -38,7 +38,7 @@ export function AppHeader() {
             </NavLink>
           </>
         )}
-        {(user.primaryRole === "agente-n1" || user.primaryRole === "agente-n2" || user.primaryRole === "gerente") && (
+        {(user.primaryRole === "agente-n1" || user.primaryRole === "agente-n2") && (
           <NavLink
             to="/cola"
             className={({ isActive }) =>

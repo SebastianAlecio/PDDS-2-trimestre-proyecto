@@ -154,6 +154,7 @@ resource "aws_iam_role_policy" "tickets_lambda_cognito" {
         "cognito-idp:AdminEnableUser",
         "cognito-idp:AdminAddUserToGroup",
         "cognito-idp:AdminRemoveUserFromGroup",
+        "cognito-idp:ListUsersInGroup",
       ]
       Resource = [var.cognito_user_pool_arn]
     }]

@@ -230,7 +230,7 @@ function DashboardBody({
         </header>
         {data.agents.length === 0 ? (
           <p className={styles.note} style={{ padding: "var(--s-xl)" }}>
-            Aún no hay agentes con tickets en el sistema.
+            Aún no hay agentes registrados en el sistema.
           </p>
         ) : (
           <table className={styles.table}>
@@ -243,6 +243,7 @@ function DashboardBody({
                 >
                   Nombre
                 </th>
+                <th style={{ width: 70 }}>Nivel</th>
                 <th
                   className={styles.sortable}
                   onClick={() => onSort("tickets_resueltos")}
@@ -281,6 +282,7 @@ function DashboardBody({
               {sortedAgents.map((a) => (
                 <tr key={a.sub}>
                   <td>{a.nombre}</td>
+                  <td className={styles.cellMuted}>{a.nivel ?? "—"}</td>
                   <td className={styles.numericCell}>{a.tickets_resueltos}</td>
                   <td className={styles.numericCell}>{a.tickets_en_progreso}</td>
                   <td className={styles.numericCell}>{a.tickets_vencidos}</td>
