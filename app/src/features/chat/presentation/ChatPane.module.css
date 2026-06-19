@@ -149,6 +149,64 @@
   gap: var(--s-sm);
 }
 
+.systemRow {
+  display: flex;
+  justify-content: center;
+  align-self: stretch;
+  padding: 4px 0;
+}
+
+.systemBubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 80%;
+  padding: var(--s-sm) var(--s-md);
+  border-radius: 10px;
+  background: var(--canvas-parchment);
+  border: 1px solid var(--hairline);
+  color: var(--ink-muted-80);
+  font-family: var(--type-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.systemIcon {
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--ink-muted-48);
+  flex: 0 0 auto;
+}
+
+.systemBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.systemTitle {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.systemReason {
+  margin: 0;
+  color: var(--ink-muted-80);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.systemTimestamp {
+  margin: 0;
+  color: var(--ink-muted-48);
+  font-size: 11px;
+}
+
 .timestamp {
   font-family: var(--type-text);
   font-size: 11px;

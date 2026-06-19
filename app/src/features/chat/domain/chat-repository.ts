@@ -22,6 +22,13 @@ export type ChatServerEvent =
       ticketId: string;
       closedBy: { sub: string; nombre: string };
       closedAt: string;
+    }
+  | {
+      type: "ticket_escalated";
+      ticketId: string;
+      escaladoPor: { sub: string; nombre: string };
+      escaladoAt: string;
+      razon: string;
     };
 
 // Estado de la conexión WS, expuesto al hook que lo consume.

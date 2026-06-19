@@ -1,19 +1,26 @@
 import type { ChatAttachment } from "../domain/message";
 import styles from "./MessageAttachmentView.module.css";
 
-const IMAGE_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-]);
+// Heurística para detectar imagenes:
+//   - Por content type: cualquier "image/*" (case insensitive).
+//   - Por extension del filename como fallback cuando el server no manda el
+//     content type correcto (ej. octet-stream).
+// Cubrir ambos casos porque algunos clientes upload con content type generico.
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
+
+function isImageAttachment(attachment: ChatAttachment): boolean {
+  const ct = (attachment.contentType || "").toLowerCase().trim();
+  if (ct.startsWith("image/")) return true;
+  if (IMAGE_EXTENSIONS.test(attachment.filename || "")) return true;
+  return false;
+}
 
 type Props = {
   attachment: ChatAttachment;
 };
 
 export function MessageAttachmentView({ attachment }: Props) {
-  const isImage = IMAGE_TYPES.has(attachment.contentType);
+  const isImage = isImageAttachment(attachment);
   const hasUrl = attachment.downloadUrl.length > 0;
 
   if (isImage && hasUrl) {

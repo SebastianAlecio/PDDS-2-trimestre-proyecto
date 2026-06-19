@@ -3,6 +3,7 @@ import { AgentHistoryPage } from "./features/tickets/presentation/AgentHistoryPa
 import { AgentTicketPage } from "./features/tickets/presentation/AgentTicketPage";
 import { CollaboratorTicketPage } from "./features/tickets/presentation/CollaboratorTicketPage";
 import { CreateTicketPage } from "./features/tickets/presentation/CreateTicketPage";
+import { ManagerDashboardPage } from "./features/tickets/presentation/ManagerDashboardPage";
 import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
 import { LoginPage } from "./features/auth/presentation/LoginPage";
@@ -105,6 +106,17 @@ export function App() {
           }
         />
 
+        <Route
+          path="/metricas"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["gerente"]}>
+                <ManagerDashboardPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <GlobalChatWidget />
@@ -118,7 +130,11 @@ export function App() {
 function GlobalChatWidget() {
   const location = useLocation();
   const path = location.pathname;
-  if (path.startsWith("/mis-tickets/") || path.startsWith("/agente/ticket/")) {
+  if (
+    path.startsWith("/mis-tickets/") ||
+    path.startsWith("/agente/ticket/") ||
+    path.startsWith("/metricas")
+  ) {
     return null;
   }
   return <ChatWidget />;
@@ -132,7 +148,7 @@ function HomeRedirect() {
   const role = status.user.primaryRole;
   if (role === "colaborador") return <Navigate to="/mis-tickets" replace />;
   if (role === "agente-n1" || role === "agente-n2") return <Navigate to="/cola" replace />;
-  if (role === "gerente") return <Navigate to="/crear-usuario" replace />;
+  if (role === "gerente") return <Navigate to="/metricas" replace />;
   return <ComingSoon title={titleForRole(role)} caption={captionForRole(role)} />;
 }
 

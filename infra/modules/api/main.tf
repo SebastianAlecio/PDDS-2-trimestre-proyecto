@@ -74,6 +74,21 @@ locals {
       http_method = "POST"
       invoke_uri  = local.invoke_uri_tickets
     }
+    "PUT /tickets/{id}/escalate" = {
+      resource_id = aws_api_gateway_resource.tickets_id_escalate.id
+      http_method = "PUT"
+      invoke_uri  = local.invoke_uri_tickets
+    }
+    "GET /tickets/{id}/history" = {
+      resource_id = aws_api_gateway_resource.tickets_id_history.id
+      http_method = "GET"
+      invoke_uri  = local.invoke_uri_tickets
+    }
+    "GET /metrics/agents" = {
+      resource_id = aws_api_gateway_resource.metrics_agents.id
+      http_method = "GET"
+      invoke_uri  = local.invoke_uri_tickets
+    }
   }
 
   # Recursos que aceptan requests cross-origin desde el browser y por tanto
@@ -88,6 +103,9 @@ locals {
     "tickets-id-messages"             = aws_api_gateway_resource.tickets_id_messages.id
     "tickets-id-messages-attachments" = aws_api_gateway_resource.tickets_id_messages_attachments.id
     "async-enqueue"                   = aws_api_gateway_resource.async_enqueue.id
+    "tickets-id-escalate"             = aws_api_gateway_resource.tickets_id_escalate.id
+    "tickets-id-history"              = aws_api_gateway_resource.tickets_id_history.id
+    "metrics-agents"                  = aws_api_gateway_resource.metrics_agents.id
   }
 }
 
@@ -184,6 +202,34 @@ resource "aws_api_gateway_resource" "async_enqueue" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_resource.async.id
   path_part   = "enqueue"
+}
+
+# Recursos agregados (E5-cloud):
+#   - /tickets/{id}/escalate — PUT para escalar un ticket de N1 a la cola N2.
+#   - /tickets/{id}/history  — GET para listar los eventos del timeline del ticket.
+#   - /metrics/agents        — GET con métricas agregadas por agente (solo gerente).
+resource "aws_api_gateway_resource" "tickets_id_escalate" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id.id
+  path_part   = "escalate"
+}
+
+resource "aws_api_gateway_resource" "tickets_id_history" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.tickets_id.id
+  path_part   = "history"
+}
+
+resource "aws_api_gateway_resource" "metrics" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "metrics"
+}
+
+resource "aws_api_gateway_resource" "metrics_agents" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.metrics.id
+  path_part   = "agents"
 }
 
 # ─── Methods + Integrations (autenticados con Cognito) ──────────────────────
@@ -330,6 +376,10 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_resource.tickets_id_messages_attachments.id,
       aws_api_gateway_resource.async.id,
       aws_api_gateway_resource.async_enqueue.id,
+      aws_api_gateway_resource.tickets_id_escalate.id,
+      aws_api_gateway_resource.tickets_id_history.id,
+      aws_api_gateway_resource.metrics.id,
+      aws_api_gateway_resource.metrics_agents.id,
       [for k, m in aws_api_gateway_method.endpoints : m.id],
       [for k, i in aws_api_gateway_integration.endpoints : i.id],
       [for k, m in aws_api_gateway_method.options : m.id],

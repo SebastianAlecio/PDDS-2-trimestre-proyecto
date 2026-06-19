@@ -535,68 +535,149 @@ async function handleQueue(event, claims) {
   const sub = claims.sub;
   if (!sub) return unauthorized("token is missing 'sub' claim");
 
-  // Tres queries paralelas:
+  const groups = parseGroups(claims);
+  const isN2 = groups.includes("agente-n2");
+  const isN1 = groups.includes("agente-n1");
+
+  // Queries paralelas:
   //   1. Sin asignar: GSI4 con STATUS#Abierto. Al tomar el ticket pasamos a
   //      STATUS#En progreso, así que esta lista contiene solo los disponibles.
   //   2. Míos activos: GSI2 con AGENT#{sub}, filtrando fuera Resuelto/Cerrado.
   //   3. Historial: GSI2 con AGENT#{sub} filtrando IN Cerrado/Resuelto —
   //      tickets que ya cerré, para la pestaña de historial del agente.
-  try {
-    const [unassignedResult, mineResult, historialResult] = await Promise.all([
+  //   4. (solo para agente-n2) Cola N2: tickets escalados con GSI2-PK = QUEUE#N2,
+  //      sin agente N2 asignado todavía. Devueltos como "escalated" para
+  //      diferenciarlos de "unassigned" (que son nuevos del colaborador).
+  //   5. (solo para agente-n1) Escalados por mí: tickets donde el campo
+  //      escalated_by_n1_sub = mi sub. Query a GSI3 (TICKETS) con
+  //      FilterExpression. Costoso a gran volumen pero práctico para MVP.
+  const promesas = [
+    ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: "GSI4",
+        KeyConditionExpression: "#pk = :status",
+        ExpressionAttributeNames: { "#pk": "GSI4-PK" },
+        ExpressionAttributeValues: { ":status": "STATUS#Abierto" },
+        ScanIndexForward: true,
+        Limit: 100,
+      }),
+    ),
+    ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: "GSI2",
+        KeyConditionExpression: "#pk = :agent",
+        FilterExpression: "estado <> :done AND estado <> :closed",
+        ExpressionAttributeNames: { "#pk": "GSI2-PK" },
+        ExpressionAttributeValues: {
+          ":agent": `AGENT#${sub}`,
+          ":done": "Resuelto",
+          ":closed": "Cerrado",
+        },
+        ScanIndexForward: false,
+        Limit: 100,
+      }),
+    ),
+    ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: "GSI2",
+        KeyConditionExpression: "#pk = :agent",
+        FilterExpression: "estado = :done OR estado = :closed",
+        ExpressionAttributeNames: { "#pk": "GSI2-PK" },
+        ExpressionAttributeValues: {
+          ":agent": `AGENT#${sub}`,
+          ":done": "Resuelto",
+          ":closed": "Cerrado",
+        },
+        ScanIndexForward: false,
+        Limit: 100,
+      }),
+    ),
+  ];
+
+  if (isN2) {
+    promesas.push(
+      ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          IndexName: "GSI2",
+          KeyConditionExpression: "#pk = :queueN2",
+          ExpressionAttributeNames: { "#pk": "GSI2-PK" },
+          ExpressionAttributeValues: { ":queueN2": "QUEUE#N2" },
+          ScanIndexForward: false,
+          Limit: 100,
+        }),
+      ),
+    );
+  } else {
+    // Push placeholder undefined para mantener alineación de índices en la
+    // destructuración. Si el caller es N1 puro (no N2), la posición 3 queda
+    // como undefined y el bloque de Promise.all maneja eso.
+    promesas.push(Promise.resolve(null));
+  }
+
+  // Query #5 — solo para agente-n1 (pero NO para n2, que ya ve la cola N2
+  // directamente). Tickets que este N1 escaló y todavía no fueron cerrados
+  // por un N2 — quedan en su panel como "Escalados por mí" para que tenga
+  // visibilidad de qué pasó con cada caso.
+  //
+  // Estrategia: query a GSI4 con STATUS#En progreso (GSI4 proyecta ALL,
+  // permite FilterExpression sobre `escalated_by_n1_sub`). Filtramos en
+  // memoria por ese campo. Cubre los tickets escalados que aún no fueron
+  // cerrados; si un N2 los cerró, ya no aparecen como "en seguimiento".
+  if (isN1 && !isN2) {
+    promesas.push(
       ddb.send(
         new QueryCommand({
           TableName: TABLE_NAME,
           IndexName: "GSI4",
           KeyConditionExpression: "#pk = :status",
+          FilterExpression: "escalated_by_n1_sub = :mySub",
           ExpressionAttributeNames: { "#pk": "GSI4-PK" },
-          ExpressionAttributeValues: { ":status": "STATUS#Abierto" },
-          ScanIndexForward: true, // por SK = PRIO#<p>#<fecha>, ordena alta primero
-          Limit: 100,
-        }),
-      ),
-      ddb.send(
-        new QueryCommand({
-          TableName: TABLE_NAME,
-          IndexName: "GSI2",
-          KeyConditionExpression: "#pk = :agent",
-          FilterExpression: "estado <> :done AND estado <> :closed",
-          ExpressionAttributeNames: { "#pk": "GSI2-PK" },
           ExpressionAttributeValues: {
-            ":agent": `AGENT#${sub}`,
-            ":done": "Resuelto",
-            ":closed": "Cerrado",
+            ":status": "STATUS#En progreso",
+            ":mySub": sub,
           },
-          ScanIndexForward: false, // por fecha_inicio, más recientes primero
           Limit: 100,
         }),
       ),
-      ddb.send(
-        new QueryCommand({
-          TableName: TABLE_NAME,
-          IndexName: "GSI2",
-          KeyConditionExpression: "#pk = :agent",
-          FilterExpression: "estado = :done OR estado = :closed",
-          ExpressionAttributeNames: { "#pk": "GSI2-PK" },
-          ExpressionAttributeValues: {
-            ":agent": `AGENT#${sub}`,
-            ":done": "Resuelto",
-            ":closed": "Cerrado",
-          },
-          ScanIndexForward: false, // más recientes primero (por fecha_inicio)
-          Limit: 100,
-        }),
-      ),
-    ]);
+    );
+  } else {
+    promesas.push(Promise.resolve(null));
+  }
 
-    const [unassignedEnriched, mineEnriched, historialEnriched] = await Promise.all([
+  try {
+    const resultados = await Promise.all(promesas);
+    const [unassignedResult, mineResult, historialResult, escaladosResult, escaladosPorMiResult] =
+      resultados;
+
+    const escalatedItems = escaladosResult ? (escaladosResult.Items ?? []) : [];
+    const escalatedByMeItems = escaladosPorMiResult
+      ? (escaladosPorMiResult.Items ?? [])
+      : [];
+
+    const [
+      unassignedEnriched,
+      mineEnriched,
+      historialEnriched,
+      escalatedEnriched,
+      escalatedByMeEnriched,
+    ] = await Promise.all([
       Promise.all((unassignedResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
       Promise.all((mineResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
       Promise.all((historialResult.Items ?? []).map(enrichTicketAttachmentsWithUrls)),
+      Promise.all(escalatedItems.map(enrichTicketAttachmentsWithUrls)),
+      Promise.all(escalatedByMeItems.map(enrichTicketAttachmentsWithUrls)),
     ]);
+
     return ok({
       unassigned: unassignedEnriched,
       mine: mineEnriched,
       historial: historialEnriched,
+      escalated: escalatedEnriched, // solo poblado cuando isN2 = true
+      escalated_by_me: escalatedByMeEnriched, // solo poblado cuando isN1 puro
     });
   } catch (err) {
     console.error("dynamodb_queue_query_failed:", err);
@@ -615,6 +696,10 @@ async function handleAssignTicket(event, claims) {
     return unauthorized("token is missing 'sub' or 'name' claim");
   }
 
+  const groups = parseGroups(claims);
+  const isN2 = groups.includes("agente-n2");
+  const isN1 = groups.includes("agente-n1");
+
   const ticketId = event.pathParameters?.id;
   if (!ticketId) {
     return badRequest("missing path parameter 'id'");
@@ -623,33 +708,90 @@ async function handleAssignTicket(event, claims) {
   const nowIso = new Date().toISOString();
   const newStatus = "En progreso";
   const agentPk = `AGENT#${sub}`;
+  const queueN2Pk = "QUEUE#N2";
 
   // Condición: el ticket existe Y (no tiene agente asignado O ya está
-  // asignado a mí — idempotencia). Si ya lo tomó otro, falla con 409.
+  // asignado a mí — idempotencia O esta en cola N2 y soy agente N2).
+  // Si ya lo tomó otro, falla con 409.
+  //
+  // El nivel asignado se calcula segun los grupos del caller:
+  //   - solo agente-n1 → nivel N1
+  //   - agente-n2 (con o sin n1) → nivel N2 (asume el rol mas alto)
+  const nivelAsumido = isN2 ? "N2" : "N1";
+
+  // Permitir tomar de QUEUE#N2 solo si el caller es agente-n2.
+  const condicion = isN2
+    ? "attribute_exists(PK) AND (attribute_not_exists(#g2pk) OR #g2pk = :agent OR #g2pk = :queueN2)"
+    : "attribute_exists(PK) AND (attribute_not_exists(#g2pk) OR #g2pk = :agent)";
+
+  const valoresCondicion = {
+    ":agent": agentPk,
+    ":statusPk": `STATUS#${newStatus}`,
+    ":status": newStatus,
+    ":name": nameClaim,
+    ":now": nowIso,
+    ":nivel": nivelAsumido,
+    ":empty": [],
+    ":nuevaEntrada": [
+      {
+        nivel: nivelAsumido,
+        sub,
+        nombre: nameClaim,
+        asignado_at: nowIso,
+      },
+    ],
+  };
+  if (isN2) valoresCondicion[":queueN2"] = queueN2Pk;
+
   try {
     const result = await ddb.send(
       new UpdateCommand({
         TableName: TABLE_NAME,
         Key: { PK: `TICKET#${ticketId}`, SK: "METADATA" },
-        UpdateExpression:
-          "SET #g2pk = :agent, #g4pk = :statusPk, estado = :status, responsable = :name, updated_at = :now",
-        ConditionExpression:
-          "attribute_exists(PK) AND (attribute_not_exists(#g2pk) OR #g2pk = :agent)",
+        UpdateExpression: [
+          "SET #g2pk = :agent",
+          "#g4pk = :statusPk",
+          "estado = :status",
+          "responsable = :name",
+          "nivel_actual = :nivel",
+          "historial_agentes = list_append(if_not_exists(historial_agentes, :empty), :nuevaEntrada)",
+          "updated_at = :now",
+        ].join(", "),
+        ConditionExpression: condicion,
         ExpressionAttributeNames: {
           "#g2pk": "GSI2-PK",
           "#g4pk": "GSI4-PK",
         },
-        ExpressionAttributeValues: {
-          ":agent": agentPk,
-          ":statusPk": `STATUS#${newStatus}`,
-          ":status": newStatus,
-          ":name": nameClaim,
-          ":now": nowIso,
-        },
+        ExpressionAttributeValues: valoresCondicion,
         ReturnValues: "ALL_NEW",
       }),
     );
-    return ok({ id: ticketId, item: result.Attributes });
+
+    // Evento timeline asignado — best-effort.
+    try {
+      await ddb.send(
+        new PutCommand({
+          TableName: TABLE_NAME,
+          Item: {
+            PK: `TICKET#${ticketId}`,
+            SK: `EVT#${nowIso}#asignado`,
+            tipo: "asignado",
+            actor_sub: sub,
+            actor_nombre: nameClaim,
+            actor_nivel: nivelAsumido,
+            created_at: nowIso,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("evento_asignado_put_failed:", err);
+    }
+
+    // Enriquecemos attachments con presigned download URLs antes de devolver
+    // — sino el frontend pierde la URL firmada al refrescar el state local
+    // con este return (que viene de ReturnValues=ALL_NEW del UpdateCommand).
+    const enriched = await enrichTicketAttachmentsWithUrls(result.Attributes);
+    return ok({ id: ticketId, item: enriched });
   } catch (err) {
     if (err.name === "ConditionalCheckFailedException") {
       // Puede ser que el ticket no existe O que ya fue tomado por otro
@@ -893,7 +1035,31 @@ async function handleCloseTicket(event, claims) {
     closedAt: now,
   });
 
-  return ok({ id: ticketId, item });
+  // 4) Evento timeline cerrado — best-effort. Queda en el historial del ticket
+  //    para que la pagina de historial muestre quien cerro y cuando.
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          PK: `TICKET#${ticketId}`,
+          SK: `EVT#${now}#cerrado`,
+          tipo: "cerrado",
+          actor_sub: sub,
+          actor_nombre: nameClaim,
+          created_at: now,
+        },
+      }),
+    );
+  } catch (err) {
+    console.error("evento_cerrado_put_failed:", err);
+  }
+
+  // Enriquecemos attachments con presigned download URLs antes de devolver
+  // — sino el frontend pierde la URL firmada al refrescar state con el item
+  // que viene de DDB sin URLs.
+  const enriched = await enrichTicketAttachmentsWithUrls(item);
+  return ok({ id: ticketId, item: enriched });
 }
 
 async function handleCreateUser(event, claims) {
@@ -1033,6 +1199,437 @@ async function handleAsyncEnqueue(event) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// PUT /tickets/{id}/escalate — escalar de N1 a la cola N2
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Escalamiento N1 → cola N2. El agente N1 que tiene el ticket asignado lo
+// devuelve a una cola exclusiva de N2 (marker GSI2-PK = "QUEUE#N2"). Cualquier
+// agente N2 disponible puede tomarlo después con el flujo normal de assign.
+//
+// Side effects en la misma operación:
+//   - Update del ticket: nuevo GSI2-PK, nivel_actual = "N2", responsable
+//     pasa a "Cola N2", se agrega entrada a historial_agentes[] con escalado_at.
+//   - PutItem evento timeline: PK=TICKET#<id>, SK=EVT#<iso>#escalado con
+//     agente_origen, razon, escalado_at — queda en el historial del ticket.
+//   - Broadcast WS al colaborador con mensaje de sistema (best-effort).
+//
+// Pre-condiciones:
+//   - Caller es agente-n1.
+//   - Ticket existe Y está asignado al caller actual (#g2pk = AGENT#<sub>).
+//   - Ticket está en estado "En progreso" o "Abierto" (no se escala uno cerrado).
+//   - Razón > 20 caracteres (campo obligatorio).
+async function handleEscalateTicket(event, claims) {
+  if (!requireGroup(claims, ["agente-n1"])) {
+    return forbidden("solo agentes N1 pueden escalar tickets a la cola N2");
+  }
+
+  const sub = claims.sub;
+  const nameClaim = (claims.name || "").trim();
+  if (!sub || !nameClaim) {
+    return unauthorized("token sin claim 'sub' o 'name'");
+  }
+
+  const ticketId = event.pathParameters?.id;
+  if (!ticketId) {
+    return badRequest("falta path parameter 'id'");
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return badRequest("body debe ser JSON válido");
+  }
+  const razon = (body.razon || "").trim();
+  if (razon.length < 20) {
+    return badRequest("la razón del escalamiento debe tener al menos 20 caracteres");
+  }
+  if (razon.length > 1000) {
+    return badRequest("la razón del escalamiento no puede superar los 1000 caracteres");
+  }
+
+  const nowIso = new Date().toISOString();
+  const myAgentPk = `AGENT#${sub}`;
+  const queueN2Pk = "QUEUE#N2";
+
+  // Update condicional: solo el agente N1 actualmente asignado puede escalar.
+  // El estado debe ser En progreso o Abierto (no escalar tickets cerrados/vencidos).
+  let updateResult;
+  try {
+    updateResult = await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: `TICKET#${ticketId}`, SK: "METADATA" },
+        UpdateExpression: [
+          "SET #g2pk = :queueN2",
+          "responsable = :responsable",
+          "nivel_actual = :nivelN2",
+          "historial_agentes = list_append(if_not_exists(historial_agentes, :empty), :nuevaEntrada)",
+          "escalated_by_n1_sub = :myAgentSub",
+          "escalated_by_n1_nombre = :myAgentNombre",
+          "updated_at = :now",
+        ].join(", "),
+        ConditionExpression:
+          "attribute_exists(PK) AND #g2pk = :myAgent AND (estado = :enProgreso OR estado = :abierto)",
+        ExpressionAttributeNames: {
+          "#g2pk": "GSI2-PK",
+        },
+        ExpressionAttributeValues: {
+          ":queueN2": queueN2Pk,
+          ":myAgent": myAgentPk,
+          ":responsable": "Cola N2",
+          ":nivelN2": "N2",
+          ":enProgreso": "En progreso",
+          ":abierto": "Abierto",
+          ":myAgentSub": sub,
+          ":myAgentNombre": nameClaim,
+          ":empty": [],
+          ":nuevaEntrada": [
+            {
+              nivel: "N1",
+              sub,
+              nombre: nameClaim,
+              asignado_at: null, // marcador: el assigned_at original ya está en otra entrada (no calculable acá sin extra query)
+              escalado_at: nowIso,
+              razon,
+            },
+          ],
+          ":now": nowIso,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+  } catch (err) {
+    if (err.name === "ConditionalCheckFailedException") {
+      return forbidden(
+        "no podes escalar este ticket: no esta asignado a vos o ya esta cerrado/vencido",
+      );
+    }
+    console.error("dynamodb_escalate_failed:", err);
+    return serverError("fallo al escalar el ticket", {
+      name: err.name,
+      message: err.message,
+    });
+  }
+
+  // Evento timeline — best-effort, no rollback si falla.
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          PK: `TICKET#${ticketId}`,
+          SK: `EVT#${nowIso}#escalado`,
+          tipo: "escalado",
+          actor_sub: sub,
+          actor_nombre: nameClaim,
+          actor_nivel: "N1",
+          escalado_a: "QUEUE#N2",
+          razon,
+          created_at: nowIso,
+        },
+      }),
+    );
+  } catch (err) {
+    console.error("evento_escalado_put_failed:", err);
+    // Continuamos: el ticket ya está escalado, el evento es metadata histórica.
+  }
+
+  // Broadcast WS al colaborador: mensaje de sistema indicando el escalamiento.
+  // Best-effort: si WS no está configurado o falla la entrega, el cambio en
+  // DDB ya está hecho y el colaborador lo ve cuando refresque la página.
+  try {
+    await broadcastTicketEscalatedWs({
+      ticketId,
+      escaladoPor: { sub, nombre: nameClaim },
+      escaladoAt: nowIso,
+      razon,
+    });
+  } catch (err) {
+    console.error("ws_broadcast_escalated_failed:", err);
+  }
+
+  const enriched = await enrichTicketAttachmentsWithUrls(updateResult.Attributes);
+  return ok({ id: ticketId, item: enriched });
+}
+
+// Broadcast best-effort para el evento de escalamiento: notifica a todas las
+// conexiones WS del ticket que se escaló. Mismo patrón que broadcastTicketClosedWs.
+async function broadcastTicketEscalatedWs({ ticketId, escaladoPor, escaladoAt, razon }) {
+  if (!wsClient) {
+    console.log("ws_broadcast_escalated_skipped: no WEBSOCKET_API_ENDPOINT configured");
+    return;
+  }
+  const connectionsRes = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :conn)",
+      ExpressionAttributeValues: {
+        ":pk": `TICKET#${ticketId}`,
+        ":conn": "CONN#",
+      },
+    }),
+  );
+  const connections = connectionsRes.Items || [];
+  if (connections.length === 0) return;
+
+  const payload = JSON.stringify({
+    type: "ticket_escalated",
+    ticket_id: ticketId,
+    escalado_por: escaladoPor,
+    escalado_at: escaladoAt,
+    razon,
+  });
+  const stale = [];
+  await Promise.all(
+    connections.map(async (item) => {
+      const connectionId = item.SK.replace("CONN#", "");
+      try {
+        await wsClient.send(
+          new PostToConnectionCommand({ ConnectionId: connectionId, Data: payload }),
+        );
+      } catch (err) {
+        if (err.name === "GoneException" || err?.$metadata?.httpStatusCode === 410) {
+          stale.push(item.SK);
+        } else {
+          console.error(`ws_post_escalated_failed connection=${connectionId}:`, err.message);
+        }
+      }
+    }),
+  );
+  if (stale.length > 0) {
+    await Promise.all(
+      stale.map((sk) =>
+        ddb.send(
+          new DeleteCommand({
+            TableName: TABLE_NAME,
+            Key: { PK: `TICKET#${ticketId}`, SK: sk },
+          }),
+        ),
+      ),
+    ).catch((err) => console.error("ws_cleanup_stale_failed:", err.message));
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /tickets/{id}/history — timeline de eventos del ticket
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Devuelve los eventos del timeline del ticket (asignado, escalado, cerrado,
+// vencido) ordenados cronológicamente. Útil para mostrar el historial visual
+// en el panel del agente y en la vista del colaborador.
+//
+// Autorización: el solicitante del ticket, cualquier agente asignado (presente
+// o pasado, según historial_agentes), o un gerente.
+async function handleListTicketHistory(event, claims) {
+  if (!requireGroup(claims, ["colaborador", "agente-n1", "agente-n2", "gerente"])) {
+    return forbidden("rol sin acceso a historial de tickets");
+  }
+  const sub = claims.sub;
+  if (!sub) return unauthorized("token sin claim 'sub'");
+
+  const ticketId = event.pathParameters?.id;
+  if (!ticketId) return badRequest("falta path parameter 'id'");
+
+  // Carga metadata del ticket para verificar autorización (que el caller sea
+  // parte del ticket — solicitante o agente del historial — o un gerente).
+  let metadata;
+  try {
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND SK = :sk",
+        ExpressionAttributeValues: {
+          ":pk": `TICKET#${ticketId}`,
+          ":sk": "METADATA",
+        },
+        Limit: 1,
+      }),
+    );
+    if (!result.Items || result.Items.length === 0) {
+      return notFound(`ticket ${ticketId} no existe`);
+    }
+    metadata = result.Items[0];
+  } catch (err) {
+    console.error("history_metadata_query_failed:", err);
+    return serverError("fallo al cargar el ticket");
+  }
+
+  const groups = parseGroups(claims);
+  const isGerente = groups.includes("gerente");
+  const isSolicitante = metadata.solicitante?.user_id === sub;
+  const isAgentePresente = metadata["GSI2-PK"] === `AGENT#${sub}`;
+  const historialAgentes = Array.isArray(metadata.historial_agentes)
+    ? metadata.historial_agentes
+    : [];
+  const isAgentePasado = historialAgentes.some((entry) => entry.sub === sub);
+
+  if (!isGerente && !isSolicitante && !isAgentePresente && !isAgentePasado) {
+    return forbidden("no tenes acceso al historial de este ticket");
+  }
+
+  // Carga todos los eventos EVT#<ts>#<tipo> ordenados cronológicamente por SK.
+  try {
+    const eventsResult = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :evt)",
+        ExpressionAttributeValues: {
+          ":pk": `TICKET#${ticketId}`,
+          ":evt": "EVT#",
+        },
+        ScanIndexForward: true, // cronológico ascendente
+      }),
+    );
+    return ok({
+      ticket_id: ticketId,
+      nivel_actual: metadata.nivel_actual || "N1",
+      historial_agentes: historialAgentes,
+      events: eventsResult.Items || [],
+    });
+  } catch (err) {
+    console.error("history_events_query_failed:", err);
+    return serverError("fallo al cargar el historial");
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /metrics/agents — dashboard del gerente
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Agrega métricas por agente sobre el universo completo de tickets. Solo
+// accesible por el rol gerente. La agregación corre en el handler sobre el
+// resultado de una query a GSI3 (PK = "TICKETS") — no usa GSIs nuevos.
+//
+// Métricas devueltas por agente:
+//   - tickets_resueltos: count donde estado = "Cerrado"
+//   - tickets_vencidos: count donde estado = "Vencido"
+//   - tickets_en_progreso: count donde estado = "En progreso"
+//   - tiempo_promedio_resolucion_min: promedio de (closed_at - fecha_inicio)
+//     en minutos, solo sobre los Cerrados.
+//
+// Limitación: el agregado es sobre tickets cuyo nivel_actual coincide con el
+// agente. Si un ticket pasó por N1 → N2, cuenta para el N2 que lo cerró
+// (no se asigna doble crédito). Para reporte detallado con doble atribución
+// se usaría el historial_agentes — futuro.
+async function handleListAgentMetrics(event, claims) {
+  if (!requireGroup(claims, ["gerente"])) {
+    return forbidden("solo los gerentes pueden ver el dashboard de métricas");
+  }
+
+  // Query a GSI3 con PK = TICKETS — trae todos los tickets de la cuenta.
+  // A volúmenes mayores se paginaría con LastEvaluatedKey y se procesaría en
+  // streaming; para el MVP (cientos a miles de tickets) el approach simple alcanza.
+  let allTickets = [];
+  try {
+    let lastKey;
+    do {
+      const params = {
+        TableName: TABLE_NAME,
+        IndexName: "GSI3",
+        KeyConditionExpression: "#pk = :tickets",
+        ExpressionAttributeNames: { "#pk": "GSI3-PK" },
+        ExpressionAttributeValues: { ":tickets": "TICKETS" },
+        Limit: 500,
+      };
+      if (lastKey) params.ExclusiveStartKey = lastKey;
+      const result = await ddb.send(new QueryCommand(params));
+      allTickets = allTickets.concat(result.Items || []);
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+  } catch (err) {
+    console.error("metrics_query_failed:", err);
+    return serverError("fallo al cargar los tickets para metricas");
+  }
+
+  // Agregación en memoria. Para volúmenes altos (decenas de miles) se haría
+  // con streams + agregación incremental en otra tabla — por ahora simple.
+  const byAgent = new Map(); // sub → { sub, nombre, resueltos, vencidos, en_progreso, sum_resolucion_ms, count_resolucion }
+  const totals = {
+    tickets_totales: allTickets.length,
+    abiertos: 0,
+    en_progreso: 0,
+    cerrados: 0,
+    vencidos: 0,
+    escalados_a_n2: 0,
+  };
+
+  for (const ticket of allTickets) {
+    const estado = ticket.estado || "Abierto";
+    if (estado === "Abierto") totals.abiertos++;
+    else if (estado === "En progreso") totals.en_progreso++;
+    else if (estado === "Cerrado") totals.cerrados++;
+    else if (estado === "Vencido") totals.vencidos++;
+
+    if (ticket.nivel_actual === "N2") totals.escalados_a_n2++;
+
+    // Identificar al agente "responsable" del ticket.
+    //   - Si tiene closed_by → ese es el agente que lo cerró.
+    //   - Si tiene GSI2-PK = AGENT#<sub> → ese es el agente actual.
+    //   - Si tiene GSI2-PK = QUEUE#N2 → está sin asignar en cola N2 (no cuenta para ningún agente).
+    //   - Sino, sin agente.
+    let agentSub = null;
+    let agentNombre = null;
+    if (ticket.closed_by?.sub) {
+      agentSub = ticket.closed_by.sub;
+      agentNombre = ticket.closed_by.nombre || ticket.responsable || "(sin nombre)";
+    } else if (ticket["GSI2-PK"] && ticket["GSI2-PK"].startsWith("AGENT#")) {
+      agentSub = ticket["GSI2-PK"].replace("AGENT#", "");
+      agentNombre = ticket.responsable || "(sin nombre)";
+    }
+    if (!agentSub) continue; // ticket sin agente: no entra en el agregado por agente
+
+    if (!byAgent.has(agentSub)) {
+      byAgent.set(agentSub, {
+        sub: agentSub,
+        nombre: agentNombre,
+        tickets_resueltos: 0,
+        tickets_vencidos: 0,
+        tickets_en_progreso: 0,
+        sum_resolucion_ms: 0,
+        count_resolucion: 0,
+      });
+    }
+    const entry = byAgent.get(agentSub);
+    // Si el nombre del agente cambió (raro pero posible), preferimos el más reciente.
+    if (agentNombre && agentNombre !== "(sin nombre)") entry.nombre = agentNombre;
+
+    if (estado === "Cerrado") {
+      entry.tickets_resueltos++;
+      if (ticket.closed_at && ticket.fecha_inicio) {
+        const closedMs = new Date(ticket.closed_at).getTime();
+        const startMs = new Date(ticket.fecha_inicio).getTime();
+        if (Number.isFinite(closedMs) && Number.isFinite(startMs) && closedMs > startMs) {
+          entry.sum_resolucion_ms += closedMs - startMs;
+          entry.count_resolucion++;
+        }
+      }
+    } else if (estado === "Vencido") {
+      entry.tickets_vencidos++;
+    } else if (estado === "En progreso") {
+      entry.tickets_en_progreso++;
+    }
+  }
+
+  // Final pass: calcular tiempo promedio en minutos por agente.
+  const agents = Array.from(byAgent.values())
+    .map((entry) => ({
+      sub: entry.sub,
+      nombre: entry.nombre,
+      tickets_resueltos: entry.tickets_resueltos,
+      tickets_vencidos: entry.tickets_vencidos,
+      tickets_en_progreso: entry.tickets_en_progreso,
+      tiempo_promedio_resolucion_min:
+        entry.count_resolucion > 0
+          ? Math.round(entry.sum_resolucion_ms / entry.count_resolucion / 60000)
+          : null,
+    }))
+    .sort((a, b) => b.tickets_resueltos - a.tickets_resueltos);
+
+  return ok({ totals, agents });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Router
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1077,6 +1674,15 @@ exports.handler = async (event) => {
 
     case "PUT /tickets/{id}/status":
       return handleCloseTicket(event, claims);
+
+    case "PUT /tickets/{id}/escalate":
+      return handleEscalateTicket(event, claims);
+
+    case "GET /tickets/{id}/history":
+      return handleListTicketHistory(event, claims);
+
+    case "GET /metrics/agents":
+      return handleListAgentMetrics(event, claims);
 
     case "POST /users":
       return handleCreateUser(event, claims);

@@ -20,7 +20,11 @@ import styles from "./ChatWidget.module.css";
 export function ChatWidget() {
   const { status } = useAuth();
   const [activeTicketId, setActiveTicketIdLocal] = useState<string | null>(() => getActiveTicketId());
-  const [collapsed, setCollapsed] = useState(false);
+  // Arranca colapsado: evitamos abrir conexión WS antes de que el usuario
+  // demuestre intención de chatear. También evita el flash de "sesión expirada"
+  // que aparecía cuando el WS intentaba conectarse antes de que el JWT estuviera
+  // disponible en el primer render post-login.
+  const [collapsed, setCollapsed] = useState(true);
   const { state: ticketsState, reload } = useMyTickets();
 
   useEffect(() => {
@@ -32,6 +36,24 @@ export function ChatWidget() {
       window.removeEventListener("storage", sync);
     };
   }, []);
+
+  // Polling de la lista de tickets cuando el widget está abierto. Mantiene
+  // la lista al día con cambios disparados desde otras pantallas (un agente
+  // toma el ticket → cambia "responsable", o el watchdog marca uno vencido).
+  // Sin esto el colaborador tiene que refrescar la página entera para ver
+  // que ya hay agente. 8s es balance entre latencia de UX y costo de polling.
+  // Cuando el widget está colapsado, no polleamos (el badge "💬 Chat de
+  // soporte" no muestra count de tickets activos).
+  useEffect(() => {
+    if (collapsed) return;
+    // Refetch inmediato al abrir el widget — útil tras un long minimize
+    // donde el state local quedó stale.
+    void reload();
+    const intervalId = window.setInterval(() => {
+      void reload();
+    }, 8000);
+    return () => window.clearInterval(intervalId);
+  }, [collapsed, reload]);
 
   // No abrir el WS si el ticket no tiene agente — no hay con quien chatear
   // y evitamos consumir una conexión inútil. El widget detecta esto desde
@@ -48,7 +70,15 @@ export function ChatWidget() {
   // cerrados — queremos mostrar la conversación archivada. La conexión WS
   // extra es benigna (no llegarán mensajes); el closedNotice bloquea
   // el input cuando corresponde.
-  const chat = useChat(isMatchedAssigned ? activeTicketId : null);
+  //
+  // Si el widget está colapsado, NO abrimos WS — evita el flash de "sesión
+  // expirada" pre-login y ahorra una conexión hasta que el usuario abra el chat.
+  const chatTargetTicketId = collapsed
+    ? null
+    : isMatchedAssigned
+      ? activeTicketId
+      : null;
+  const chat = useChat(chatTargetTicketId);
 
   // Si llega el evento ticket_closed por WS mientras estamos viendo el
   // chat, refetcheamos la lista para que el ticket cerrado salga del
@@ -156,6 +186,7 @@ export function ChatWidget() {
           <ChatPane
             viewerSub={status.user.username}
             messages={chat.messages}
+            systemMessages={chat.systemMessages}
             connectionState={chat.connectionState}
             sendState={chat.sendState}
             historyLoading={chat.historyState.kind === "loading"}
