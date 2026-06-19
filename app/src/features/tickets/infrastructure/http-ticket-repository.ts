@@ -1,6 +1,11 @@
 import { apiFetch } from "../../../shared/api/http-client";
 import type { CreateTicketInput, Ticket } from "../domain/ticket";
-import type { QueueData, TicketRepository } from "../domain/ticket-repository";
+import type {
+  AgentMetricsResponse,
+  QueueData,
+  TicketHistory,
+  TicketRepository,
+} from "../domain/ticket-repository";
 import { mapDynamoItemToTicket } from "./dynamodb-item-mapper";
 
 // Implementación HTTP del repository. Llama a la HTTP API expuesta por
@@ -20,9 +25,16 @@ type CreateResponse = {
   uploads: PresignedUpload[];
 };
 type ListResponse = { items: unknown[]; count: number };
-type QueueResponse = { unassigned: unknown[]; mine: unknown[]; historial?: unknown[] };
+type QueueResponse = {
+  unassigned: unknown[];
+  mine: unknown[];
+  historial?: unknown[];
+  escalated?: unknown[];
+  escalated_by_me?: unknown[];
+};
 type AssignResponse = { id: string; item: unknown };
 type CloseResponse = { id: string; item: unknown };
+type EscalateResponse = { id: string; item: unknown };
 
 export class HttpTicketRepository implements TicketRepository {
   async create(input: CreateTicketInput, files: File[] = []): Promise<Ticket> {
@@ -69,6 +81,8 @@ export class HttpTicketRepository implements TicketRepository {
       unassigned: (response.unassigned ?? []).map(mapDynamoItemToTicket),
       mine: (response.mine ?? []).map(mapDynamoItemToTicket),
       historial: (response.historial ?? []).map(mapDynamoItemToTicket),
+      escalated: (response.escalated ?? []).map(mapDynamoItemToTicket),
+      escalated_by_me: (response.escalated_by_me ?? []).map(mapDynamoItemToTicket),
     };
   }
 
@@ -86,6 +100,29 @@ export class HttpTicketRepository implements TicketRepository {
       { method: "PUT", body: { status: "Cerrado" } },
     );
     return mapDynamoItemToTicket(response.item);
+  }
+
+  async escalateTicket(ticketId: string, razon: string): Promise<Ticket> {
+    const response = await apiFetch<EscalateResponse>(
+      `/tickets/${encodeURIComponent(ticketId)}/escalate`,
+      { method: "PUT", body: { razon } },
+    );
+    return mapDynamoItemToTicket(response.item);
+  }
+
+  async listHistory(ticketId: string): Promise<TicketHistory> {
+    const response = await apiFetch<TicketHistory>(
+      `/tickets/${encodeURIComponent(ticketId)}/history`,
+      { method: "GET" },
+    );
+    return response;
+  }
+
+  async listAgentMetrics(): Promise<AgentMetricsResponse> {
+    const response = await apiFetch<AgentMetricsResponse>("/metrics/agents", {
+      method: "GET",
+    });
+    return response;
   }
 }
 

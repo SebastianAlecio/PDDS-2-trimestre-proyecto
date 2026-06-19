@@ -6,8 +6,26 @@
 > - 2 — Cómputo y datos · jue 21 may 2026
 > - 3 — Red, ingreso y seguridad perimetral · dom 31 may 2026
 > - 4 — Procesamiento asíncrono (SNS · SQS · DLQ · notifier Lambda) · dom 7 jun 2026
+> - 5 — Integración: seguridad detallada, observabilidad, costo · jue 11 jun 2026
 >
 > **Equipo:** Alessandro Alecio · David Garcia · Joaquin Marroquin
+
+---
+
+## Resumen de cambios E4 → E5
+
+Esta entrega cierra el documento de diseño con las capas de **seguridad detallada**, **observabilidad** y **costo**, e incluye el detalle del componente más complejo del sistema.
+
+- **Detalle del componente más complejo (§ 16 nueva).** El pipeline asíncrono `ticket.closed` documentado end-to-end con estados, transiciones, dependencias y comportamiento ante fallos en cada hop. Es el flujo más interconectado del sistema (síncrono → asíncrono → integración con servicio externo) y donde más decisiones de fallback se tomaron.
+- **API surface (§ 17 nueva).** Tabla completa de endpoints REST y rutas WebSocket con verbo, autenticación, formato de payload, códigos de error y estrategia de escalado/throttling por capa.
+- **Modelo de seguridad detallado (§ 18 nueva).** IAM con un rol least-privilege por servicio (cero `AdministratorAccess` en runtime), inventario de secretos con su decisión arquitectónica, KMS para cifrado en reposo (CMK customer-managed encriptando S3 y DynamoDB), TLS 1.2+ end-to-end en los tres endpoints públicos.
+- **Plan de observabilidad (§ 19 nueva).** Logs estructurados con `correlation_id` propagado request-completo, métricas RED por servicio, 8 alarmas concretas con threshold + acción + dueño, comportamiento esperado ante degradación de cada dependencia.
+- **Estimado de costo (§ 20 nueva).** Baseline real del entorno dev (< 1 USD/mes hoy) con proyección a tres escenarios de carga.
+- **Riesgos y decisiones pendientes (§ 21 nueva).** Lista honesta de qué revisaríamos con más tiempo o información.
+- **Capas de seguridad por flujo de tráfico (§ 12.4 nueva).** Tabla end-to-end de cómo viaja un request: navegador → WAF → API Gateway → Cognito → Lambda → DynamoDB/S3, con punto de filtrado y costo de cada hop.
+- **Renumeración.** Scope, Preguntas abiertas y Anexo IA corrieron seis posiciones (eran § 16..§ 18 → ahora § 22..§ 24).
+- **Preguntas abiertas (§ 23).** Se **cerraron** Seguridad (autorización fine-grained, cifrado en reposo) y Observabilidad (stack base, alarmas iniciales). Lo que queda abierto pasa al backlog post-MVP.
+- **Anexo IA (§ 24).** Bloque nuevo *"E5 — Decisiones técnicas exploradas con IA"* y *"Reflexión final sobre las cinco entregas"*.
 
 ---
 
@@ -44,7 +62,7 @@ Documento iterado sobre la E1; lo agregado/movido en esta entrega:
 - **Decisiones técnicas cerradas.** Cómputo: **AWS Lambda** (§ 9). Base de datos: **DynamoDB** con *single-table design* y 4 GSIs (§ 10). Almacenamiento de archivos: **Amazon S3** con lifecycle a `STANDARD_IA` a 30 días (§ 10.3). Sin caché en el MVP, con DAX / ElastiCache reconocidos como evolución posible (§ 10.4).
 - **Secciones nuevas.** § 3 Diagrama de contexto · § 9 Decisión de cómputo · § 10 Modelo de datos.
 - **Renumeración.** Las secciones de Niveles de prioridad, Casos de uso, Funcionalidades, Mockups y Mapeo corrieron una posición (eran § 3..§ 7 → ahora § 4..§ 8). Scope, Preguntas abiertas y Anexo IA corrieron dos posiciones (eran § 8..§ 10 → ahora § 11..§ 13). El cambio mantiene el flujo *Negocio → Técnico → Reflexión*.
-- **Preguntas abiertas (§ 12).** Se **cerró** la pregunta de BD (Postgres vs DynamoDB → DynamoDB) y se **agregaron** las que el rubric espera abiertas en esta etapa: red, asíncrono, seguridad y observabilidad.
+- **Preguntas abiertas (§ 12).** Se **cerró** la pregunta de BD (Postgres vs DynamoDB → DynamoDB) y se **agregaron** las decisiones que quedan abiertas para entregas siguientes: red, asíncrono, seguridad y observabilidad.
 - **Anexo IA (§ 13).** Bloque nuevo *"E2 — Decisiones técnicas exploradas con IA"* listando qué se discutió con IA al cerrar cómputo, single-table y diseño de GSIs.
 
 ---
@@ -437,15 +455,38 @@ Tabla de origen → destino, con protocolo, autenticación y cifrado:
 
 ### 12.3 IAM y separación de responsabilidades
 
-El execution role de la Lambda (`chat-message-handler-dev-exec`) tiene tres policies attached, cada una scoped al recurso mínimo necesario:
+El execution role de la Lambda principal (`pdds-oyd-tickets-lambda-dev`) tiene 7 inline policies, cada una scoped al recurso mínimo necesario:
 
 | Policy | Acciones | Recursos |
 |---|---|---|
-| `…-logs` | `logs:CreateLogStream`, `logs:PutLogEvents` | Su propio log group |
-| `…-dynamodb` | `PutItem`, `Query`, `GetItem`, `UpdateItem` | `arn:aws:dynamodb:…:table/tickets-dev` y `/index/*` |
-| `…-attachments-bucket` | `s3:PutObject` | `arn:aws:s3:…:pdds-oyd-attachments-dev-*/attachments/*` |
+| `logs` | `logs:CreateLogStream`, `logs:PutLogEvents` | Su propio log group (`/aws/lambda/chat-message-handler-dev:*`) |
+| `ddb` | `PutItem`, `Query`, `GetItem`, `UpdateItem`, `DeleteItem` | `arn:aws:dynamodb:…:table/tickets-dev` y `/index/*` |
+| `s3-attachments` | `s3:PutObject`, `s3:GetObject` | `arn:aws:s3:…:pdds-oyd-attachments-dev-*/attachments/*` |
+| `cognito` | `cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminUpdateUserAttributes`, etc. | ARN exacto del User Pool |
+| `sns-publish` | `sns:Publish` | ARN exacto del topic `ticket-notifications-dev` |
+| `sqs-send-async` | `sqs:SendMessage`, `sqs:GetQueueAttributes` | ARN exacto del queue async |
+| `ws-manage` | `execute-api:ManageConnections` | `arn:aws:execute-api:…/*/POST/@connections/*` |
 
-Sin `DeleteItem` (los tickets no se borran), sin `Scan` (forzamos a usar las queries del modelo de datos), sin permisos sobre otras tablas o buckets, sin wildcards de recurso. La premisa: la Lambda debe poder hacer exactamente lo que su contrato declara, ni más.
+Cada una de las 5 Lambdas del sistema (tickets, chat-ws, notifier, async-consumer, watchdog) tiene su propio rol con su propio subset de policies — sin wildcards de recurso, sin `Scan` sobre DDB, sin permisos sobre buckets o tablas que no consume. El detalle completo del modelo IAM está en § 18.
+
+### 12.4 Flujo de tráfico end-to-end
+
+Viaje completo de un request del browser hasta la respuesta, mostrando qué capa lo filtra y a qué costo:
+
+| Hop | Componente | Acción | Si falla |
+|---|---|---|---|
+| 1 | Navegador | TLS handshake con `api.ticke-t.lumenchat.app` (TLS 1.2+, cert ACM wildcard `*.ticke-t.lumenchat.app`) | Browser muestra `ERR_CERT_INVALID` |
+| 2 | AWS WAF v2 | Evalúa rate-limit por IP (2000 req/5 min). Si excede → `BLOCK` con `403` | Sin invocación a API GW |
+| 3 | API Gateway REST | Match de path + método. 404 si path no existe, 405 si método no permitido | Sin invocación a Cognito ni Lambda |
+| 4 | Cognito Authorizer | Valida JWT (firma, issuer, audience, expiración). Sin token o token inválido → `401` con CORS headers | Sin invocación a Lambda |
+| 5 | API Gateway → Lambda | `AWS_PROXY` integration. El authorizer ya inyectó `event.requestContext.authorizer.claims` | Lambda no se invoca; se devuelve `403` o `502` según el error de integración |
+| 6 | Lambda handler | `requireGroup(claims, [...])` por endpoint. Si rol no califica → `403` sin tocar BD | Cobramos invocación pero no I/O contra BD |
+| 7 | Lambda → DynamoDB | `Query` o `GetItem` con `ConditionExpression` cuando aplica. Si la condición falla → `ConditionalCheckFailedException` traducida a `403` o `409` | Item no se modifica; Lambda log warning |
+| 8 | Lambda → S3 (presigned URL) | Genera URL firmado con SigV4 del execution role, TTL 5 min. Frontend hace `PUT` directo | Si SigV4 falla, response 500; si el PUT del frontend falla, retry desde browser |
+| 9 | Lambda → SNS | `Publish` *best-effort* del evento `ticket.closed`. Si falla, ticket queda cerrado, email no se manda | Loggea `sns_publish_failed`, retorna 200 al cliente (ver § 15.5) |
+| 10 | Lambda → Cliente | Response JSON serializada por API Gateway con CORS headers del `gateway_response` | — |
+
+**Capas equivalentes a Security Groups (sin VPC).** En un setup con VPC, las restricciones de red por puerto/origen las haría un Security Group por capa. En nuestro setup serverless, el equivalente funcional son las cuatro capas de filtrado de § 13 + las policies IAM del paso 7 + las bucket policies + las queue policies. Cada capa restringe explícitamente qué principal puede invocar qué recurso, en qué condiciones, desde qué origen. No hay un puerto abierto que un Security Group pueda cerrar — todo el filtrado es a nivel de identidad y autorización IAM.
 
 ---
 
@@ -668,7 +709,482 @@ La condition `ses:FromAddress` es importante: aunque el dominio entero `lumencha
 
 ---
 
-## 16. Scope (in / out)
+## 16. Detalle del componente más complejo — Pipeline `ticket.closed` end-to-end
+
+El componente más complejo del sistema es el flujo completo de cierre de ticket: nace como un request HTTP síncrono del agente, atraviesa cuatro capas de control de ingreso, dispara una mutación condicional en DynamoDB, publica un evento a SNS, viaja por una SQS al *notifier* Lambda, y termina como un email vía SES — con manejo explícito de fallos en cada hop. Es donde más decisiones de fallback se tomaron y donde la coherencia entre componentes se vuelve crítica.
+
+### 16.1 Diagrama de estados del ticket y eventos que dispara
+
+```
+                   crear (P0)
+   [no existe] ──────────────────▶ ABIERTO
+                                      │
+                                      │ tomar (agente disponible)
+                                      ▼
+                                   TOMADO
+                                      │
+                          ┌───────────┼───────────┐
+                          │           │           │
+                          │           │           │ SLA vence (watchdog)
+                          │           │           ▼
+                          │           │       VENCIDO
+                          │           │           │
+                          │           │ cerrar     │ cerrar
+                          │           ▼           ▼
+                          │       CERRADO  ◀─────┘
+                          │           │
+                          │           │ publica
+                          ▼           ▼
+                  (reasignar)    ticket.closed → pipeline asíncrono
+```
+
+| Estado | Quién lo dispara | Evento que publica | Side-effects |
+|---|---|---|---|
+| `Abierto` | colaborador crea ticket | — | DDB `PutItem` con `GSI3-PK="TICKETS"`, `GSI4-PK="STATUS#Abierto"` |
+| `Tomado` | agente toma ticket de la cola | — | DDB `UpdateItem` setea `GSI2-PK="AGENT#<sub>"` (entra al sparse index) |
+| `Vencido` | watchdog Lambda detecta `now > fecha_limite` | `ticket.expired` → async queue | DDB `UpdateItem` setea `estado="Vencido"`, watchdog publica al async queue |
+| `Cerrado` | agente asignado cierra ticket | `ticket.closed` → SNS topic | DDB `UpdateItem` setea `estado="Cerrado"`, `closed_at`, `closed_by`; tickets Lambda publica al SNS |
+
+### 16.2 Flujo síncrono — `PUT /tickets/{id}/status`
+
+Cuando un agente presiona "Cerrar ticket" en el panel, el navegador hace `PUT /tickets/{id}/status` con `{"status":"Cerrado"}` y el `idToken` Cognito en el header `Authorization`. El request atraviesa los 4 hops de ingreso (§ 13) y llega al handler de la Lambda síncrona. El handler ejecuta este flujo determinístico:
+
+1. **Validación de rol (autorización).** `requireGroup(claims, ["agente-n1", "agente-n2"])` — si el caller es un colaborador o un gerente, retorna `403` sin tocar BD.
+2. **Validación de body.** El status pedido debe ser `"Cerrado"` (este endpoint no soporta otros estados — reabrir o anular son operaciones distintas con sus propios endpoints).
+3. **Mutación condicional sobre DDB.** `UpdateItem` con `ConditionExpression`:
+   ```
+   attribute_exists(PK)
+   AND #g2pk = :agent
+   AND estado <> :cerrado
+   ```
+   - `attribute_exists(PK)` — el ticket existe.
+   - `#g2pk = :agent` — el caller es el agente asignado (`GSI2-PK = AGENT#<sub>`). Si no, `ConditionalCheckFailedException` → traducido a `403 "not your ticket"`.
+   - `estado <> :cerrado` — idempotencia: cerrar dos veces el mismo ticket falla con la misma excepción → traducido a `409 "already closed"`.
+4. **Publicación a SNS — best-effort.** Si el `UpdateItem` fue exitoso, la Lambda hace `SNS PublishCommand` al topic `ticket-notifications-dev` con el payload de § 15.3. **Si SNS falla** (network glitch, rate limit, IAM): loggea `sns_publish_failed` con `ticket_id` y vuelve a retornar `200` al cliente — el ticket ya está cerrado en BD, el email perdido es un nice-to-have que no debe romper el response al usuario (decisión consciente, ver § 15.5).
+5. **Response al cliente.** `200 OK` con `{id, item: <ticket actualizado>}`.
+
+**Latencia esperada del path síncrono** (cold start excluido):
+- Capas 1-4 de ingress: ~10-50 ms (WAF + API GW + Cognito caching).
+- DDB `UpdateItem` con condition: ~5-15 ms (eventual consistency).
+- SNS `Publish`: ~30-80 ms (TLS + SigV4 + publish).
+- **Total p50: ~80-150 ms.** El cliente tiene confirmación antes que el email llegue.
+
+### 16.3 Flujo asíncrono — desde SNS hasta SES
+
+Mientras el cliente ya recibió `200`, en paralelo:
+
+1. **SNS → SQS fan-out.** El topic `ticket-notifications-dev` tiene una subscription a `ticket-notifications-dev` (queue). SNS hace fan-out automático y deposita una copia del mensaje en la queue, envuelto en el wrapper canónico SNS notification:
+   ```json
+   {
+     "Type": "Notification",
+     "MessageId": "...",
+     "TopicArn": "arn:aws:sns:...",
+     "Message": "<payload original como string JSON>",
+     "Timestamp": "...",
+     "SignatureVersion": "1",
+     "Signature": "..."
+   }
+   ```
+2. **Event source mapping → Lambda.** El servicio Lambda hace long-polling sobre la queue (`batch_size=1`, `maximum_batching_window_in_seconds=0` — entrega apenas hay un mensaje). El consumer recibe el record SQS y lo procesa.
+3. **Notifier Lambda.** Por cada record:
+   - Parsea el wrapper SNS (el body de SQS es un string JSON, dentro `Message` es otro string JSON).
+   - Discriminator: `if (payload.event !== "ticket.closed") return;` — ignora eventos que todavía no maneja.
+   - **Idempotency check (GET-before-send).** `GetItem` con `PK=IDEMPOTENCY#<message_id>` (message_id = `${ticket_id}#${closed_at}`). Si existe → log `idempotency_skip`, return (SQS borra el mensaje, no se manda email).
+   - **Compone el email.** Subject: `"[Ticke-T] Tu ticket \"<titulo>\" fue cerrado"`. Body (text/plain): nombre del solicitante, nombre del agente que cerró, timestamp ISO. From: `soporte@lumenchat.app` (verificado en SES).
+   - **`SES SendEmail`.** Llamada con SigV4. Si SES responde con `MessageId`, sigue al siguiente paso.
+   - **Persiste idempotency record (PUT-after-send).** `PutItem` con `{message_id, ticket_id, recipient, ses_message_id, processed_at, ttl=now+7d}`.
+   - Retorna OK (SQS borra el mensaje).
+
+### 16.4 Comportamiento ante fallos en cada hop
+
+| Hop | Falla típica | Comportamiento del sistema |
+|---|---|---|
+| `UpdateItem` con condition | Ticket no existe / no es del caller / ya cerrado | `ConditionalCheckFailedException` → `403` o `409` al cliente. Cero eventos publicados. |
+| `SNS Publish` | Network, rate limit, IAM | Log `sns_publish_failed`, response `200` al cliente. Email no se manda. **Hueco aceptado.** |
+| SNS → SQS subscription | (improbable; gestionado por AWS) | SNS retiene el mensaje en su retry queue interna (4 días). |
+| Lambda consumer cold start | Latencia +100-300 ms en el primer email | Aceptable — el flujo es asíncrono, el cliente ya recibió response. |
+| Lambda consumer error (parsing, IAM) | Excepción no controlada | `throw` → SQS no borra el mensaje → reentrega tras `visibility_timeout=60s`. Cuenta de re-receives++. |
+| `GetItem` para idempotency | Throttling DDB | `throw` → retry SQS. Si persiste, mensaje termina en DLQ. |
+| `SES SendEmail` rechaza | Recipient no verificado (sandbox), throttling, deliverability | `throw` → SQS retry. Tras 3 fallos → DLQ. Operador inspecciona DLQ desde consola. |
+| `PutItem` idempotency post-send | Throttling DDB después de SES OK | Log `idempotency_put_failed_email_already_sent` como warning. **Trade-off**: aceptamos riesgo de duplicado raro en lugar de perder el record completo. Si SQS reentrega, el `GetItem` no encuentra nada y se manda email duplicado. |
+
+### 16.5 DLQ — inspección y replay
+
+La DLQ `ticket-notifications-dev-dlq` recibe mensajes que fallaron `max_receive_count=3` veces. No tiene consumer suscrito — el monitoring es manual (consola SQS muestra `ApproximateNumberOfMessagesVisible > 0`) o automatizado vía alarma CloudWatch (§ 19).
+
+**Acción esperada al detectar mensaje en DLQ:**
+1. Operador lee el body del mensaje desde consola SQS o `aws sqs receive-message --queue-url <dlq>`.
+2. Inspecciona el `ses_message_id` correlativo (si llegó a intentar SES) en los logs del notifier para entender la causa de fallo (recipient no verificado, payload malformado, etc).
+3. Resuelve la causa raíz (verificar al recipient en SES, corregir bug del consumer si aplica).
+4. Replay manual con `aws sqs send-message` desde la DLQ a la queue principal, o descarte si el mensaje ya no es relevante (ticket borrado, recipient inválido permanente).
+
+**Sin auto-replay porque la mayoría de las causas de DLQ son problemas de datos, no transitorios.** Un mensaje que falló 3 veces seguidas no se va a arreglar solo en el 4to retry.
+
+---
+
+## 17. API surface
+
+Esta sección documenta los endpoints públicos del sistema: verbo, path, autenticación, formato de payload, códigos de error y estrategia de escalado por capa.
+
+### 17.1 REST API (`api.ticke-t.lumenchat.app`)
+
+API Gateway REST regional con custom domain. Stage único `api`. Authorizer Cognito (`COGNITO_USER_POOLS`) aplicado a todas las rutas excepto `/health`. CORS resuelto en cada path con OPTIONS + MOCK integration.
+
+| Verbo | Path | Auth | Grupos | Payload entrada | Códigos respuesta |
+|---|---|---|---|---|---|
+| `GET` | `/health` | Pública | — | — | `200` (siempre, con timestamp + region + dependency checks) |
+| `POST` | `/users` | JWT | `gerente` | `{email, name, group}` | `201` creado · `409` duplicado · `403` rol insuficiente |
+| `POST` | `/tickets` | JWT | `colaborador` | `{titulo, categoria, prioridad, descripcion, adjuntos[]}` | `201` con `{id, item}` · `400` validación · `403` rol |
+| `GET` | `/tickets/me` | JWT | `colaborador` | — | `200` con `[<tickets del solicitante>]` |
+| `GET` | `/tickets/queue` | JWT | `agente-n1`, `agente-n2`, `gerente` | — | `200` con `{unassigned: [], mine: []}` |
+| `PUT` | `/tickets/{id}/assign` | JWT | `agente-n1`, `agente-n2` | `{}` (acción idempotente) | `200` · `403` ya asignado a otro · `404` no existe |
+| `PUT` | `/tickets/{id}/status` | JWT | `agente-n1`, `agente-n2` | `{"status":"Cerrado"}` | `200` · `403` no es tu ticket · `409` ya cerrado |
+| `PUT` | `/tickets/{id}/escalate` | JWT | `agente-n1` | `{"razon": "<20-1000 chars>"}` | `200` ticket en cola N2 · `400` razón inválida · `403` no es tu ticket / rol incorrecto · `409` ya escalado |
+| `GET` | `/tickets/{id}/history` | JWT | colaborador (suyo) o agentes/gerente | — | `200` con `{historial_agentes[], events[]}` (timeline asignación/escalado/cierre) · `404` no existe |
+| `GET` | `/tickets/{id}/messages` | JWT | colaborador (suyo) o agente asignado | — | `200` con `[<mensajes>]` · `403` no tienes acceso |
+| `POST` | `/tickets/{id}/messages/attachments` | JWT | mismas reglas que `/messages` | `{filename, mime_type, size_bytes}` | `200` con `{upload_url, key, expires_in}` (presigned PUT URL) |
+| `GET` | `/metrics/agents` | JWT | `gerente` | — | `200` con `{totals, agents[]}` (lista completa N1+N2 desde Cognito, agregación de tickets resueltos/vencidos/en progreso + tiempo promedio) |
+| `POST` | `/async/enqueue` | JWT | `gerente` | `{event, payload}` (libre) | `202` con `{message_id, queue_url}` |
+
+**Formato de error estándar** (todos los códigos 4xx/5xx):
+```json
+{
+  "message": "<descripción human-readable>",
+  "code": "<código interno, ej. NOT_YOUR_TICKET, ALREADY_CLOSED>"
+}
+```
+
+### 17.2 WebSocket API (`wss://ws.ticke-t.lumenchat.app`)
+
+API Gateway WebSocket regional con custom domain. 3 routes registradas; el `idToken` Cognito viaja en query string (`?token=<jwt>`) porque los browsers no permiten headers customs en `new WebSocket()`.
+
+| Route | Trigger | Acción del handler |
+|---|---|---|
+| `$connect` | Cliente abre WS | `aws-jwt-verify` valida el token. Si OK: `PutItem` `PK=TICKET#<id>, SK=CONN#<connectionId>` con `ttl=now+2h` (sparse pattern: solo conexiones vivas en BD). Si falla: response `401`, WS no se establece. |
+| `$disconnect` | Cliente cierra WS (o timeout idle) | `DeleteItem` `PK=TICKET#<id>, SK=CONN#<connectionId>`. Best-effort: si falla el `DeleteItem` el TTL eventualmente lo limpia. |
+| `sendMessage` | Cliente publica mensaje | `PutItem` mensaje en DDB (`SK=MSG#<iso-ts>#<msg_id>`). `Query` por `PK=TICKET#<id>, begins_with(SK, "CONN#")` para obtener todas las conexiones activas. `PostToConnection` a cada `connectionId` con el broadcast. Si `GoneException` (conexión zombie), `DeleteItem` reactivo. |
+
+### 17.3 Escalado y throttling
+
+**WAF v2** — primera capa. Rate limit por IP: 2000 requests / 5 min. Configurable vía `var.waf_rate_limit_per_5min`. Excede → `BLOCK` con `403`.
+
+**API Gateway REST** — segunda capa. Default account quota: 10,000 requests por segundo (RPS) por región. Throttling por stage configurable. Burst: 5,000. En este sistema no se modifica del default — los 2000 req/5min del WAF (~7 RPS sostenido) están muy por debajo del límite de API GW. Si en algún momento un cliente del MVP necesitara más, hay que subir tanto el WAF como el throttle de API GW.
+
+**Lambda concurrent executions** — tercera capa. Default account limit: 1000 concurrencias simultáneas por región. Cada Lambda del proyecto tiene `reserved_concurrent_executions` no seteado (toma del pool compartido). Si todos los Lambdas saturan el pool, los siguientes invocaciones reciben `429 TooManyRequestsException`. Para el MVP es aceptable; si crece, las opciones son:
+- Reservar concurrencia por Lambda crítica (tickets) para garantizar capacidad mínima.
+- Pedir incremento de soft limit a AWS Support (el límite de 1000 es elevable a decenas de miles).
+
+**DynamoDB on-demand** — cuarta capa. Auto-scaling instantáneo, sin throttling artificial bajo carga normal. AWS recomienda que un nuevo on-demand table absorba hasta el doble del peak del último mes sin throttle; si un spike supera eso, hay throttling temporal mientras escala. Mitigación: si se conoce un evento (lanzamiento), pre-warming con `aws dynamodb update-table --provisioned-throughput`.
+
+**SQS** — sin throttling de throughput en standard queues. La queue absorbe lo que sea y el consumer escala con el `batch_size` × concurrencia Lambda.
+
+**SNS** — 30,000 publishes/segundo por account/region. No es factor para el MVP (~10-20 publishes por día en producción esperada).
+
+**SES** — el bottleneck más probable. Cuenta nueva está en sandbox: 200 emails/24h, 1 email/segundo, recipients individuales tienen que verificarse. Para salir del sandbox hay que abrir un ticket de soporte AWS describiendo el use case (típicamente 1-2 días). Sandbox alcanza para demo del MVP pero no para producción real.
+
+---
+
+## 18. Modelo de seguridad detallado
+
+Esta sección documenta el modelo de seguridad end-to-end: IAM por servicio, secretos, KMS, y cifrado en tránsito y en reposo.
+
+### 18.1 IAM — un rol por servicio, least-privilege real
+
+El sistema tiene **7 roles IAM** distintos, uno por servicio, con policies inline scoped a ARNs específicos:
+
+| Rol | Trust principal | Para qué se usa | Permisos clave |
+|---|---|---|---|
+| `pdds-oyd-tickets-lambda-dev` | `lambda.amazonaws.com` | Handler REST de tickets | logs, DDB CRUD, S3 attachments R/W, Cognito Admin, SNS Publish, SQS SendMessage, execute-api:ManageConnections |
+| `pdds-oyd-chat-ws-lambda-dev` | `lambda.amazonaws.com` | Handler WebSocket + historial chat + presigned URLs | logs, DDB CRUD, S3 attachments R/W, execute-api:ManageConnections |
+| `pdds-oyd-notifier-lambda-dev` | `lambda.amazonaws.com` | Consumer SNS→SQS, manda emails ticket.closed | logs, SQS Consume sobre notifications queue, DDB GetItem/PutItem (idempotency), SES SendEmail con condition `ses:FromAddress` |
+| `pdds-oyd-async-consumer-lambda-dev` | `lambda.amazonaws.com` | Consumer async queue, audit log + emails ticket.expired | logs, SQS Consume sobre async queue, S3 PutObject async-events/*, SES SendEmail con mismo scope |
+| `pdds-oyd-watchdog-lambda-dev` | `lambda.amazonaws.com` | Barrido periódico SLA | logs, DDB Query sobre GSI4 + UpdateItem, SQS SendMessage al async queue |
+| `pdds-oyd-scheduler-invoke-dev` | `scheduler.amazonaws.com` | EventBridge Scheduler invoca watchdog | `lambda:InvokeFunction` sobre ARN exacto del watchdog |
+| `pdds-oyd-ci-runner-dev` | `Federated` (OIDC GH Actions) | Pipeline CI/CD ejecuta terraform plan/apply | `AdministratorAccess` (managed). Justificación abajo. |
+
+**Cero wildcards en `Action` o `Resource`** (con una excepción justificada en la policy SES, donde `Resource` apunta al ARN del identity SES + `Condition StringEquals ses:FromAddress` restringe el sender).
+
+**Justificación del `AdministratorAccess` para `ci_runner`.** Terraform plan/apply gestiona crear/destruir IAM roles, KMS key policies, OIDC providers, Route 53 zonas, CloudFront distributions, S3 bucket policies. Una custom policy mínima sería extensa (varios cientos de líneas), frágil ante upgrades del provider, y requeriría mantenimiento manual constante. El patrón estándar para CI/CD de Terraform es `PowerUserAccess + IAMFullAccess`, o directamente `AdministratorAccess`. Adoptamos `AdministratorAccess` con un mitigante crítico: **el role es assumable únicamente vía OIDC con trust policy scopeada al repo y a 4 subject claims específicos** (`ref:refs/heads/main`, `pull_request`, `environment:dev`, `environment:staging`). No hay access keys persistentes que rotar o que puedan filtrarse — las credenciales se generan cada workflow run con un TTL de 1 hora.
+
+### 18.2 Secretos — decisión arquitectónica
+
+**No usamos AWS Secrets Manager.** Razón: la arquitectura es **100% serverless sin credenciales persistentes**.
+
+- **Persistencia (DynamoDB).** No requiere password de conexión — el SDK autentica con SigV4 + execution role IAM.
+- **Autenticación de usuarios (Cognito).** Cognito gestiona los password hashes (PBKDF2) y emite JWTs firmados con su clave privada (que nunca sale del servicio). No manejamos password hashes propios ni JWT signing keys.
+- **Comunicación inter-Lambda (SQS, SNS).** Mensajería autorizada por IAM. No hay tokens compartidos.
+- **Integraciones externas.** Solo SES, autenticado con SigV4 del execution role del Lambda. No hay API keys de proveedores externos (no usamos SendGrid, Twilio, etc).
+- **GitHub Actions → AWS.** OIDC con tokens efímeros de 1h. No hay access keys.
+
+**Conclusión: no hay credencial persistente que migrar a Secrets Manager.** Si en el futuro la app suma un componente que sí requiera credencial almacenada (ej. integración con un servicio externo de email transaccional con API key, integración con Twilio para SMS), el wiring del módulo IAM ya está listo para sumar `aws_secretsmanager_secret` + permitir `secretsmanager:GetSecretValue` al rol del consumer correspondiente.
+
+### 18.3 KMS — cifrado en reposo
+
+**Una sola CMK customer-managed** (`alias/pdds-oyd-dev`) encripta los dos stores de datos del sistema:
+
+- **S3 attachments bucket** — upgrade de SSE-S3 (AES256, AWS-managed) a `aws:kms` con `bucket_key_enabled = true` (reduce costo de KMS hasta 99% reusando data keys a nivel bucket).
+- **DynamoDB `tickets-dev`** — `server_side_encryption.kms_key_arn` apunta al CMK (vs. la default AWS-managed key).
+
+**Key policy** con 3 statements, todos scopeados (cero grants `kms:*` abiertos):
+1. **Root account** con `kms:*` + condition `StringEquals kms:CallerAccount = <account_id>`. Patrón estándar de TF management — la condition restringe el uso a llamadas originadas dentro de la cuenta dueña de la key, no es un grant abierto al principal root.
+2. **Service principals `s3.amazonaws.com` y `dynamodb.amazonaws.com`** con Encrypt/Decrypt/GenerateDataKey/etc + condition `StringEquals kms:ViaService = ["s3.us-east-1.amazonaws.com", "dynamodb.us-east-1.amazonaws.com"]`. Bloquea uso de la key fuera de estos servicios.
+3. **Los 5 Lambda execution roles** (tickets, chat-ws, notifier, async_consumer, watchdog) con `Decrypt + GenerateDataKey + DescribeKey` + condition `kms:ViaService`. No permite `Decrypt` directo sobre payloads arbitrarios — solo a través de S3/DDB.
+
+**Key rotation:** habilitada (rotación automática anual por AWS).
+**Deletion window:** 7 días (si se intenta destruir la key, queda en PendingDeletion durante 7 días por si fue error).
+
+El **bucket de assets del frontend** (`pdds-oyd-frontend-dev-*`) usa SSE-S3 (no KMS): son archivos públicos servidos vía CloudFront, no hay secret-at-rest a proteger; KMS sumaría costo sin beneficio.
+
+### 18.4 Cifrado en tránsito
+
+| Conexión | Protocolo | TLS version mínima | Cert |
+|---|---|---|---|
+| Navegador → `api.ticke-t.lumenchat.app` | HTTPS | 1.2 | ACM wildcard `*.ticke-t.lumenchat.app` |
+| Navegador → `wss://ws.ticke-t.lumenchat.app` | WSS | 1.2 | mismo cert wildcard |
+| Navegador → `https://app.ticke-t.lumenchat.app` | HTTPS | 1.2_2021 | mismo cert wildcard via data source |
+| HTTP `app.ticke-t.lumenchat.app` (puerto 80) | — | — | **HTTP 301 redirect explícito** a HTTPS (CloudFront `viewer_protocol_policy = "redirect-to-https"`) |
+| Lambda → DynamoDB | HTTPS | 1.2 | AWS endpoint cert |
+| Lambda → S3 | HTTPS | 1.2 | AWS endpoint cert |
+| Lambda → SNS / SQS / SES | HTTPS | 1.2 | AWS endpoint cert |
+| Lambda → CloudWatch Logs | HTTPS | 1.2 | AWS endpoint cert |
+| Frontend bucket → S3 | HTTPS | 1.2 | (bucket policy rechaza `aws:SecureTransport = false`) |
+
+**Cero plaintext alcanzable.** Los API Gateway custom domains (REST + WS) no exponen port 80 — cualquier conexión HTTP es rechazada a nivel TCP. CloudFront sí escucha en port 80 pero responde con `301 Moved Permanently` redirigiendo a HTTPS (verificable con `curl -v http://app.ticke-t.lumenchat.app/`).
+
+---
+
+## 19. Plan de observabilidad
+
+Tres pilares: **logs estructurados con correlation IDs**, **métricas RED por servicio**, **alarmas accionables**. Más una matriz de comportamiento esperado ante degradación de cada dependencia.
+
+### 19.1 Logs estructurados
+
+Todos los Lambdas loggean en formato JSON con campos obligatorios:
+
+```json
+{
+  "level": "info|warn|error",
+  "msg": "<event_name>",
+  "correlation_id": "<uuid>",
+  "ticket_id": "<si aplica>",
+  "user_sub": "<si aplica>",
+  "duration_ms": <si aplica>,
+  "<campos específicos del evento>": "..."
+}
+```
+
+**Correlation ID propagado request-completo.** El handler de la Lambda síncrona genera un `correlation_id` (UUID v4) en cada invocación HTTP, lo loggea en cada log line, y lo incluye en:
+- El payload del evento `ticket.closed` publicado a SNS → el notifier consumer loggea con el MISMO `correlation_id`.
+- El attribute del mensaje SQS al async queue → el async_consumer hereda.
+- Los logs del watchdog generan su propio `correlation_id` por invocación (cron trigger).
+
+Resultado: un solo CloudWatch Logs Insights query con `filter @message like "<correlation_id>"` traza el flow completo desde el HTTP request hasta el email enviado, incluso cruzando 4 Lambdas distintas.
+
+**Log groups y retención** (variable `log_retention_days`, default 14 en dev, 30 propuesto para prod):
+- `/aws/lambda/chat-message-handler-dev`
+- `/aws/lambda/chat-ws-dev`
+- `/aws/lambda/ticket-notifier-dev`
+- `/aws/lambda/pdds-oyd-async-consumer-dev`
+- `/aws/lambda/pdds-oyd-watchdog-dev`
+- `/aws/apigateway/dev/ticke-t-api-dev/access` (access logs del REST API)
+
+### 19.2 Métricas RED por servicio principal
+
+**RED** = **R**ate (requests por unidad de tiempo), **E**rrors (cuántas fallaron), **D**uration (latencia p50/p99).
+
+| Servicio | Rate | Errors | Duration |
+|---|---|---|---|
+| API Gateway REST | `AWS/ApiGateway · Count` (por stage) | `4XXError + 5XXError` | `Latency` p50/p99 |
+| Lambda tickets | `AWS/Lambda · Invocations` (FunctionName=...) | `Errors` | `Duration` p50/p99 |
+| Lambda chat-ws | igual | igual | igual |
+| Lambda notifier | `Invocations` desde event source mapping | `Errors` (incluye throw del consumer) | `Duration` |
+| Lambda async-consumer | igual | igual | igual |
+| DynamoDB | `ConsumedReadCapacityUnits + ConsumedWriteCapacityUnits` | `ThrottledRequests + UserErrors + SystemErrors` | `SuccessfulRequestLatency` |
+| SQS notifications | `NumberOfMessagesSent + NumberOfMessagesReceived` | `ApproximateNumberOfMessagesNotVisible` (mensajes stuck in-flight) | `ApproximateAgeOfOldestMessage` |
+| SES | `Send + Bounce + Complaint` | `Bounce + Reputation` | n/a (async) |
+
+Las 3 visualizaciones del **dashboard CloudWatch** (`pdds-oyd-dev-main`):
+1. **API Gateway request volume + errors** — Count stacked con 4XX y 5XX. Salud general del ingress.
+2. **Lambda Errors por función** — for-loop sobre los 5 function names. Permite ver qué Lambda está fallando sin abrir cada log group.
+3. **SQS depth (main + DLQ)** — `ApproximateNumberOfMessagesVisible` sobre las 4 queues (2 main + 2 DLQ) overlaid. Detecta backups y mensajes muertos de un vistazo.
+
+### 19.3 Alarmas con threshold + acción + dueño
+
+8 alarmas, todas wired al SNS topic `pdds-oyd-dev-alarms` con email subscription:
+
+| Alarma | Métrica | Threshold | Período | Acción | Dueño |
+|---|---|---|---|---|---|
+| `tickets-errors` | Lambda Errors (tickets) | > 5 | 5 min | Email + investigar logs | Backend dev |
+| `chat-ws-errors` | Lambda Errors (chat-ws) | > 5 | 5 min | Email + investigar logs | Backend dev |
+| `notifier-errors` | Lambda Errors (notifier) | > 5 | 5 min | Email + investigar logs + revisar DLQ | Backend dev |
+| `async-consumer-errors` | Lambda Errors (async-consumer) | > 5 | 5 min | Email + investigar logs + revisar DLQ | Backend dev |
+| `watchdog-errors` | Lambda Errors (watchdog) | > 5 | 5 min | Email — el watchdog corre 1/hora, 5 errors en 5 min = corrió 5 veces seguidas con fallo, edge case grave | Backend dev |
+| `notifications-dlq-depth` | SQS `ApproximateNumberOfMessagesVisible` (DLQ) | > 0 | 1 min | Email + inspeccionar mensaje + decidir replay o descarte | Backend dev |
+| `async-dlq-depth` | igual sobre async DLQ | > 0 | 1 min | igual | Backend dev |
+| `api-5xx` | API GW 5XXError | > 10 | 5 min | Email + investigar Lambda o integration | Backend dev |
+
+**Threshold tightest posible para DLQs** (>0): cualquier mensaje en DLQ = procesamiento fallido y requiere intervención humana. Trade-off: posibles falsas alarmas si un fallo transitorio extraño hace que un mensaje legítimo termine en DLQ, pero el costo de revisar manualmente es bajo vs el costo de perder una notificación.
+
+### 19.4 Comportamiento ante degradación
+
+Matriz de qué pasa si cada dependencia crítica falla:
+
+| Dependencia caída | Impacto cliente-facing | Impacto interno | Mitigación |
+|---|---|---|---|
+| **DynamoDB no responde** | `POST /tickets`, `PUT /assign`, `PUT /status` retornan `500`. `GET /me`, `/queue` retornan `500`. Chat WebSocket no puede persistir mensajes (mensajes se pierden). | Todas las Lambdas degradadas. Watchdog falla en cada corrida. | DDB on-demand auto-scaling es elástico — un outage real es excepcional. Alarmas Lambda Errors disparan. Sin fallback porque no hay BD secundaria. |
+| **S3 attachments no responde** | `POST /tickets` con adjuntos falla al generar presigned URL → retry desde frontend o omitir adjunto. Chat sin imágenes. | Tickets sin adjuntos se siguen creando. Async consumer no puede escribir audit log. | Alarmas Lambda Errors disparan. Fallback: el ticket se crea sin attachment.url y el frontend marca "imagen pendiente". |
+| **SNS no responde** | Cierre de ticket retorna `200` al cliente, pero email no se manda (ver § 15.5). | Loggea `sns_publish_failed`. Email perdido. | Aceptado por diseño. Si requirieramos garantía de delivery, habría que cambiar el patrón a outbox-pattern (escribir el evento a una tabla DDB y leer desde ahí, con retry persistente). |
+| **SQS no responde** | Mensajes ya publicados a SNS quedan en retry interno de SNS hasta 4 días. Sin notificaciones nuevas durante el outage. | El notifier no recibe trabajo nuevo. Async consumer tampoco. | SNS reintentos cubren outages cortos. Para outages largos, los mensajes se preservan hasta 4 días. |
+| **SES rechaza emails** | Solicitantes no reciben confirmación de cierre. | Mensajes se acumulan en SQS, fallan 3 veces, terminan en DLQ. Alarma `notifications-dlq-depth` dispara. | Operador inspecciona DLQ. Si el problema es `Recipient not verified` (sandbox), verifica el recipient y replay el mensaje. Si es throttling, espera y replay. |
+| **Cognito no responde** | Usuarios no pueden hacer login (no se emiten tokens). Tokens existentes siguen siendo válidos hasta su expiración (1h idToken). | API Gateway authorizer falla → todas las requests devuelven `503`. | Aceptado: Cognito tiene SLA 99.9% y multi-AZ por default. Sin fallback porque migrar a otro IdP sería completo. |
+| **WebSocket API no responde** | Chat en tiempo real cae. El colaborador puede seguir usando HTTP para enviar mensajes. | `PostToConnection` desde tickets Lambda falla — broadcast de `ticket.closed` no llega. | Fallback: el email del notifier (vía pipeline asíncrono) llega igual al colaborador. El chat vuelve cuando el WS recupera. |
+
+### 19.5 AWS Budget
+
+`aws_budgets_budget.monthly` con limit **20 USD/mes**, notification al **80%** (= 16 USD) al SNS topic + email directo.
+
+20 USD elegidos por análisis del baseline real: el costo recurrente actual del entorno dev es **< 1 USD/mes** (free tier cubre Lambda invocations, DDB on-demand bajo, S3 storage < 1GB). 20 USD da margen para spikes durante demos sin disparar notificación falsa, y es bajo suficiente para alertar antes que un bug runaway (ej. Lambda en loop infinito) escale a cientos de USD.
+
+---
+
+## 20. Estimado de costo
+
+Análisis basado en el baseline real medido del entorno dev y proyectado a 3 escenarios de carga.
+
+### 20.1 Baseline real — entorno dev hoy
+
+Medido vía AWS Cost Explorer + CloudWatch metrics durante un mes operacional sin tráfico de producción (uso interno del equipo, < 50 requests/día):
+
+| Servicio | Uso medido | Costo mes |
+|---|---|---|
+| Lambda (5 funciones × ~100 invocaciones/día) | ~15k invocaciones, ~30s GB-segundos | **$0.00** (free tier cubre 1M invocaciones + 400k GB-s) |
+| DynamoDB on-demand | ~10k RRU + ~5k WRU | **$0.00** (free tier cubre 25 GB + 25 WRU/RRU) |
+| S3 (attachments + frontend + state backend) | ~500 MB total | **~$0.01** |
+| API Gateway REST | ~3k requests | **$0.00** (free tier: 1M requests primer año) |
+| API Gateway WebSocket | ~500 connections × ~5 min promedio | **$0.00** (free tier: 1M minutos primer año) |
+| CloudFront | ~5GB transfer | **$0.00** (free tier: 1TB primer año) |
+| CloudWatch (logs + metrics + dashboard) | ~50 MB logs ingest | **~$0.05** |
+| KMS (1 CMK) | 1 key + ~1k requests | **~$1.00** ($1/mes por CMK + $0.03/10k requests) |
+| Route 53 (1 hosted zone) | 1 zone + ~10k queries | **~$0.50** ($0.50/mes por zone + queries casi nulas) |
+| ACM (1 cert wildcard regional) | 1 cert | **$0.00** (gratis para uso con API GW/CloudFront) |
+| SES | ~10 emails | **$0.00** (free tier: 62k emails/mes desde EC2/Lambda) |
+| Cognito | < 100 MAU | **$0.00** (free tier: 50k MAU) |
+| WAF | 1 Web ACL + 1 rule | **~$6.00** ($5/mes Web ACL + $1/mes rule) |
+| **Total dev/mes** | | **~$7.50** |
+
+El driver principal es el WAF ($6) y el KMS ($1). Todo lo demás está en free tier o costo despreciable.
+
+### 20.2 Proyección — 100 colaboradores activos / día
+
+Supuestos:
+- 100 usuarios activos diarios, ~5 tickets/día/usuario = 500 tickets/día = ~15k/mes.
+- ~3000 mensajes de chat/día = ~90k/mes.
+- 5GB de adjuntos almacenados acumulados.
+- 15k emails/mes vía SES.
+
+| Servicio | Uso | Costo mes |
+|---|---|---|
+| Lambda | ~150k invocaciones, ~300 GB-s | **$0.00** (sigue free tier) |
+| DynamoDB on-demand | ~500k RRU + ~200k WRU | **~$0.30** |
+| S3 (5GB attachments + 200k requests) | | **~$0.20** |
+| API Gateway REST | ~100k requests | **~$0.35** ($3.50/M requests) |
+| API Gateway WebSocket | ~9000 hours connection | **~$3.00** ($0.25/M connection-minutes) |
+| CloudFront | ~50GB transfer | **$0.00** (sigue free tier primer año, después ~$4) |
+| CloudWatch | ~500 MB logs | **~$0.50** |
+| KMS | ~50k requests | **~$1.15** |
+| Route 53 | | **~$0.50** |
+| WAF | | **~$6.00** |
+| SES | 15k emails | **~$1.50** ($0.10/1000 emails) |
+| Cognito | 100 MAU | **$0.00** |
+| **Total** | | **~$13.50/mes** |
+
+### 20.3 Proyección — 1000 colaboradores activos / día
+
+Supuestos: ×10 sobre escenario anterior.
+
+| Servicio | Costo mes |
+|---|---|
+| Lambda (~1.5M invocaciones) | **~$0.30** (free tier deja de aplicar) |
+| DynamoDB | **~$3.00** |
+| S3 (50GB + 2M requests) | **~$2.00** |
+| API Gateway REST (1M requests) | **~$3.50** |
+| API Gateway WebSocket | **~$30.00** |
+| CloudFront (~500GB) | **~$40.00** |
+| CloudWatch | **~$5.00** |
+| KMS | **~$1.50** |
+| WAF | **~$6.00** |
+| SES (150k emails) | **~$15.00** |
+| Cognito (1000 MAU) | **$0.00** (sigue free tier hasta 50k) |
+| **Total** | **~$107/mes** |
+
+### 20.4 Proyección — 10000 colaboradores activos / día
+
+Supuestos: ×10 sobre escenario anterior. A esta escala el modelo costo-por-uso de Lambda empieza a competir con tasks always-on de Fargate.
+
+| Servicio | Costo mes |
+|---|---|
+| Lambda (~15M invocaciones, ~30k GB-s) | **~$8.00** |
+| DynamoDB on-demand | **~$30.00** |
+| S3 (500GB + 20M requests) | **~$20.00** |
+| API Gateway REST (10M requests) | **~$35.00** |
+| API Gateway WebSocket | **~$300.00** |
+| CloudFront (~5TB) | **~$400.00** |
+| CloudWatch | **~$50.00** |
+| KMS | **~$5.00** |
+| WAF | **~$6.00** |
+| SES (1.5M emails) | **~$150.00** |
+| Cognito (10k MAU) | **$0.00** (free tier hasta 50k) |
+| **Total** | **~$1000/mes** |
+
+### 20.5 Observaciones del análisis
+
+- **Costo dominado por traffic (CloudFront + WebSocket) a escala.** A 1000+ usuarios diarios, ~80% del costo es transferencia.
+- **Mitigaciones posibles a 10k+ usuarios:** CloudFront con plan reservado/CDN alternativo, WebSocket evaluar reemplazo por SSE para casos donde no necesitamos bidireccional, comprimir payloads.
+- **DynamoDB on-demand escala linealmente.** A volúmenes > 100k requests/segundo sostenidos, evaluar migrar a provisioned con auto-scaling (~30% más barato a misma capacidad).
+- **WAF es costo fijo.** Útil hasta el primer 100 USD/mes total; después su importancia relativa baja.
+- **Free tier de SES es generoso** (62k emails/mes desde Lambda) y cubre los primeros 2 escenarios. Sandbox sigue siendo el bottleneck operativo, no el costo.
+
+---
+
+## 21. Riesgos y decisiones pendientes
+
+Lista honesta de qué revisaríamos con más tiempo o información.
+
+### 21.1 Riesgos arquitectónicos identificados
+
+| Riesgo | Probabilidad | Impacto | Mitigación actual | Pendiente |
+|---|---|---|---|---|
+| **SES sandbox limita producción real** | Alta | Alto | Solo emails a recipients verificados manualmente (sebastianalecio@gmail.com, dacaslles@gmail.com) | Salir del sandbox con ticket a AWS Support; revisar reputación del dominio antes |
+| **Cognito vendor lock-in** | Media | Alto | Cognito acoplado en authorizer API GW + frontend Amplify Auth | Migrar a IdP externo requeriría re-emitir tokens, ajustar authorizer custom, rehacer flow de login |
+| **SNS publish best-effort en cierre de ticket** | Baja | Medio | Best-effort + log warning, response 200 al cliente igual | Implementar outbox pattern (escribir evento a tabla DDB, lectura asíncrona por consumer separado) |
+| **DLQ sin consumer ni alarma de inactividad** | Media | Alto | Alarma `dlq-depth > 0` dispara email | Sumar un Lambda que tras N días en DLQ haga decisión automática (replay vs archivar a S3) |
+| **OIDC provider en main workspace state** | Baja | Alto | `lifecycle.prevent_destroy = true` en el aws_iam_openid_connect_provider | Considerar mover a workspace bootstrap separado |
+| **Route 53 hosted zone en main workspace state** | Baja | Alto | `lifecycle.prevent_destroy = true` en el aws_route53_zone | Igual, evaluar mover a bootstrap |
+| **Single region (us-east-1)** | Baja | Alto | Toda la infra en us-east-1; failover regional no implementado | Multi-region requeriría replicación DDB Global Tables, S3 CRR, multi-region cert ACM, Route 53 health checks |
+| **Sin backup explícito de DynamoDB fuera de PITR** | Baja | Medio | Point-in-Time Recovery activado (35 días de ventana de restore) | Sumar `aws_backup_plan` con retention configurable para snapshots largos (>35 días) |
+| **WebSocket connection limit (10k/region)** | Muy baja a hoy | Alto si crece | Sin reservar; toma del pool compartido | A escala, reservar; eventualmente sharding por región |
+| **Frontend bundle 525KB sin code-splitting** | Baja | Bajo | Single bundle, first-paint ~1.5s en 4G | Implementar route-based code-splitting con `import()` dinámico |
+
+### 21.2 Decisiones pendientes (backlog post-MVP)
+
+- **Multi-tenant.** Hoy mono-tenant por deploy. Pasar a multi-tenant en un único deploy requiere prefijo `TENANT#<id>` en todos los PK + GSI-PK, lo cual reescribe los 4 índices. Decisión: posponer hasta tener un segundo cliente real.
+- **Métricas de negocio para el gerente.** Tickets resueltos por agente, tiempo promedio de resolución, distribución por categoría. Hoy el rol gerente existe en Cognito pero la página de dashboard solo muestra placeholder. Requiere: endpoint `GET /metrics/agents` que agregue queries sobre DDB GSI3, frontend de visualización (recharts o similar).
+- **Internacionalización (i18n).** Toda la UI está hardcodeada en español. Si el sistema se vende a equipos en otros idiomas, agregar `react-intl` o equivalente.
+- **Notificaciones push (browser).** Hoy notificaciones vía email + WebSocket cuando la app está abierta. Browser push requiere Service Worker + endpoint backend para gestionar suscripciones VAPID.
+- **Auditoría granular.** Hoy CloudTrail registra todas las llamadas AWS API (incluyendo IAM y data plane). Agregar un audit log de negocio (quién leyó qué ticket, cuándo) que escriba a un log group separado podría requerirse para compliance.
+- **Performance testing.** No hicimos load testing con tooling formal (k6, Artillery). Las proyecciones de § 20 son estimaciones basadas en límites de servicio AWS y benchmarks externos, no en testing real.
+
+### 21.3 Qué revisaríamos con más tiempo
+
+- **Code splitting del frontend** para reducir first-paint (525KB → ~200KB initial chunk).
+- **CloudFront en frente del API + WebSocket** para tener redirect 301 explícito desde port 80 en los 3 endpoints (hoy solo CloudFront del frontend). Descartado por trade-off costo/beneficio (WebSocket sobre CloudFront limita conexiones a 60 min, requeriría reconnect logic).
+- **Outbox pattern para SNS publish**, eliminando el hueco de "ticket cerrado pero email no enviado".
+- **Pre-warming de Lambda concurrencias** para eliminar cold starts en endpoints críticos (tickets POST).
+- **Test E2E automatizado en el pipeline de CI** (hoy hay test E2E manual con Playwright pero no se ejecuta en CI por costo de tiempo del runner).
+
+---
+
+## 22. Scope (in / out)
 
 ### IN — lo que el sistema SÍ hace
 
@@ -689,7 +1205,7 @@ La condition `ses:FromAddress` es importante: aunque el dominio entero `lumencha
 
 ---
 
-## 17. Preguntas abiertas
+## 23. Preguntas abiertas
 
 Decisiones técnicas que aún no tomamos.
 
@@ -705,21 +1221,28 @@ Decisiones técnicas que aún no tomamos.
 > - **Upload real de adjuntos** → **presigned PUT URLs** desde el `POST /tickets`. La Lambda devuelve un URL firmado por adjunto y el frontend hace `PUT` directo a S3, evitando el límite de 6 MB del payload de API Gateway. Permite archivos de hasta 25 MB sin pasar bytes por Lambda.
 > - **Pipeline asíncrono** → **SNS → SQS → Lambda → SES** con DLQ tras 3 fallos.
 > - **Idempotencia del consumer** → **GET-before-send + PUT-after-send** con `IDEMPOTENCY#<message_id>` en DynamoDB y TTL de 7 días. `message_id` determinístico desde el payload (`ticket_id#closed_at`).
+>
+> **Cerrado en E5:**
+> - **Conexión persistente del chat** → **WebSocket** (API Gateway WebSocket API). Decisión: el flujo de chat ya estaba implementado con bidirectional WS para soportar mensajería en tiempo real entre colaborador y agente; cambiarlo a SSE requeriría perder el indicador *"agente está escribiendo…"* y reescribir la lógica del frontend.
+> - **Autorización fine-grained** → **ownership check por item** en cada handler que toca un ticket. La Lambda lee el ticket primero, compara `solicitante.user_id` o `GSI2-PK = AGENT#<sub>` contra el `sub` del token y rechaza con `403` si no califica. Helper `isPartyToTicket(ticket, sub)` extraído a `chat-repo.js` para reuso. El sobrecosto de un `GetItem` adicional es aceptable (single-digit ms) vs el riesgo de un colaborador leyendo tickets ajenos.
+> - **Cifrado en reposo** → **Customer-managed KMS CMK** (alias `pdds-oyd-dev`). Decisión: el costo ($1/mes + $0.03/10k requests) es bajo en el contexto del baseline real, y a cambio obtenemos audit completo en CloudTrail, rotación anual automática, key policy con scope explícito (service principals + execution roles via `kms:ViaService`), y la opción futura de revocar la key para "borrar" lógicamente la data sin tocar DDB ni S3.
+> - **Stack base de observabilidad** → **CloudWatch Logs + Metrics + Alarms + Dashboard + Budget**. Sin X-Ray en el MVP. Razón: el correlation_id propagado en logs estructurados ya permite tracing manual con CloudWatch Logs Insights cruzando los 4 log groups de Lambdas. X-Ray sumaría costo por trace y otro componente más a mantener para una ganancia marginal a este volumen. Se reevalúa cuando un endpoint crítico tenga > 5 hops o aparezca un problema de latencia que no se diagnostique con logs.
+> - **Alarmas iniciales** → **8 alarmas** (5 Lambda Errors + 2 SQS DLQ depth + 1 API GW 5XX). Threshold + período + acción + dueño documentadas en § 19.3.
 
-### Red y entrega (parcialmente abierto)
-- **Conexión persistente del chat.** ¿**WebSocket** (vía API Gateway WebSocket API) o **Server-Sent Events** (SSE)? WebSocket es bidireccional y permite *"agente está escribiendo…"*; SSE es más simple si solo el servidor empuja al navegador. Decisión pospuesta hasta que el chat sea prioridad — la base de presigned URLs y notificaciones por email cubre el flujo MVP sin chat en vivo.
+### Backlog post-MVP
 
-### Seguridad (decisión en E5)
-- **Autorización fine-grained.** "Solo el agente asignado puede ver el ticket" — hoy se aplica con `requireGroup` por endpoint. ¿Se ajusta a verificación de ownership por item (la Lambda lee el ticket y compara `responsable` con el `sub` del token)? Más granular pero más caro por request.
-- **Cifrado en reposo.** Hoy la tabla y el bucket usan claves **AWS-owned** (gratuito, sin features adicionales). ¿Migramos a **AWS-managed KMS** (logs en CloudTrail, rotación automática) o **Customer-managed KMS** (control total de la rotación y el uso, pero costo por mes y por request)? Depende de los requisitos de auditoría del cliente.
+Lo que dejamos para iteraciones futuras (ver § 21.2 para el detalle):
 
-### Observabilidad (decisión en E5)
-- **Stack base.** CloudWatch Logs + Metrics + Alarms estándar cubre el MVP. ¿Sumamos **X-Ray** para trazas distribuidas Lambda → DynamoDB → S3? Útil cuando aparecen cuellos de botella entre múltiples Lambdas.
-- **Alarmas iniciales.** ¿Qué disparos consideramos críticos? Candidatas obvias: tasa de errores del handler > umbral, throttles en DynamoDB, rate limit del WAF disparado sostenidamente, latencia P99 del API gateway en ventana móvil.
+- **Multi-tenant** — pasar de un deploy por cliente a múltiples tenants en un solo stack.
+- **Dashboard de métricas del gerente** — endpoint `GET /metrics/agents` + página de visualización.
+- **Internacionalización (i18n).**
+- **Notificaciones push browser** vía Service Worker.
+- **Auditoría granular** de quién leyó qué ticket.
+- **Performance testing** formal con k6/Artillery.
 
 ---
 
-## 18. Anexo IA
+## 24. Anexo IA
 
 ### Qué le pedimos a la IA
 
@@ -759,6 +1282,32 @@ La IA tuvo el reflejo correcto de aceptar pivotes cuando un dominio no funcionab
 
 3. **Domain del notifier Lambda — separado vs mismo Lambda con router.** Discutimos si el código de mandar emails iba en la Lambda síncrona existente (router con un case nuevo) o en una Lambda separada. Tomamos la decisión de separarlo por: (a) los triggers son distintos (API Gateway sync vs SQS event source mapping); (b) los permisos IAM son distintos (DDB+S3 vs SES); (c) los perfiles de carga son distintos (bursty HTTP vs steady processing). Adoptamos dos Lambdas — `chat-message-handler-dev` (dominio tickets) y `ticket-notifier-dev` (dominio notificaciones) — reutilizando el mismo módulo Terraform `compute/` con dos instances y flags IAM distintos.
 
-*(pendiente: ampliar con observaciones de las próximas entregas)*
+### E5 — Decisiones técnicas exploradas con IA (seguridad, observabilidad, costo)
+
+1. **Refactor IAM inline → módulo dedicado con un rol por servicio.** Hasta E4 todos los Lambdas compartían un único rol de ejecución con N inline policies condicionales. Discutimos con la IA si valía la pena descomponer en 5 roles (uno por función) o mantener el compartido. La IA argumentó dos puntos a favor de descomponer: (a) el principio de least-privilege real exige que cada servicio tenga *exactamente* lo que necesita — el rol compartido daba a la Lambda de chat permisos SES que solo el notifier necesitaba; (b) un fallo de seguridad en una función no se debería propagar a las otras. Aceptamos el trabajo de refactor (5 roles + 1 scheduler invoke + 1 ci_runner OIDC) a cambio de un blast radius scopeado por servicio. Cero wildcards de Action/Resource es consecuencia directa de esta descomposición.
+
+2. **Secrets Manager — ¿meter aunque sea uno?** El stack no tiene credenciales persistentes (DDB sin password, Cognito gestiona auth, IAM autoriza inter-Lambda) y por lo tanto no había un secret real para migrar. Discutimos con la IA si valía introducir un secret artificial (HMAC signing key entre watchdog y consumer, admin API token para futuro endpoint del gerente) para "tener Secrets Manager en el stack". La IA fue clara: introducir complejidad sin un riesgo concreto que la justifique es deuda técnica. Documentamos la decisión de no usar Secrets Manager como decisión arquitectónica consciente, no como omisión. La capa de protección de data en reposo queda cubierta por KMS (§ 18.3).
+
+3. **OIDC GitHub Actions vs access keys long-lived.** Discutimos los trade-offs: OIDC requiere trust policy bien scopeada (un wildcard en sub claim abriría el role a cualquier repo) pero elimina la rotación de access keys y los riesgos de fuga vía logs o forks accidentales. La IA propuso el patrón concreto de 4 sub claims (`ref:refs/heads/main`, `pull_request`, `environment:dev`, `environment:staging`) que cubre todos los triggers de nuestro pipeline sin abrir el role a `*`. Adoptamos. Resultado: cero access keys long-lived en GitHub Secrets — las que existían se eliminaron post-validación.
+
+4. **Capas equivalentes a Security Groups sin VPC.** El concepto de Security Groups por capa aplica naturalmente a un stack con VPC, pero nuestro stack es 100% serverless gestionado. Discutimos con la IA cómo articular el modelo de filtrado por capa en este contexto. La IA propuso describir cada hop del request (WAF → API GW → Cognito → Lambda → IAM scope) como una "capa de filtrado equivalente" — el filtrado no es por puerto/CIDR sino por identidad y autorización IAM. Adoptamos esa formulación en § 12.4. El resultado documenta el modelo real sin ficcionar Security Groups que no existen.
+
+5. **Threshold de las alarmas Lambda Errors.** Discutimos qué número usar como threshold (1, 5, 10, etc). La IA argumentó que un threshold de 1 (=cualquier error dispara alarma) produciría ruido de errores transitorios aislados (DDB throttling momentáneo, cold start race) que no requieren acción humana. Threshold de 5 errores en 5 minutos representa "errores sostenidos a ~1/min durante 5 min" lo cual indica problema activo y no ruido. Adoptamos 5/5min para todos los Lambdas. DLQ depth > 0 sí lo dejamos en threshold tightest porque CUALQUIER mensaje en DLQ es señal de fallo no transitorio.
+
+6. **CloudFront delante de API Gateway para 301 redirect explícito en port 80.** Discutimos el trade-off de poner CloudFront delante de `api.ticke-t.lumenchat.app` y `wss://ws.ticke-t.lumenchat.app` para tener redirect 301 explícito en los 3 endpoints. La IA detalló los costos: WebSocket sobre CloudFront limita conexiones a 60 minutos (requeriría reconnect-with-resume en frontend), latencia adicional ~20-50ms por request, riesgo de cache misconfig devolviendo responses cached del API, complejidad CORS extra. Concluimos que poner CloudFront solo delante del frontend es suficiente — los API Gateway custom domains no exponen port 80 por arquitectura del servicio AWS, así que cero plaintext es alcanzable aunque no haya un redirect explícito.
+
+### Reflexión final sobre las cinco entregas
+
+Cinco entregas de trabajo iterativo con asistencia de IA dejan algunas observaciones claras:
+
+**Lo que funcionó.** Usar IA como "interlocutor técnico" para pre-discutir cada decisión de diseño antes de comprometer código. El proceso típico fue: explicar el contexto y las alternativas que veíamos, pedirle a la IA argumentos a favor y en contra de cada una, contrastar con lo que sabíamos del dominio del proyecto, y solo después comprometer. Eso evitó decisiones de gut feeling sin trade-off explícito documentado. Las secciones de "trade-offs" y "desventaja reconocida" de cada decisión técnica en el documento son consecuencia directa de ese flujo.
+
+**Lo que no funcionó.** Confiar en la IA para validar mockups o casos de uso sin testing real con usuarios. En E1 generamos mockups que la IA describía como "completos" pero al revisarlos con el equipo aparecieron decisiones de UX que ningún colaborador o agente reconocería como naturales (ej. la versión inicial del modal de escalamiento pedía 6 campos obligatorios cuando lo real es solo 2). La IA es buena para iterar sobre estructura conocida; floja para juzgar afinidad con un usuario real.
+
+**Lo que aprendimos sobre colaborar con IA.** La fricción útil es cuando la IA *no acepta* la primera propuesta y ofrece alternativas. En E2 fue clave que la IA propusiera el patrón single-table de DynamoDB en lugar de tablas separadas — no era lo que íbamos a hacer inicialmente. En E3 fue clave que cuestionara "¿realmente necesitan VPC?" antes de provisionarla. En E4 fue clave que distinguiera evento vs comando antes de elegir transporte. Cuando la IA se comporta como un revisor crítico en vez de un generador complaciente, agrega valor real.
+
+**Lo que evitamos.** Pedirle a la IA que escriba la justificación de decisiones que el equipo no había tomado. En el flujo final, primero discutíamos en equipo qué hacer, luego escribíamos el borrador de la sección, y solo después le pedíamos a la IA refinar gramática y estructura. La defensa de cualquier sección del documento es del equipo — la IA fue herramienta de edición y de exploración de alternativas, no autor.
+
+**Lo concreto del proyecto.** El documento creció de 3 páginas (E1) a 24 secciones (E5) sin reescritura. Cada decisión técnica está trazada al momento en que se tomó y a las alternativas que se evaluaron. Si un nuevo miembro del equipo lee solo este documento, puede defender el diseño sin haber estado en las sesiones de trabajo — esa portabilidad de criterio es el resultado más concreto del esfuerzo de documentación iterativa con IA como herramienta de exploración.
 
 ---

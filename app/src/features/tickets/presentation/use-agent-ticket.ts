@@ -28,6 +28,7 @@ export function useAgentTicket(
   const [state, setState] = useState<State>({ kind: "loading" });
   const [assignState, setAssignState] = useState<ActionState>({ kind: "idle" });
   const [closeState, setCloseState] = useState<ActionState>({ kind: "idle" });
+  const [escalateState, setEscalateState] = useState<ActionState>({ kind: "idle" });
 
   const reload = useCallback(async () => {
     if (!ticketId) {
@@ -48,6 +49,22 @@ export function useAgentTicket(
       const archived = data.historial.find((t) => t.id === ticketId);
       if (archived) {
         setState({ kind: "ready", ticket: archived, isAssignedToMe: true });
+        return;
+      }
+      // Cola N2 — tickets escalados por algún N1, esperando que un N2 los
+      // tome. Solo aparecen acá cuando el caller es agente-n2.
+      // `isAssignedToMe: false` para que se muestre el botón "Tomar".
+      const escalated = data.escalated.find((t) => t.id === ticketId);
+      if (escalated) {
+        setState({ kind: "ready", ticket: escalated, isAssignedToMe: false });
+        return;
+      }
+      // Escalados por mí (N1) — tickets que el N1 escaló y aún no fueron
+      // cerrados por un N2. Modo read-only: el N1 puede ver el estado
+      // actual y el chat archivado pero no puede tomar acciones.
+      const escalatedByMe = data.escalated_by_me.find((t) => t.id === ticketId);
+      if (escalatedByMe) {
+        setState({ kind: "ready", ticket: escalatedByMe, isAssignedToMe: false });
         return;
       }
       const unassigned = data.unassigned.find((t) => t.id === ticketId);
@@ -91,9 +108,47 @@ export function useAgentTicket(
     }
   }, [repo, state]);
 
+  // Escala el ticket a la cola N2. Tras el PUT exitoso, el ticket deja
+  // de pertenecer al agente N1 actual — refetcheamos la cola para que el
+  // panel transicione a "not-found" (ya no aparece en mis tickets) y el
+  // usuario pueda volver a /cola. Si lo dejamos en "ready" el panel
+  // mostraría datos stale (responsable = el N1 anterior).
+  const escalate = useCallback(
+    async (razon: string) => {
+      if (state.kind !== "ready") return;
+      setEscalateState({ kind: "pending" });
+      try {
+        await repo.escalateTicket(state.ticket.id, razon);
+        setEscalateState({ kind: "idle" });
+        await reload();
+      } catch (err) {
+        setEscalateState({ kind: "error", message: humanize(err) });
+      }
+    },
+    [repo, state, reload],
+  );
+
   return useMemo(
-    () => ({ state, assignState, closeState, reload, assign, close }),
-    [state, assignState, closeState, reload, assign, close],
+    () => ({
+      state,
+      assignState,
+      closeState,
+      escalateState,
+      reload,
+      assign,
+      close,
+      escalate,
+    }),
+    [
+      state,
+      assignState,
+      closeState,
+      escalateState,
+      reload,
+      assign,
+      close,
+      escalate,
+    ],
   );
 }
 
