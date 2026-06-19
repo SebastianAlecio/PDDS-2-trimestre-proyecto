@@ -162,3 +162,121 @@ output "async_consumer_function_arn" {
   description = "ARN de la Lambda consumer del módulo async_consumer. Se inyecta como target del aws_lambda_event_source_mapping."
   value       = module.async_consumer.function_arn
 }
+
+# ─── Security outputs (OYD-D5) ────────────────────────────────────────────
+
+output "kms_key_id" {
+  description = "ID corto de la CMK que encripta S3 + DynamoDB (D5 Deliverable B)."
+  value       = module.kms.key_id
+}
+
+output "kms_key_arn" {
+  description = "ARN de la CMK. Referenciado en aws_s3_bucket_server_side_encryption_configuration y en aws_dynamodb_table.server_side_encryption."
+  value       = module.kms.key_arn
+}
+
+output "kms_alias_name" {
+  description = "Alias amigable de la CMK (ej. alias/pdds-oyd-dev). Útil para queries con AWS CLI: aws kms describe-key --key-id alias/..."
+  value       = module.kms.alias_name
+}
+
+# ─── IAM role outputs (OYD-D5 Deliverable A — exposed for auditability) ──
+
+output "iam_tickets_lambda_role_arn" {
+  description = "ARN del execution role del tickets Lambda. Consumido por module.compute como execution_role_arn."
+  value       = module.iam.tickets_lambda_role_arn
+}
+
+output "iam_chat_ws_lambda_role_arn" {
+  description = "ARN del execution role del chat-ws Lambda."
+  value       = module.iam.chat_ws_lambda_role_arn
+}
+
+output "iam_notifier_lambda_role_arn" {
+  description = "ARN del execution role del notifier Lambda."
+  value       = module.iam.notifier_lambda_role_arn
+}
+
+output "iam_async_consumer_lambda_role_arn" {
+  description = "ARN del execution role del async_consumer Lambda."
+  value       = module.iam.async_consumer_lambda_role_arn
+}
+
+output "iam_watchdog_lambda_role_arn" {
+  description = "ARN del execution role del watchdog Lambda."
+  value       = module.iam.watchdog_lambda_role_arn
+}
+
+output "iam_scheduler_invoke_role_arn" {
+  description = "ARN del role asumido por EventBridge Scheduler para invocar el watchdog."
+  value       = module.iam.scheduler_invoke_role_arn
+}
+
+output "iam_ci_runner_role_arn" {
+  description = "ARN del role assumable via OIDC desde GitHub Actions. Vacío hasta que enable_github_oidc = true (Task 3)."
+  value       = module.iam.ci_runner_role_arn
+}
+
+output "iam_github_oidc_provider_arn" {
+  description = "ARN del provider OIDC de GitHub Actions. Vacío hasta que enable_github_oidc = true (Task 3)."
+  value       = module.iam.github_oidc_provider_arn
+}
+
+# ─── CDN outputs (OYD-D5 Deliverable D) ────────────────────────────────
+
+output "frontend_bucket_name" {
+  description = "Nombre del bucket S3 que hostea el frontend. Consumido por el workflow frontend-deploy.yml para aws s3 sync."
+  value       = length(module.cdn) > 0 ? module.cdn[0].bucket_name : ""
+}
+
+output "frontend_distribution_id" {
+  description = "ID de la CloudFront distribution. Consumido por el workflow para create-invalidation post-deploy."
+  value       = length(module.cdn) > 0 ? module.cdn[0].distribution_id : ""
+}
+
+output "frontend_distribution_domain_name" {
+  description = "Dominio CloudFront (ej. d3abc.cloudfront.net). Para debug; usuarios usan frontend_url."
+  value       = length(module.cdn) > 0 ? module.cdn[0].distribution_domain_name : ""
+}
+
+output "frontend_url" {
+  description = "URL pública del frontend (https://app.ticke-t.lumenchat.app). Endpoint final para usuarios."
+  value       = length(module.cdn) > 0 ? module.cdn[0].frontend_url : ""
+}
+
+# ─── Observability outputs (OYD-D5 Deliverable E evidence) ─────────────
+
+output "observability_sns_topic_arn" {
+  description = "ARN del SNS topic que recibe alarmas y notificaciones de budget. Email subscription al notification_email."
+  value       = module.observability.sns_topic_arn
+}
+
+output "observability_dashboard_name" {
+  description = "Nombre del CloudWatch dashboard (consola: CloudWatch -> Dashboards -> click name)."
+  value       = module.observability.dashboard_name
+}
+
+output "observability_lambda_error_alarm_arns" {
+  description = "Lista de ARNs de las alarmas de Lambda Errors (1 por funcion)."
+  value       = module.observability.lambda_error_alarm_arns
+}
+
+output "observability_dlq_depth_alarm_arns" {
+  description = "Lista de ARNs de las alarmas de SQS DLQ depth."
+  value       = module.observability.dlq_depth_alarm_arns
+}
+
+output "observability_api_5xx_alarm_arn" {
+  description = "ARN de la alarma de API Gateway 5XX errors."
+  value       = module.observability.api_5xx_alarm_arn
+}
+
+output "observability_api_access_log_group" {
+  description = "Log group del API Gateway access log."
+  value       = module.observability.api_access_log_group_name
+}
+
+output "observability_budget_id" {
+  description = "ID del AWS Budget mensual."
+  value       = module.observability.budget_id
+}

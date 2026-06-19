@@ -107,8 +107,13 @@ resource "aws_dynamodb_table" "this" {
     enabled        = true
   }
 
+  # SSE con CMK customer-managed cuando se provee kms_key_arn (D5 Deliverable
+  # B). Si está vacío, AWS usa la default service-managed key. La key policy
+  # del módulo kms/ permite Encrypt/Decrypt al service principal dynamodb.*
+  # y a las Lambda roles via kms:ViaService.
   server_side_encryption {
-    enabled = true
+    enabled     = true
+    kms_key_arn = var.kms_key_arn != "" ? var.kms_key_arn : null
   }
 
   point_in_time_recovery {

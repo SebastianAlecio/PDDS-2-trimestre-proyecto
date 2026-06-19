@@ -36,3 +36,9 @@ variable "cors_allowed_origins" {
   type        = list(string)
   default     = ["*"]
 }
+
+variable "kms_key_arn" {
+  description = "ARN del CMK que encripta los objetos del bucket. Si está vacío, el bucket usa SSE-S3 (AES256, AWS-managed). Si está seteado, el bucket usa aws:kms con la CMK del módulo kms/ — requerido para D5 Deliverable B."
+  type        = string
+  default     = ""
+}

@@ -25,6 +25,8 @@ on:
 
 permissions:
   contents: read
+  # OIDC — D5 Deliverable C. Requerido para AssumeRoleWithWebIdentity.
+  id-token: write
 
 defaults:
   run:
@@ -42,7 +44,7 @@ jobs:
       # primero, sino bash falla con "No such file or directory" al
       # tratar de chdir a infra/.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate confirm input
         if: inputs.confirm != 'destroy'
@@ -57,22 +59,27 @@ jobs:
           echo "Target backend: infra/envs/${{ inputs.environment }}/backend-${{ inputs.environment }}.hcl"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "~> 1.8"
           terraform_wrapper: false
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      # OIDC — el environment se eligio via workflow_dispatch (inputs.environment),
+      # y la propiedad `environment: ${{ inputs.environment }}` del job hace que
+      # el sub claim del token JWT contenga environment:dev o environment:staging.
+      # Ambos casos estan cubiertos por la trust policy del ci_runner. El ARN del
+      # role lo elegimos por env via vars de GH (mismo role por ahora; cuando
+      # separemos permisos por env se setean ARNs distintos).
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ inputs.environment == 'staging' && vars.AWS_ROLE_ARN_STAGING || vars.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
 
       - name: Terraform init
         run: |

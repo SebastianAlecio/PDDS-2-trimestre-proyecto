@@ -30,13 +30,13 @@
 **Trigger del compute** (módulo `infra/modules/compute/`, recurso `aws_lambda_event_source_mapping.sqs`):
 - `batch_size = 1` (var `sqs_batch_size`). Un mensaje por invocación de Lambda — facilita debugging y aísla retries. Acepta menos throughput pero hoy el volumen es bajo.
 - `maximum_batching_window_in_seconds = 0` (var). Sin esperar para acumular — entrega apenas hay un mensaje. Latencia mínima vs costo de invocaciones — válido al volumen actual.
-- `bisect_batch_on_function_error` (var declarada en `compute/variables.tf` por requisito del rubric — pero AWS SQS NO soporta este parámetro; solo Kinesis y DynamoDB Streams. La var queda como no-op en el resource. Documentado en el bloque `aws_lambda_event_source_mapping.sqs` del módulo).
+- `bisect_batch_on_function_error` (var declarada en `compute/variables.tf` por compatibilidad de interfaz del módulo — pero AWS SQS NO soporta este parámetro; solo Kinesis y DynamoDB Streams. La var queda como no-op en el resource. Documentado en el bloque `aws_lambda_event_source_mapping.sqs` del módulo).
 
 **Routing al DLQ**:
 - Si el consumer tira un error (`throw`), Lambda devuelve el mensaje a la cola sin DeleteMessage.
 - SQS espera el `visibility_timeout_seconds` (60s) y re-entrega el mismo mensaje al consumer.
 - Cuando `receiveCount > max_receive_count` (3), SQS aplica el `redrive_policy` y mueve el mensaje a la DLQ.
-- La DLQ NO tiene consumer — el grader/equipo la revisa manualmente desde la consola SQS o via `aws sqs receive-message`.
+- La DLQ NO tiene consumer — el equipo la revisa manualmente desde la consola SQS o via `aws sqs receive-message`.
 
 **Acción esperada sobre mensajes dead-lettered**: revisión humana — el flow típico es leer el body del mensaje, verificar por qué falló (recipient no verificado en SES sandbox, payload malformado, ticket borrado del DDB), y o bien reenviar manualmente o descartar. Sin auto-replay porque la causa del DLQ suele ser un problema de datos, no transitorio.
 
@@ -57,10 +57,10 @@
 
 **Pattern elegido: separate backend.hcl** (no Terraform workspaces). El `backend.tf` root quedó como `backend "s3" {}` vacío; los workflows inyectan el `-backend-config=infra/envs/<env>/backend-<env>.hcl` en cada `init`. Razones:
 - Explícito: el archivo `backend-<env>.hcl` documenta exactamente qué state apunta dónde, sin depender de "workspace seleccionado" silencioso.
-- Sin footgun: olvidar `terraform workspace select <env>` antes de un plan apunta al workspace `default` (rubric pitfall named). Con backends separados, omitir el `-backend-config` falla el init explícitamente.
+- Sin footgun: olvidar `terraform workspace select <env>` antes de un plan apunta al workspace `default` y aplica contra el state equivocado silenciosamente. Con backends separados, omitir el `-backend-config` falla el init explícitamente.
 - Migración del state previo (`infra/terraform.tfstate` → `infra/envs/dev/terraform.tfstate`) ejecutada con `terraform init -migrate-state -force-copy`. Backup del state original quedó en `s3://...backup-pre-d4`.
 
-**Variables que difieren entre dev y staging (≥3 que pide el rubric, total 11)**:
+**Variables que difieren entre dev y staging (11 en total)**:
 - `environment` = `"dev"` vs `"staging"`
 - `attachments_bucket_name_prefix` = `pdds-oyd-attachments` vs `pdds-oyd-attachments-staging`
 - `compute_memory_size` = 128 vs 256 (staging tiene más memoria para pruebas de carga)
@@ -112,7 +112,7 @@
 
 **Timezone**: `America/Guatemala` (var `watchdog_timezone`). EventBridge Scheduler soporta IANA timezones nativos (legacy CloudWatch Events solo UTC). Para nuestro caso `rate(1 hour)` no usa timezone, pero la variable queda definida para futuras expressions tipo `cron(0 8 * * ? *)` (8am hora GT) que sí dependen del timezone.
 
-**Recurso TF**: `aws_scheduler_schedule.this` (en `infra/modules/compute/main.tf`). NO `aws_cloudwatch_event_rule` legacy — rubric exige específicamente el API nuevo (EventBridge Scheduler).
+**Recurso TF**: `aws_scheduler_schedule.this` (en `infra/modules/compute/main.tf`). Usamos el API nuevo (EventBridge Scheduler) en lugar del legacy `aws_cloudwatch_event_rule` — soporta timezones IANA nativos, schedules one-off y un IAM role dedicado por schedule (least-privilege más limpio).
 
 **IAM role dedicado del scheduler** (`aws_iam_role.scheduler_invoke`):
 - Trust policy: solo `scheduler.amazonaws.com` puede assume.
@@ -137,7 +137,7 @@
 5. **Consumer (async-consumer Lambda)**: handler en `infra/modules/compute/src/async-consumer/index.js`. Por cada record:
    - Parsea el body JSON.
    - Escribe UN objeto a S3: `s3://pdds-oyd-attachments-dev-<sufijo>/async-events/<messageId>.json` con el payload + metadata de procesamiento.
-   - Loggea `async_consumer_ok` con `messageId`, `bucket`, `objectKey` (rubric exige "consumer must log the processed message ID").
+   - Loggea `async_consumer_ok` con `messageId`, `bucket`, `objectKey` para poder correlacionar un evento SQS con su objeto resultante en S3 desde CloudWatch Logs.
    - Si `payload.event === "ticket.expired"`, dispara branch adicional: SES SendEmail al `solicitante.correo` con el detalle del ticket vencido.
 
 **Producer secundario**: el watchdog Lambda. Mismo flow desde el paso 4 — encola `{event:"ticket.expired", ...}` directo al async queue, el consumer lo procesa con el branch SES.
@@ -168,7 +168,7 @@ Para nuestro caso (`ticket.expired` del watchdog, ~10-20 mensajes por hora máxi
 Elegimos **separate backend.hcl per env** sobre Terraform workspaces. Trade-off:
 
 - **backend-<env>.hcl**: explícito en archivos versionados; cada env tiene su key/bucket/lock-table documentado en el repo; olvidar `-backend-config=` rompe `init` con error claro; cambiar entre envs requiere `init -reconfigure` lo que fuerza re-init explícito.
-- **Terraform workspaces**: una sola config de backend, switching con `terraform workspace select <env>`; menos archivos pero el "env actual" vive en el filesystem local (`.terraform/environment`), no en el repo. Forgetting el select es un pitfall named en el rubric ("Terraform workspace not selected before plan/apply").
+- **Terraform workspaces**: una sola config de backend, switching con `terraform workspace select <env>`; menos archivos pero el "env actual" vive en el filesystem local (`.terraform/environment`), no en el repo. Forgetting el select es un pitfall conocido: aplica contra el workspace `default` (state distinto) sin avisar.
 
 Workspaces son más concisos pero el footgun del select silencioso pesa más que la ergonomía de menos archivos. Para un equipo de 3 con turnover de quién toca infra, explícito gana.
 

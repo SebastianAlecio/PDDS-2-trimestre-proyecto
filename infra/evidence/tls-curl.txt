@@ -1,0 +1,167 @@
+# TLS verification — D5 Deliverable D evidence
+
+Generated: 2026-06-17T23:13:39Z
+
+Public endpoints en Ticke-T (3 totales):
+  https://api.ticke-t.lumenchat.app — REST API (API Gateway REGIONAL + custom domain)
+  wss://ws.ticke-t.lumenchat.app    — WebSocket API (API Gateway v2 + custom domain)
+  https://app.ticke-t.lumenchat.app — Frontend (CloudFront + S3 privado via OAC)
+
+Cobertura HTTPS: 100% — los 3 endpoints son HTTPS-only, sin endpoints HTTP plaintext.
+Cert wildcard *.ticke-t.lumenchat.app de D3 cubre los 3 (ACM us-east-1, regional + global).
+
+============================================================
+## https://api.ticke-t.lumenchat.app/health
+============================================================
+* Host api.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 98.86.94.189, 18.210.79.98, 18.207.3.45
+*   Trying 98.86.94.189:443...
+* Connected to api.ticke-t.lumenchat.app (98.86.94.189) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* (304) (IN), TLS handshake, Unknown (8):
+* (304) (IN), TLS handshake, Certificate (11):
+* (304) (IN), TLS handshake, CERT verify (15):
+* (304) (IN), TLS handshake, Finished (20):
+* (304) (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "api.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+
+============================================================
+## https://app.ticke-t.lumenchat.app/ (CloudFront, frontend)
+============================================================
+* Host app.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.85.78.124, 52.85.78.21, 52.85.78.42, 52.85.78.59
+*   Trying 52.85.78.124:443...
+* Connected to app.ticke-t.lumenchat.app (52.85.78.124) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* (304) (IN), TLS handshake, Unknown (8):
+* (304) (IN), TLS handshake, Certificate (11):
+* (304) (IN), TLS handshake, CERT verify (15):
+* (304) (IN), TLS handshake, Finished (20):
+* (304) (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "app.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.ticke-t.lumenchat.app/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.ticke-t.lumenchat.app]
+* [HTTP/2] [1] [:path: /]
+
+============================================================
+## http://app.ticke-t.lumenchat.app/ (debe devolver HTTP 301)
+============================================================
+* Host app.ticke-t.lumenchat.app:80 was resolved.
+* IPv6: (none)
+* IPv4: 52.85.78.124, 52.85.78.21, 52.85.78.42, 52.85.78.59
+*   Trying 52.85.78.124:80...
+* Connected to app.ticke-t.lumenchat.app (52.85.78.124) port 80
+> GET / HTTP/1.1
+> Host: app.ticke-t.lumenchat.app
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 301 Moved Permanently
+< Server: CloudFront
+< Date: Wed, 17 Jun 2026 23:13:41 GMT
+< Content-Type: text/html
+< Content-Length: 167
+< Connection: keep-alive
+< Location: https://app.ticke-t.lumenchat.app/
+< X-Cache: Redirect from cloudfront
+< Via: 1.1 e315040cdcb6abeba8d4edc55f4280f6.cloudfront.net (CloudFront)
+
+============================================================
+## wss://ws.ticke-t.lumenchat.app (WebSocket — verificacion HTTPS handshake del custom domain)
+============================================================
+
+WSS no se puede curlear directo. Hago un GET al mismo host por HTTPS para
+validar el cert. API Gateway WS responde 426 Upgrade Required (esperado).
+
+* Host ws.ticke-t.lumenchat.app:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.205.211.189, 3.225.166.47, 44.208.94.81
+*   Trying 52.205.211.189:443...
+* Connected to ws.ticke-t.lumenchat.app (52.205.211.189) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* (304) (IN), TLS handshake, Unknown (8):
+* (304) (IN), TLS handshake, Certificate (11):
+* (304) (IN), TLS handshake, CERT verify (15):
+* (304) (IN), TLS handshake, Finished (20):
+* (304) (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=*.ticke-t.lumenchat.app
+*  start date: Jun  4 00:00:00 2026 GMT
+*  expire date: Dec 18 23:59:59 2026 GMT
+*  subjectAltName: host "ws.ticke-t.lumenchat.app" matched cert's "*.ticke-t.lumenchat.app"
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M01
+*  SSL certificate verify ok.
+* using HTTP/2
+
+============================================================
+## http://api.ticke-t.lumenchat.app/health (API Gateway no expone port 80)
+============================================================
+
+AWS API Gateway custom domains NO escuchan en port 80 por decision
+arquitectonica de AWS. Cualquier intento de conectarse en HTTP es
+rechazado a nivel TCP (no hay listener). Resultado: cero plaintext
+alcanzable, pero NO hay un HTTP 301 redirect explicito (no hay
+listener que pueda responder con el codigo).
+
+* Host api.ticke-t.lumenchat.app:80 was resolved.
+* IPv6: (none)
+* IPv4: 18.210.79.98, 18.207.3.45, 98.86.94.189
+*   Trying 18.210.79.98:80...
+* connect to 18.210.79.98 port 80 from 192.168.1.11 port 56974 failed: Connection refused
+*   Trying 18.207.3.45:80...
+* connect to 18.207.3.45 port 80 from 192.168.1.11 port 56975 failed: Connection refused
+*   Trying 98.86.94.189:80...
+* connect to 98.86.94.189 port 80 from 192.168.1.11 port 56976 failed: Connection refused
+* Failed to connect to api.ticke-t.lumenchat.app port 80 after 189 ms: Couldn't connect to server
+
+============================================================
+## http://ws.ticke-t.lumenchat.app/ (idem)
+============================================================
+
+* Host ws.ticke-t.lumenchat.app:80 was resolved.
+* IPv6: (none)
+* IPv4: 3.225.166.47, 44.208.94.81, 52.205.211.189
+*   Trying 3.225.166.47:80...
+* connect to 3.225.166.47 port 80 from 192.168.1.11 port 56977 failed: Connection refused
+*   Trying 44.208.94.81:80...
+* connect to 44.208.94.81 port 80 from 192.168.1.11 port 56978 failed: Connection refused
+*   Trying 52.205.211.189:80...
+* connect to 52.205.211.189 port 80 from 192.168.1.11 port 56979 failed: Connection refused
+* Failed to connect to ws.ticke-t.lumenchat.app port 80 after 191 ms: Couldn't connect to server
