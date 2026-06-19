@@ -41,7 +41,7 @@ variable "compute_memory_size" {
 variable "watchdog_schedule" {
   description = "Frecuencia de ejecución para la Lambda del Watchdog"
   type        = string
-  default     = "rate(1 hour)"
+  default     = "rate(5 minutes)"
 }
 
 variable "tickets_table_name" {
