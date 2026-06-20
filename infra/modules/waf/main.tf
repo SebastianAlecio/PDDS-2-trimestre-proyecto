@@ -7,10 +7,7 @@ locals {
 #
 # La única regla activa es rate limit por IP. Razón: en un MVP de helpdesk
 # interno autenticado, el riesgo dominante es brute-force al endpoint
-# público (intentos de login Cognito, scraping). Las managed rules OWASP no
-# agregan valor porque no servimos HTML ni usamos SQL, y el authorizer
-# Cognito ya filtra el 100% de las invocaciones a rutas protegidas. Quedan
-# documentadas como evolución futura.
+# público (intentos de login Cognito, scraping).
 resource "aws_wafv2_web_acl" "this" {
   name        = local.web_acl_name
   description = "Ticke-T WAF: rate-limit on the REST API public ingress"

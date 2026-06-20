@@ -41,11 +41,6 @@ resource "aws_cognito_user_pool" "pool" {
     email_subject        = "Tu código de verificación para Ticke-T"
     email_message        = "Tu código de verificación es {####}."
   }
-
-  # email y name son atributos built-in de Cognito; quedan habilitados sin
-  # necesidad de declarar un bloque schema. Los schema blocks solo se usan
-  # para atributos custom (`custom:role`, etc.) — Cognito no soporta agregar
-  # atributos custom requeridos en pools ya existentes.
 }
 
 resource "aws_cognito_user_pool_client" "client" {
