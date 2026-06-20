@@ -1,0 +1,227 @@
+/* Historial del ticket — section colapsable + timeline vertical. El
+   patrón visual sigue el resto de pages del feature (parchment, hairlines,
+   sin sombras decorativas). Cada evento es un card con un dot a la
+   izquierda y una linea conectora vertical entre dots. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-md);
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--s-md);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.toggle:hover {
+  color: var(--primary);
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+}
+
+.caret {
+  font-size: 11px;
+  color: var(--ink-muted-48);
+  transition: transform 120ms ease;
+}
+
+.caretOpen {
+  transform: rotate(90deg);
+}
+
+.note {
+  font-family: var(--type-text);
+  font-size: 14px;
+  color: var(--ink-muted-48);
+  margin: 0;
+}
+
+.errorBox {
+  color: #8a1f1f;
+  background: #fde8e8;
+  padding: var(--s-md);
+  border-radius: 8px;
+  font-family: var(--type-text);
+  font-size: 13px;
+}
+
+.retryBtn {
+  margin-left: var(--s-sm);
+  background: transparent;
+  border: 1px solid #8a1f1f;
+  color: #8a1f1f;
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  font-family: var(--type-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-md);
+}
+
+/* La linea vertical que une todos los dots. Termina cerca del último
+   dot para no quedar floja al fondo. */
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--hairline);
+}
+
+.event {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s-sm) var(--s-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dot {
+  position: absolute;
+  left: -22px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink-muted-48);
+  border: 2px solid var(--canvas);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.dotCreated { background: var(--primary); }
+.dotAsignado { background: var(--primary); }
+.dotEscalado { background: var(--sev-mid); }
+.dotCerrado { background: var(--ok); }
+.dotVencido { background: var(--sev-high); }
+
+.eventHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-sm);
+}
+
+.eventTitle {
+  font-family: var(--type-text);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.eventTime {
+  font-family: var(--type-text);
+  font-size: 11px;
+  color: var(--ink-muted-48);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.eventMeta {
+  font-family: var(--type-text);
+  font-size: 12px;
+  color: var(--ink-muted-48);
+}
+
+.eventBadge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--canvas-parchment);
+  color: var(--ink-muted-80);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+}
+
+.eventReason {
+  font-family: var(--type-text);
+  font-size: 13px;
+  color: var(--ink-muted-80);
+  margin: 4px 0 0;
+  font-style: italic;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.agentsBlock {
+  margin-top: var(--s-md);
+  padding-top: var(--s-md);
+  border-top: 1px dashed var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+}
+
+.agentsTitle {
+  font-family: var(--type-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-muted-48);
+  margin: 0;
+}
+
+.agentsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agentRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--type-text);
+  font-size: 13px;
+  color: var(--ink);
+  padding: 6px 10px;
+  background: var(--canvas-parchment);
+  border-radius: 8px;
+}
+
+.agentName {
+  font-weight: 600;
+}
+
+.agentMeta {
+  color: var(--ink-muted-48);
+  font-size: 12px;
+}

@@ -5,21 +5,11 @@ locals {
 
 # CloudWatch log group de la función. Naming matchea el log group ARN que el
 # módulo iam construye por convención (arn:aws:logs:...:log-group:/aws/lambda/${function_name}).
-# Si cambia el path o el formato, hay que actualizar el local correspondiente
-# en iam/ para que las policies de logs sigan scopeando al ARN correcto.
-#
-# NOTA D5 Task 5: este recurso se va a mover al módulo observability/ en una
-# task posterior; mientras tanto convive acá para preservar el state.
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.function_name}"
   retention_in_days = var.log_retention_days
 }
 
-# Si la Lambda tiene package.json (depende de paquetes npm como
-# @aws-sdk/s3-request-presigner que no vienen en el runtime de Node 22),
-# corremos `npm install` antes del archive_file para que node_modules entre
-# al zip. Trigger por hash de package.json + package-lock.json (si existe)
-# fuerza re-instalación cuando las deps cambian.
 resource "null_resource" "npm_install" {
   count = fileexists("${local.source_dir}/package.json") ? 1 : 0
 
@@ -44,10 +34,7 @@ data "archive_file" "lambda" {
   depends_on = [null_resource.npm_install]
 }
 
-# Función Lambda. El role viene del módulo iam/ como input — este módulo ya
-# no crea su propio rol (D5 Deliverable A). El log group debe existir antes
-# de que Lambda registre su primer invocación (sino AWS auto-crea uno con
-# retention=Never, y el resource TF se queda huérfano).
+# Función Lambda. El role viene del módulo iam/ como input.
 resource "aws_lambda_function" "this" {
   function_name = local.function_name
   role          = var.execution_role_arn
@@ -75,12 +62,6 @@ resource "aws_lambda_function" "this" {
 # IAM policy que permite sqs:ReceiveMessage/DeleteMessage/etc vive en el
 # módulo iam/ (en el rol correspondiente). Acá solo se crea el resource del
 # mapping cuando attach_sqs_event_source_mapping = true.
-#
-# batch_size, maximum_batching_window_in_seconds, bisect_batch_on_function_error
-# vienen como inputs del rubric OYD-D4 Deliverable B. NOTA: AWS SQS no soporta
-# bisect_batch_on_function_error (solo Kinesis/DDB Streams) — la variable
-# queda declarada en variables.tf por compatibilidad de contrato del rubric
-# pero NO se cablea al resource.
 resource "aws_lambda_event_source_mapping" "sqs" {
   count = var.attach_sqs_event_source_mapping ? 1 : 0
 
@@ -92,10 +73,7 @@ resource "aws_lambda_event_source_mapping" "sqs" {
 }
 
 # ─── EventBridge Schedule LEGACY (aws_cloudwatch_event_rule) ──────────────
-# Solo se crea si attach_scheduler = false y schedule_expression != "" (modo
-# legacy puro). Cuando attach_scheduler = true se usa el aws_scheduler_schedule
-# nuevo (OYD-D4 Deliverable C exige el API nuevo). Mantenido por backwards-
-# compatibility de la transición; no se usa en dev/staging actualmente.
+# Solo se crea si attach_scheduler = false y schedule_expression != ""
 resource "aws_cloudwatch_event_rule" "schedule" {
   count               = var.schedule_expression != "" && !var.attach_scheduler ? 1 : 0
   name                = "${local.function_name}-schedule"
@@ -120,7 +98,7 @@ resource "aws_lambda_permission" "eventbridge_invoke" {
 
 # ─── EventBridge Scheduler (OYD-D4 Deliverable C — API nueva) ─────────────
 # El role asumido por el scheduler para invocar la Lambda viene del módulo
-# iam/ como var.scheduler_role_arn — ya no se crea inline acá.
+# iam/ como var.scheduler_role_arn
 resource "aws_scheduler_schedule" "this" {
   count = var.attach_scheduler ? 1 : 0
 

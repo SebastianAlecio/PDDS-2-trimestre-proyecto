@@ -6,6 +6,7 @@ import { ChatPane } from "../../chat/presentation/ChatPane";
 import { useChat } from "../../chat/presentation/use-chat";
 import { setActiveTicketId } from "../../chat/presentation/chat-session-storage";
 import { TicketAttachmentsView } from "./TicketAttachmentsView";
+import { TicketHistoryView } from "./TicketHistoryView";
 import { useMyTickets } from "./use-my-tickets";
 import { shortId } from "./use-create-ticket";
 import styles from "./CollaboratorTicketPage.module.css";
@@ -136,6 +137,12 @@ export function CollaboratorTicketPage() {
                   <TicketAttachmentsView attachments={ticket.attachments} />
                 </section>
               )}
+
+              <TicketHistoryView
+                ticketId={ticket.id}
+                ticketCreatedAt={ticket.createdAt}
+                ticketRequesterName={ticket.requester.name}
+              />
             </section>
 
             <section className={styles.chatCol}>
@@ -143,6 +150,7 @@ export function CollaboratorTicketPage() {
                 <ChatPane
                   viewerSub={viewerSub}
                   messages={chat.messages}
+                  systemMessages={chat.systemMessages}
                   connectionState={chat.connectionState}
                   sendState={chat.sendState}
                   historyLoading={chat.historyState.kind === "loading"}

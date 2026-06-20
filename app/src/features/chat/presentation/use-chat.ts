@@ -29,6 +29,17 @@ export type ChatTicketClosedSignal = {
   closedByName: string;
 };
 
+// Mensaje de sistema (no chat regular) renderizado como banner en línea
+// con el feed. Por ahora solo "escalado"; se puede ampliar a otros eventos
+// del ticket si suman a la conversación.
+export type ChatSystemMessage = {
+  id: string;
+  kind: "escalated";
+  createdAt: string;
+  byName: string;
+  reason: string;
+};
+
 export type UseChatOptions = {
   // Cuándo cerrar el ticket triggerea callback para la UI (colaborador:
   // cierra el widget; agente: vuelve a la cola).
@@ -45,6 +56,7 @@ export function useChat(
   const [connectionState, setConnectionState] = useState<ChatConnectionState>("idle");
   const [sendState, setSendState] = useState<SendState>({ kind: "idle" });
   const [ticketClosed, setTicketClosed] = useState<ChatTicketClosedSignal | null>(null);
+  const [systemMessages, setSystemMessages] = useState<ChatSystemMessage[]>([]);
 
   // Suscripción activa al WS. La guardamos en ref para que el cleanup
   // del useEffect pueda llamar a close() aún si el callback del hook
@@ -67,6 +79,7 @@ export function useChat(
       setHistoryState({ kind: "idle" });
       setConnectionState("idle");
       setTicketClosed(null);
+      setSystemMessages([]);
       return;
     }
 
@@ -76,8 +89,45 @@ export function useChat(
       setHistoryState({ kind: "loading" });
       setConnectionState("idle");
       setTicketClosed(null);
+      setSystemMessages([]);
 
-      // 1) Cargar history vía REST.
+      // 1) Resolver token Cognito PRIMERO. El widget puede abrirse antes
+      //    de que Amplify haya hidratado los tokens desde el storage
+      //    (race entre el mount del componente y la inicialización del
+      //    AuthProvider). Sin esta espera, el primer listMessages disparaba
+      //    401 y mostraba "Tu sesión expiró" prematuramente. Reintentamos
+      //    hasta 3 veces con backoff corto antes de dar por perdida la sesión.
+      let token: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return;
+        try {
+          const session = await fetchAuthSession();
+          const idToken = session.tokens?.idToken?.toString();
+          if (idToken) {
+            token = idToken;
+            break;
+          }
+        } catch (err) {
+          console.warn(`use_chat_token_attempt_${attempt}_failed`, err);
+        }
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        }
+      }
+
+      if (cancelled) return;
+
+      if (!token) {
+        setConnectionState("closed");
+        setHistoryState({
+          kind: "error",
+          message: "No se pudo obtener tu sesión. Vuelve a iniciar sesión.",
+        });
+        return;
+      }
+
+      // 2) Cargar history vía REST — con el token ya validado, no debería
+      //    dar 401 por timing.
       try {
         const history = await repo.listMessages(ticketId!);
         if (cancelled) return;
@@ -86,24 +136,6 @@ export function useChat(
       } catch (err) {
         if (cancelled) return;
         setHistoryState({ kind: "error", message: humanizeChatError(err) });
-        return;
-      }
-
-      // 2) Resolver token Cognito y abrir WS.
-      let token: string;
-      try {
-        const session = await fetchAuthSession();
-        const idToken = session.tokens?.idToken?.toString();
-        if (!idToken) throw new Error("missing id token");
-        token = idToken;
-      } catch (err) {
-        if (cancelled) return;
-        setConnectionState("closed");
-        setHistoryState({
-          kind: "error",
-          message: "No se pudo obtener tu sesión. Vuelve a iniciar sesión.",
-        });
-        console.error("use_chat_token_failed", err);
         return;
       }
 
@@ -126,6 +158,23 @@ export function useChat(
               if (onTicketClosedRef.current) {
                 onTicketClosedRef.current(signal);
               }
+              return;
+            }
+            if (event.type === "ticket_escalated") {
+              // Idempotente: si llega duplicado (reconnect re-broadcast),
+              // dedupeamos por (createdAt + byName) ya que el server no
+              // expone un id estable para system events. Es lo bastante
+              // único en la práctica.
+              const sysMsg: ChatSystemMessage = {
+                id: `esc-${event.escaladoAt}-${event.escaladoPor.sub}`,
+                kind: "escalated",
+                createdAt: event.escaladoAt,
+                byName: event.escaladoPor.nombre,
+                reason: event.razon,
+              };
+              setSystemMessages((prev) =>
+                prev.some((m) => m.id === sysMsg.id) ? prev : [...prev, sysMsg],
+              );
             }
           },
           onStateChange: (state) => {
@@ -217,6 +266,7 @@ export function useChat(
       connectionState,
       sendState,
       ticketClosed,
+      systemMessages,
       send,
       dismissSendError,
     }),
@@ -226,6 +276,7 @@ export function useChat(
       connectionState,
       sendState,
       ticketClosed,
+      systemMessages,
       send,
       dismissSendError,
     ],

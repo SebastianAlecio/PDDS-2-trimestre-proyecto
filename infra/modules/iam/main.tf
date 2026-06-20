@@ -154,6 +154,7 @@ resource "aws_iam_role_policy" "tickets_lambda_cognito" {
         "cognito-idp:AdminEnableUser",
         "cognito-idp:AdminAddUserToGroup",
         "cognito-idp:AdminRemoveUserFromGroup",
+        "cognito-idp:ListUsersInGroup",
       ]
       Resource = [var.cognito_user_pool_arn]
     }]
@@ -276,7 +277,7 @@ resource "aws_iam_role_policy" "chat_ws_lambda_ws_manage" {
 }
 
 # ─── ROL 3: notifier_lambda ──────────────────────────────────────────────
-# Consumer del flow SNS→SQS de Cloud E4. Maneja eventos ticket.closed.
+# Consumer del flow SNS→SQS. Maneja eventos ticket.closed.
 #   - CloudWatch logs
 #   - SQS Consume sobre la cola ticket-notifications (no la async)
 #   - DDB GetItem/PutItem (idempotency records IDEMPOTENCY#<message_id>)
@@ -358,7 +359,7 @@ resource "aws_iam_role_policy" "notifier_lambda_ses_send" {
 }
 
 # ─── ROL 4: async_consumer_lambda ────────────────────────────────────────
-# Consumer del async queue (OYD-D4 Deliverable E). Maneja eventos ticket.expired.
+# Consumer del async queue. Maneja eventos ticket.expired.
 #   - CloudWatch logs
 #   - SQS Consume sobre el async queue
 #   - S3 PutObject sobre async-events/* del bucket de attachments (audit)
@@ -433,7 +434,7 @@ resource "aws_iam_role_policy" "async_consumer_lambda_ses_send" {
 }
 
 # ─── ROL 5: watchdog_lambda ──────────────────────────────────────────────
-# Barrido periódico (1/hora) que busca tickets vencidos por SLA y publica
+# Barrido periódico (5 minutos) que busca tickets vencidos por SLA y publica
 # ticket.expired al async queue.
 #   - CloudWatch logs
 #   - DDB Query sobre GSI4 (PK=STATUS#Abierto, SK begins_with PRIO#)
@@ -513,8 +514,3 @@ resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
     }]
   })
 }
-
-# ─── ROL 7: ci_runner — OIDC ─────────────────────────────────────────────
-# Definido en oidc.tf de este mismo módulo. Se mantiene separado por claridad
-# narrativa: este archivo expone las cargas de trabajo runtime; oidc.tf el
-# pipeline de despliegue.

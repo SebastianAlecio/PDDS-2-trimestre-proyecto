@@ -200,5 +200,23 @@ function parseEvent(raw: unknown): ChatServerEvent | null {
     };
   }
 
+  if (type === "ticket_escalated") {
+    const ticketId = typeof obj.ticket_id === "string" ? obj.ticket_id : null;
+    const escaladoPor = obj.escalado_por as Record<string, unknown> | undefined;
+    const escaladoAt = typeof obj.escalado_at === "string" ? obj.escalado_at : "";
+    const razon = typeof obj.razon === "string" ? obj.razon : "";
+    if (!ticketId) return null;
+    return {
+      type: "ticket_escalated",
+      ticketId,
+      escaladoPor: {
+        sub: String(escaladoPor?.sub ?? ""),
+        nombre: String(escaladoPor?.nombre ?? ""),
+      },
+      escaladoAt,
+      razon,
+    };
+  }
+
   return null;
 }
