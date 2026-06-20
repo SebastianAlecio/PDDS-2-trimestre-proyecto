@@ -12,10 +12,6 @@
 #   - 1 CloudWatch dashboard con 3 widgets, body construido con jsonencode()
 #     (NO heredoc con ARNs hardcodeados — pitfall del rubric).
 #   - 1 AWS Budget mensual con notificación al 80% al SNS + email.
-#
-# Observabilidad del NEGOCIO (tickets resueltos por agente, tiempo promedio,
-# etc.) NO entra acá — es feature de la app, se construye después con un
-# endpoint /metrics + página de gerente.
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
@@ -40,8 +36,7 @@ resource "aws_cloudwatch_log_group" "api_gateway_access" {
 }
 
 # ─── SNS topic + email subscription ──────────────────────────────────────
-# Topic compartido por todas las alarmas. El budget también publica al mismo
-# topic — un solo inbox para todo lo que requiere atención humana.
+# Topic compartido por todas las alarmas. El budget también publica al mismo topic.
 resource "aws_sns_topic" "alarms" {
   name = "${local.name}-alarms"
 
@@ -86,7 +81,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
 # ─── SQS DLQ depth alarmas (1 por DLQ) ───────────────────────────────────
 # Threshold 1: ANY mensaje en la DLQ es señal de procesamiento fallido y
-# requiere intervención humana. Tightest threshold posible.
+# requiere intervención manual. Tightest threshold posible.
 resource "aws_cloudwatch_metric_alarm" "sqs_dlq_depth" {
   for_each = toset(var.sqs_dlq_names)
 
