@@ -6,195 +6,606 @@
 
 ---
 
-## 1. Async messaging design
+## 1. Async Messaging Design
 
-**Servicio elegido:** Amazon SQS standard (NO FIFO). Coexiste con el pipeline SNS+SQS+notifier que ya existía de Cloud E4 (que sigue manejando `ticket.closed` → email) — el nuevo pipeline SQS-only del módulo `async/` maneja `ticket.expired` (watchdog) + endpoint de testing `POST /async/enqueue`.
+### Servicio seleccionado
 
-**Por qué SQS standard y no FIFO**:
-- El throughput del watchdog es bajo (1 ejecución/hora, batches pequeños). No necesitamos los 300 tx/s sin batching de FIFO.
-- Cada `ticket.expired` es independiente — no hay orden de procesamiento relevante entre dos tickets distintos. La idempotencia se garantiza a nivel de DDB (ConditionExpression `estado = "Abierto"` antes del update).
-- FIFO cuesta más por mensaje y limita el throughput global de la cola — sin beneficio funcional para nuestro caso.
+Para la implementación de procesamiento asíncrono se seleccionó **Amazon SQS Standard**. Esta solución coexiste con el pipeline SNS + SQS + Notifier desarrollado previamente en Cloud Computing Delivery 4, el cual continúa gestionando eventos `ticket.closed` y el envío de notificaciones por correo electrónico.
 
-**DLQ y redrive_policy** (módulo `infra/modules/async/`, recursos `aws_sqs_queue.main` + `aws_sqs_queue.dlq`):
-- `max_receive_count = 3` (var `async_max_receive_count`). Después de 3 fallos del consumer, SQS mueve el mensaje a la DLQ. Default conservador — alineado con `notifications_max_receive_count` del pipeline viejo.
-- `message_retention_seconds = 345600` (4 días) en la cola principal. Sobrevive a un outage prolongado del consumer.
-- `dlq_message_retention_seconds = 1209600` (14 días, máximo SQS). La DLQ es para inspección post-incidente — ventana amplia para que un humano la revise.
-- `visibility_timeout_seconds = 60`. Debe ser ≥ al timeout del consumer Lambda (30s). Si fuera menor, SQS reentrega antes de que el consumer termine y el mismo mensaje se procesa dos veces.
+El nuevo pipeline, implementado en el módulo `async/`, utiliza exclusivamente SQS y es responsable de procesar los eventos `ticket.expired` generados por el watchdog, así como los mensajes enviados mediante el endpoint de pruebas `POST /async/enqueue`.
 
-**Validación real con datos del dominio**: en el primer apply, el watchdog encontró 2 tickets vencidos. 1 se envió por email exitosamente (`sebastianalecio@gmail.com`, verificado en SES sandbox). El otro (`oyd-evidence-colab@oyd.local`, no verificado) falló 3 veces en SES → terminó en la DLQ. Eso valida el flow del redrive_policy con tráfico real, no sintético.
+### Justificación de SQS Standard frente a FIFO
 
----
+La elección de SQS Standard se fundamenta en las características funcionales y operativas del dominio:
 
-## 2. Event-driven architecture
+- El volumen esperado de procesamiento es reducido. El watchdog se ejecuta periódicamente y genera lotes pequeños de mensajes, por lo que no es necesario aprovechar las capacidades de throughput garantizado que ofrece FIFO.
+- Cada evento `ticket.expired` representa una operación independiente. No existe un requisito de orden de procesamiento entre tickets distintos.
+- La idempotencia se encuentra garantizada a nivel de DynamoDB mediante el uso de una `ConditionExpression` que valida que el ticket continúe en estado `Abierto` antes de realizar la actualización correspondiente.
+- SQS FIFO introduce un costo mayor por mensaje y limita el throughput global de la cola, sin aportar beneficios relevantes para el caso de uso implementado.
 
-**Trigger del compute** (módulo `infra/modules/compute/`, recurso `aws_lambda_event_source_mapping.sqs`):
-- `batch_size = 1` (var `sqs_batch_size`). Un mensaje por invocación de Lambda — facilita debugging y aísla retries. Acepta menos throughput pero hoy el volumen es bajo.
-- `maximum_batching_window_in_seconds = 0` (var). Sin esperar para acumular — entrega apenas hay un mensaje. Latencia mínima vs costo de invocaciones — válido al volumen actual.
-- `bisect_batch_on_function_error` (var declarada en `compute/variables.tf` por compatibilidad de interfaz del módulo — pero AWS SQS NO soporta este parámetro; solo Kinesis y DynamoDB Streams. La var queda como no-op en el resource. Documentado en el bloque `aws_lambda_event_source_mapping.sqs` del módulo).
+### Configuración de la cola y Dead Letter Queue
 
-**Routing al DLQ**:
-- Si el consumer tira un error (`throw`), Lambda devuelve el mensaje a la cola sin DeleteMessage.
-- SQS espera el `visibility_timeout_seconds` (60s) y re-entrega el mismo mensaje al consumer.
-- Cuando `receiveCount > max_receive_count` (3), SQS aplica el `redrive_policy` y mueve el mensaje a la DLQ.
-- La DLQ NO tiene consumer — el equipo la revisa manualmente desde la consola SQS o via `aws sqs receive-message`.
+La infraestructura se implementó en el módulo `infra/modules/async/` mediante los recursos `aws_sqs_queue.main` y `aws_sqs_queue.dlq`.
 
-**Acción esperada sobre mensajes dead-lettered**: revisión humana — el flow típico es leer el body del mensaje, verificar por qué falló (recipient no verificado en SES sandbox, payload malformado, ticket borrado del DDB), y o bien reenviar manualmente o descartar. Sin auto-replay porque la causa del DLQ suele ser un problema de datos, no transitorio.
+| Parámetro                       | Valor               | Justificación                                                                                                                                                                                |
+| ------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max_receive_count`             | `3`                 | Después de tres intentos fallidos de procesamiento, el mensaje es enviado a la DLQ. El valor se mantiene alineado con la configuración utilizada en el pipeline de notificaciones existente. |
+| `message_retention_seconds`     | `345600` (4 días)   | Permite conservar mensajes durante interrupciones prolongadas del consumidor.                                                                                                                |
+| `dlq_message_retention_seconds` | `1209600` (14 días) | Proporciona una ventana amplia para análisis e investigación posterior a incidentes.                                                                                                         |
+| `visibility_timeout_seconds`    | `60` segundos       | Debe ser mayor o igual al timeout del consumidor Lambda (30 segundos) para evitar reentregas prematuras del mismo mensaje.                                                                   |
 
-**IAM least-privilege** (módulo `infra/modules/compute/main.tf`, `aws_iam_role_policy.lambda_sqs_consume`):
-- Actions: `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes`.
-- Resource: `var.sqs_queue_arn` (queue ARN exacto del módulo async/, sin wildcards).
-- El consumer también tiene `s3:PutObject` scoped a `${bucket_arn}/async-events/*` (no a todo el bucket) y `ses:SendEmail` con condition `ses:FromAddress = soporte@lumenchat.app` (no a cualquier from).
+### Estrategia de manejo de errores
 
----
+Cuando un mensaje no puede ser procesado correctamente, SQS aplica la política de reintentos configurada mediante `redrive_policy`.
 
-## 3. Terraform environment layout y CD pipeline
+Tras superar el límite definido por `max_receive_count`, el mensaje es trasladado automáticamente a la Dead Letter Queue, donde queda disponible para análisis y recuperación manual.
 
-**Estructura `infra/envs/`**:
-- `infra/envs/dev/dev.tfvars` — environment dev, ya existía
-- `infra/envs/dev/backend-dev.hcl` — config del S3 backend para dev, key `infra/envs/dev/terraform.tfstate`
-- `infra/envs/staging/staging.tfvars` — nuevo en D4, 11 variables distintas a dev
-- `infra/envs/staging/backend-staging.hcl` — key `infra/envs/staging/terraform.tfstate` (mismo bucket que dev, lock table compartido)
+### Validación con datos reales
 
-**Pattern elegido: separate backend.hcl** (no Terraform workspaces). El `backend.tf` root quedó como `backend "s3" {}` vacío; los workflows inyectan el `-backend-config=infra/envs/<env>/backend-<env>.hcl` en cada `init`. Razones:
-- Explícito: el archivo `backend-<env>.hcl` documenta exactamente qué state apunta dónde, sin depender de "workspace seleccionado" silencioso.
-- Sin footgun: olvidar `terraform workspace select <env>` antes de un plan apunta al workspace `default` y aplica contra el state equivocado silenciosamente. Con backends separados, omitir el `-backend-config` falla el init explícitamente.
-- Migración del state previo (`infra/terraform.tfstate` → `infra/envs/dev/terraform.tfstate`) ejecutada con `terraform init -migrate-state -force-copy`. Backup del state original quedó en `s3://...backup-pre-d4`.
+La configuración fue validada utilizando datos reales del dominio durante el primer despliegue de la infraestructura.
 
-**Variables que difieren entre dev y staging (11 en total)**:
-- `environment` = `"dev"` vs `"staging"`
-- `attachments_bucket_name_prefix` = `pdds-oyd-attachments` vs `pdds-oyd-attachments-staging`
-- `compute_memory_size` = 128 vs 256 (staging tiene más memoria para pruebas de carga)
-- `dns_parent_domain` = `lumenchat.app` vs `""` (staging sin DNS custom para no chocar con dev por control del dominio)
-- `dns_api_full_hostname` = `api.ticke-t.lumenchat.app` vs `""`
-- `dns_enable_api_custom_domain` = `true` vs `false`
-- `dns_enable_ses_domain_identity` = `true` vs `false`
-- `ses_from_address` = `soporte@lumenchat.app` vs `""`
-- `dns_ws_full_hostname` = `ws.ticke-t.lumenchat.app` vs `""`
-- `dns_enable_ws_custom_domain` = `true` vs `false`
-- `notifications_max_receive_count` = 3 vs 5 (staging usa retries más conservadores)
+El watchdog detectó dos tickets vencidos:
 
-**Plan-artifact promotion** (workflows `.github/workflows/terraform-ci.yml` + `terraform-apply.yml`):
-- Plan en la PR (`terraform-ci.yml`) corre `terraform plan -out=tfplan` y sube como artifact via `actions/upload-artifact@v4`. También sube el directorio `modules/compute/build/` (los zips de las Lambdas que el `data.archive_file` materializa en plan time — sin esto el apply en otro runner falla buscando los zips).
-- Apply en el merge (`terraform-apply.yml`) busca el run de CI de la PR que produjo el merge commit (vía `actions/github-script` resolviendo `parents[1]` del merge commit), descarga el artifact con `actions/download-artifact@v4` y corre `terraform apply tfplan` — sin `-auto-approve`, sin re-plan.
+- El primer ticket generó exitosamente una notificación hacia la dirección `sebastianalecio@gmail.com`, previamente verificada dentro del entorno sandbox de Amazon SES.
+- El segundo ticket estaba asociado a la dirección `oyd-evidence-colab@oyd.local`, la cual no se encontraba verificada. Como consecuencia, SES rechazó el envío en los tres intentos permitidos y el mensaje fue trasladado automáticamente a la DLQ.
 
-**Approval gate de staging**:
-- GitHub Environment `staging` configurado en Settings → Environments con required reviewer = `SebastianAlecio`.
-- El job `apply-staging` declara `environment: staging` → pausa hasta aprobación humana en la UI.
-- Cero overrides en el YAML del workflow para saltarse el gate — la protección está en el repository setting, no en el código.
-
-**Secrets namespacing per environment**:
-- Cada environment (dev + staging) tiene su propio set de secrets env-scoped: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
-- Cuando un job declara `environment: dev`, GitHub resuelve `${{ secrets.AWS_ACCESS_KEY_ID }}` desde el env scope primero (fallback al repo level si no hay env-scoped).
-- Patrón demostrado aunque hoy compartan valores (misma cuenta AWS). En el futuro si staging se separa a otra cuenta AWS, el cambio es solo cambiar el valor del secret env-scoped.
-
-**Branch protection ruleset en `main`** (Settings → Rules → Rulesets):
-- Status: Active. Target: `main`.
-- Status checks required (deben matchear exactamente los nombres de los jobs del workflow `terraform-ci.yml`):
-  - `Terraform fmt`
-  - `Terraform validate`
-  - `Terraform plan (dev)`
-- Require a pull request before merging (no push directo a main).
-- Require branches to be up to date before merging (evita que merges paralelos pisen state inconsistente).
-- Block force pushes (incluso para admins — la historia de main es append-only).
-- Restrict deletions (main no se puede borrar).
-
-**Por qué require-branch-up-to-date + block-force-push juntos**: las dos reglas previenen escenarios de "merged code review skipped". Si una PR mergea sin estar al día con main, las checks corrieron contra una base distinta a lo que termina en main — la rama puede pasar checks individualmente pero romper main por interacciones. Forzando branch-up-to-date, los checks re-corren con la base real. Block-force-push previene que alguien (incluido un admin) sobreescriba commits ya mergeados con `git push --force`, lo que efectivamente borraría revisiones aprobadas del historial.
+Esta prueba permitió verificar el funcionamiento completo de la política de redrive utilizando tráfico real del sistema, incluyendo el manejo de errores y la transferencia automática hacia la cola de mensajes fallidos.
 
 ---
 
-## 4. Scheduled jobs
+## 2. Event-Driven Architecture
 
-**Función**: `pdds-oyd-watchdog-dev` (Lambda). Source en `infra/modules/compute/src/watchdog/index.js`.
+### Integración entre SQS y Lambda
 
-**Comportamiento**: cada hora scanea `aws_dynamodb_table.tickets-dev` via GSI4 (`STATUS#Abierto`), filtra por `fecha_limite <= now`, marca los tickets vencidos como `Vencido` (con `ConditionExpression "estado = :estado_actual"` para evitar dobles updates), y publica un mensaje `{event:"ticket.expired", ticket_id, solicitante, ...}` al SQS del módulo async/. El async_consumer procesa el mensaje (audit log a S3 + email vía SES al solicitante).
+El procesamiento de mensajes se realiza mediante el recurso `aws_lambda_event_source_mapping.sqs`, definido en el módulo `infra/modules/compute/`.
 
-**Cron expression**: `rate(1 hour)` (var `watchdog_schedule`). Razón: el SLA más corto en el dominio es 1 hora (prioridad Alta). Una ventana de chequeo de 1h significa que un ticket Alta puede tardar entre 1 y 2 horas en marcarse Vencido tras pasar el SLA. Aceptable para MVP — escalable a `rate(15 minutes)` o `rate(5 minutes)` si el negocio exige notificación más rápida.
+La configuración utilizada es la siguiente:
 
-**Timezone**: `America/Guatemala` (var `watchdog_timezone`). EventBridge Scheduler soporta IANA timezones nativos (legacy CloudWatch Events solo UTC). Para nuestro caso `rate(1 hour)` no usa timezone, pero la variable queda definida para futuras expressions tipo `cron(0 8 * * ? *)` (8am hora GT) que sí dependen del timezone.
+| Parámetro                            | Valor                                | Justificación                                                                                                                                     |
+| ------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `batch_size`                         | `1`                                  | Cada invocación procesa un único mensaje, facilitando la trazabilidad, el diagnóstico de errores y el aislamiento de reintentos.                  |
+| `maximum_batching_window_in_seconds` | `0`                                  | Los mensajes se entregan inmediatamente después de estar disponibles, priorizando la baja latencia sobre la reducción del número de invocaciones. |
+| `bisect_batch_on_function_error`     | Variable declarada pero no utilizada | Se mantiene por compatibilidad de interfaz entre módulos. AWS SQS no soporta este parámetro; únicamente aplica para Kinesis y DynamoDB Streams.   |
 
-**Recurso TF**: `aws_scheduler_schedule.this` (en `infra/modules/compute/main.tf`). Usamos el API nuevo (EventBridge Scheduler) en lugar del legacy `aws_cloudwatch_event_rule` — soporta timezones IANA nativos, schedules one-off y un IAM role dedicado por schedule (least-privilege más limpio).
+La configuración prioriza simplicidad operativa y facilidad de depuración sobre throughput máximo, una decisión adecuada para el volumen actual de mensajes.
 
-**IAM role dedicado del scheduler** (`aws_iam_role.scheduler_invoke`):
-- Trust policy: solo `scheduler.amazonaws.com` puede assume.
-- Inline policy `aws_iam_role_policy.scheduler_invoke_lambda` con:
-  - Action: `lambda:InvokeFunction`
-  - Resource: ARN exacto del watchdog (`aws_lambda_function.this.arn`). Sin wildcards. Si en el futuro hay otro watchdog, requiere otro role distinto.
+### Flujo de reintentos y envío a DLQ
 
-**Por qué el role del scheduler es más narrow que el execution role del Lambda**: el role del scheduler solo necesita invocar UNA función específica. El execution role del watchdog necesita Query/UpdateItem sobre DDB + SendMessage sobre SQS + write logs — múltiples acciones sobre múltiples recursos. Separar roles por responsabilidad (invocar vs ejecutar) es el patrón de least-privilege canónico de AWS.
+El procesamiento de errores sigue el comportamiento estándar de integración entre SQS y Lambda:
 
----
+1. El consumidor recibe un mensaje desde la cola principal.
+2. Si la ejecución finaliza correctamente, Lambda elimina el mensaje de la cola.
+3. Si ocurre una excepción durante el procesamiento, el mensaje permanece en la cola y no se ejecuta `DeleteMessage`.
+4. SQS espera el tiempo definido en `visibility_timeout_seconds` (60 segundos).
+5. Finalizado dicho período, el mensaje vuelve a estar disponible para una nueva entrega.
+6. Cuando el contador de recepciones (`receiveCount`) supera el valor configurado en `max_receive_count`, SQS aplica la política de redrive y mueve el mensaje a la Dead Letter Queue.
 
-## 5. End-to-end async proof
+La DLQ no dispone de consumidores automáticos. Los mensajes permanecen almacenados para revisión manual por parte del equipo.
 
-**Lenguaje y runtime**: JavaScript / Node.js 22 (arm64). Mismo runtime que las otras Lambdas del proyecto (tickets, chat-ws, notifier).
+### Gestión de mensajes en la DLQ
 
-**Flow del enqueue → consumer → S3 + SES**:
+Los mensajes enviados a la Dead Letter Queue requieren análisis manual antes de cualquier acción correctiva.
 
-1. **Producer (endpoint HTTP)**: `POST /async/enqueue` en API Gateway REST. Bajo Cognito authorizer (mismo authorizer que el resto del API). Backend: tickets Lambda (handler `handleAsyncEnqueue` en `infra/modules/compute/src/index.js`).
-2. La Lambda recibe el body JSON, hace `SQSClient.send(SendMessageCommand)` apuntando a la queue del módulo async/ (env var `ASYNC_QUEUE_URL`).
-3. Devuelve `HTTP 202` con el `MessageId` real que devolvió AWS (no un id hardcoded ni un id local).
-4. **Trigger del consumer**: `aws_lambda_event_source_mapping` con event source el ARN de la queue. Lambda hace long-polling, recibe un record por invocación (batch_size=1).
-5. **Consumer (async-consumer Lambda)**: handler en `infra/modules/compute/src/async-consumer/index.js`. Por cada record:
-   - Parsea el body JSON.
-   - Escribe UN objeto a S3: `s3://pdds-oyd-attachments-dev-<sufijo>/async-events/<messageId>.json` con el payload + metadata de procesamiento.
-   - Loggea `async_consumer_ok` con `messageId`, `bucket`, `objectKey` para poder correlacionar un evento SQS con su objeto resultante en S3 desde CloudWatch Logs.
-   - Si `payload.event === "ticket.expired"`, dispara branch adicional: SES SendEmail al `solicitante.correo` con el detalle del ticket vencido.
+El procedimiento esperado consiste en:
 
-**Producer secundario**: el watchdog Lambda. Mismo flow desde el paso 4 — encola `{event:"ticket.expired", ...}` directo al async queue, el consumer lo procesa con el branch SES.
+1. Revisar el contenido del mensaje almacenado en la DLQ.
+2. Identificar la causa raíz del fallo.
+3. Determinar si el problema corresponde a:
+   - Direcciones de correo no verificadas en Amazon SES.
+   - Payloads inválidos o malformados.
+   - Datos eliminados o inconsistentes dentro de DynamoDB.
+   - Errores de configuración o dependencias externas.
+4. Reenviar o descartar el mensaje según corresponda.
 
-**IAM execution role del consumer**:
-- `s3:PutObject` scoped a `arn:aws:s3:::pdds-oyd-attachments-dev-<sufijo>/async-events/*` (no a todo el bucket — solo al prefix async-events/).
-- `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes` scoped al ARN exacto de la queue del módulo async/ (no wildcard).
-- `ses:SendEmail`, `ses:SendRawEmail` con condition `StringEquals { "ses:FromAddress": "soporte@lumenchat.app" }`. El consumer puede mandar emails solo desde esa dirección — si el config cambia a otra from-address sin verificar primero, SES rechaza.
-- `logs:CreateLogStream`, `logs:PutLogEvents` scoped a su propio log group `/aws/lambda/pdds-oyd-async-consumer-dev`.
+No se implementó un mecanismo automático de reprocesamiento, ya que los errores observados suelen estar relacionados con problemas de datos o configuración, y no con fallos transitorios de infraestructura.
 
-**Object key en S3**: derivado del messageId que devuelve SQS al producer. Pattern: `async-events/<messageId>.json`. El messageId es único por invocación de SendMessage, así que la key es naturalmente única — no hay riesgo de colisión entre concurrent producers.
+### Implementación de Least Privilege
 
----
+Los permisos asociados al consumidor fueron definidos siguiendo el principio de **least privilege**, restringiendo cada acción únicamente a los recursos estrictamente necesarios.
 
-## 6. Trade-offs arquitectónicos
+La política `aws_iam_role_policy.lambda_sqs_consume`, definida en `infra/modules/compute/main.tf`, otorga los siguientes permisos:
 
-### 6.1 — SQS standard vs FIFO
+| Servicio | Acciones permitidas                                     | Alcance                                                                      |
+| -------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| SQS      | `ReceiveMessage`, `DeleteMessage`, `GetQueueAttributes` | ARN exacto de la cola del módulo `async/`.                                   |
+| S3       | `PutObject`                                             | Exclusivamente sobre `${bucket_arn}/async-events/*`.                         |
+| SES      | `SendEmail`                                             | Restringido mediante la condición `ses:FromAddress = soporte@lumenchat.app`. |
 
-Elegimos **SQS standard** sobre FIFO para el módulo async/. Trade-off real:
-
-- **Standard**: throughput ilimitado, at-least-once delivery (un mensaje puede entregarse 2+ veces), orden no garantizado. ~$0.40/millón requests.
-- **FIFO**: orden garantizado dentro de un MessageGroupId, exactly-once processing dentro de un dedup window de 5 min, throughput limitado a 300 tx/s sin batching (3000 con batching). ~$0.50/millón requests + costo de FIFO-specific operations.
-
-Para nuestro caso (`ticket.expired` del watchdog, ~10-20 mensajes por hora máximo en producción real), el order no importa entre dos tickets distintos y los mensajes son inherentemente idempotentes por la ConditionExpression del UpdateItem en DDB. FIFO agrega complejidad (MessageGroupId, MessageDeduplicationId) sin beneficio. Standard es la elección obvia.
-
-### 6.2 — Separate backend configs vs Terraform workspaces
-
-Elegimos **separate backend.hcl per env** sobre Terraform workspaces. Trade-off:
-
-- **backend-<env>.hcl**: explícito en archivos versionados; cada env tiene su key/bucket/lock-table documentado en el repo; olvidar `-backend-config=` rompe `init` con error claro; cambiar entre envs requiere `init -reconfigure` lo que fuerza re-init explícito.
-- **Terraform workspaces**: una sola config de backend, switching con `terraform workspace select <env>`; menos archivos pero el "env actual" vive en el filesystem local (`.terraform/environment`), no en el repo. Forgetting el select es un pitfall conocido: aplica contra el workspace `default` (state distinto) sin avisar.
-
-Workspaces son más concisos pero el footgun del select silencioso pesa más que la ergonomía de menos archivos. Para un equipo de 3 con turnover de quién toca infra, explícito gana.
+Esta estrategia reduce la superficie de acceso de la función Lambda y evita el uso de permisos amplios o comodines innecesarios.
 
 ---
 
-## Evidence
+# 3. Terraform Environment Layout and CD Pipeline
 
-Todos los archivos en `infra/evidence/`. Renderizados en `infra/README.md` bajo `## Evidence`.
+## Estructura de entornos
 
-| Archivo | Cubre |
-|---|---|
-| `async-foundation.txt` | Deliverable A — `terraform output` con queue URL/ARN, DLQ URL/ARN |
-| `event-source-plan.txt` | Deliverable B — output de `aws lambda get-event-source-mapping` |
-| `event-source.png` | Deliverable B — Console Lambda → Triggers tab del consumer |
-| `scheduler-plan.txt` | Deliverable C — output de `aws scheduler get-schedule` |
-| `scheduler.png` | Deliverable C — Console EventBridge → Schedules, tab Schedule pattern |
-| `scheduler-target.png` | Deliverable C — tab Target con Lambda ARN + IAM role |
-| `async-enqueue.txt` | Deliverable E — curl `POST /async/enqueue` mostrando HTTP 202 + MessageId |
-| `async-consumer.png` | Deliverable E — CloudWatch log `async_consumer_ok` con messageId |
-| `async-object.png` | Deliverable E — S3 console mostrando `async-events/<messageId>.json` |
-| `github-environments.png` | Deliverable D — Settings → Environments mostrando dev + staging |
-| `github-environments-staging.png` | Deliverable D — staging environment con required reviewer visible |
-| `ruleset-config.png` | Deliverable D — branch ruleset activo en main (status + target + rules generales) |
-| `ruleset-config-checks.png` | Deliverable D — required status checks del ruleset (fmt / validate / plan dev) |
-| `ruleset-blocked-merge.png` | Deliverable D — PR mostrando merge bloqueado por check fallando |
-| `ci-apply-dev.png` | Deliverable D — apply-dev verde post-merge |
-| `ci-apply-staging.png` | Deliverable D — apply-staging pausado en approval gate |
-| `ci-destroy.png` | Deliverable D — UI del workflow_dispatch del gated destroy |
-| `ci-drift.png` | Deliverable D — drift detection con plan output en GITHUB_STEP_SUMMARY |
+La infraestructura se organizó utilizando una estructura de directorios independiente para cada entorno dentro de `infra/envs/`.
+
+| Archivo | Descripción |
+|----------|-------------|
+| `infra/envs/dev/dev.tfvars` | Variables específicas del entorno de desarrollo. |
+| `infra/envs/dev/backend-dev.hcl` | Configuración del backend S3 para desarrollo. Utiliza la clave `infra/envs/dev/terraform.tfstate`. |
+| `infra/envs/staging/staging.tfvars` | Variables específicas del entorno de staging incorporadas en Delivery 4. |
+| `infra/envs/staging/backend-staging.hcl` | Configuración del backend S3 para staging. Utiliza la clave `infra/envs/staging/terraform.tfstate`. Comparte el mismo bucket y tabla de locking que el entorno de desarrollo. |
+
+## Estrategia de gestión del estado
+
+Se optó por utilizar archivos `backend-<env>.hcl` independientes para cada entorno en lugar de Terraform Workspaces.
+
+El archivo raíz `backend.tf` se mantiene con una configuración mínima:
+
+``` hcl
+backend "s3" {}
+```
+
+Durante la ejecución de los workflows, cada entorno inyecta su configuración mediante el parámetro:
+
+`-backend-config=infra/envs/<env>/backend-<env>.hcl`
+
+## Justificación de la estrategia seleccionada
+
+La utilización de archivos de backend independientes proporciona varias ventajas operativas:
+
+- La ubicación del state queda documentada explícitamente en archivos versionados dentro del repositorio.
+- La configuración utilizada por cada entorno es visible y auditable sin depender del estado local de Terraform.
+- Se elimina el riesgo de ejecutar operaciones sobre un workspace incorrecto por una selección previa inadvertida.
+- La omisión del parámetro `-backend-config` genera un error explícito durante la inicialización, reduciendo la probabilidad de errores operativos.
+
+Como parte de esta implementación, el state original fue migrado desde:
+
+`infra/terraform.tfstate`
+
+hacia:
+
+`infra/envs/dev/terraform.tfstate`
+
+mediante la ejecución de:
+
+`terraform init -migrate-state -force-copy`
+
+Se conservó una copia de respaldo del state original en S3 bajo el prefijo `backup-pre-d4`.
+
+## Diferencias entre entornos
+
+Las siguientes variables presentan configuraciones distintas entre los entornos de desarrollo y staging:
+
+| Variable | Dev | Staging | Justificación |
+|-----------|-----|----------|---------------|
+| `environment` | `dev` | `staging` | Identifica el entorno desplegado. |
+| `attachments_bucket_name_prefix` | `pdds-oyd-attachments` | `pdds-oyd-attachments-staging` | Evita colisiones entre recursos S3. |
+| `compute_memory_size` | `128` | `256` | Staging dispone de mayor capacidad para pruebas de carga y validaciones de rendimiento. |
+| `dns_parent_domain` | `lumenchat.app` | `""` | Staging no utiliza dominios personalizados. |
+| `dns_api_full_hostname` | `api.ticke-t.lumenchat.app` | `""` | Disponible únicamente en desarrollo. |
+| `dns_enable_api_custom_domain` | `true` | `false` | Deshabilitado en staging para simplificar la configuración DNS. |
+| `dns_enable_ses_domain_identity` | `true` | `false` | Evita configuraciones adicionales de DNS y SES en staging. |
+| `ses_from_address` | `soporte@lumenchat.app` | `""` | Staging no utiliza una dirección de correo personalizada. |
+| `dns_ws_full_hostname` | `ws.ticke-t.lumenchat.app` | `""` | Disponible únicamente en desarrollo. |
+| `dns_enable_ws_custom_domain` | `true` | `false` | Deshabilitado en staging. |
+| `notifications_max_receive_count` | `3` | `5` | Staging utiliza una política de reintentos más conservadora para pruebas y diagnóstico. |
+
+## Estrategia de promoción mediante Plan Artifacts
+
+Los workflows `terraform-ci.yml` y `terraform-apply.yml` implementan un patrón de promoción basado en artifacts.
+
+Durante la ejecución de una Pull Request:
+
+1. Se ejecuta `terraform plan -out=tfplan`.
+2. El archivo de plan generado se publica como artifact mediante `actions/upload-artifact@v4`.
+3. También se publica el directorio `modules/compute/build/`, el cual contiene los paquetes ZIP generados por `data.archive_file`.
+
+La publicación de estos artefactos garantiza que el apply utilice exactamente los mismos artefactos evaluados durante el plan.
+
+Durante el merge hacia `main`:
+
+1. El workflow localiza el pipeline de CI asociado a la Pull Request.
+2. Descarga los artifacts generados durante el plan.
+3. Ejecuta `terraform apply tfplan`.
+
+Este proceso evita la generación de un nuevo plan durante el despliegue y garantiza la consistencia entre la revisión y la aplicación efectiva de cambios.
+
+## Approval Gate para Staging
+
+El entorno `staging` se encuentra protegido mediante GitHub Environments.
+
+La configuración incluye:
+
+- Environment: `staging`
+- Required reviewer: `SebastianAlecio`
+
+Cuando el workflow ejecuta el job `apply-staging`, GitHub detiene la ejecución hasta que se complete la aprobación manual correspondiente.
+
+La protección se implementa a nivel de configuración del repositorio y no mediante lógica dentro de los workflows, evitando mecanismos que puedan ser modificados accidentalmente desde el código.
+
+## Gestión de Secrets por Entorno
+
+Cada entorno dispone de su propio conjunto de credenciales:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+
+Cuando un workflow declara un entorno específico mediante:
+
+`environment: dev`
+
+GitHub resuelve los secrets definidos para dicho entorno antes de considerar secrets globales del repositorio.
+
+Aunque actualmente ambos entornos utilizan la misma cuenta de AWS, esta estrategia permite migrar staging hacia una cuenta independiente sin requerir cambios en los workflows.
+
+## Protección de la rama principal
+
+Se configuró un Ruleset activo sobre la rama `main` con las siguientes restricciones:
+
+### Status checks requeridos
+
+- `Terraform fmt`
+- `Terraform validate`
+- `Terraform plan (dev)`
+
+### Reglas de protección
+
+- Requerir Pull Request antes de realizar merges.
+- Requerir que las ramas se encuentren actualizadas respecto a `main`.
+- Bloquear force pushes.
+- Restringir la eliminación de la rama.
+
+## Justificación de las protecciones configuradas
+
+La combinación de las reglas *Require branches to be up to date before merging* y *Block force pushes* evita escenarios donde código no validado termine incorporándose a la rama principal.
+
+Exigir que las ramas estén actualizadas garantiza que las validaciones se ejecuten sobre la versión más reciente de `main`, reduciendo el riesgo de conflictos entre cambios paralelos.
+
+Por otra parte, bloquear force pushes protege la integridad del historial de revisiones y evita que cambios previamente aprobados puedan ser sobrescritos o eliminados.
+
+---
+
+# 4. Scheduled Jobs
+
+## Función programada
+
+La automatización periódica del dominio se implementó mediante la función Lambda:
+
+`pdds-oyd-watchdog-dev`
+
+El código fuente se encuentra ubicado en:
+
+`infra/modules/compute/src/watchdog/index.js`
+
+## Comportamiento
+
+La función consulta periódicamente la tabla `aws_dynamodb_table.tickets-dev` utilizando el índice GSI4 (`STATUS#Abierto`).
+
+Durante cada ejecución:
+
+1. Se identifican tickets cuya fecha límite haya expirado (`fecha_limite <= now`).
+2. Se actualiza su estado a `Vencido`.
+3. La actualización se realiza utilizando una `ConditionExpression` que garantiza que el ticket continúe en estado `Abierto`.
+4. Se publica un evento `ticket.expired` en la cola SQS del módulo `async/`.
+5. El consumidor asíncrono procesa posteriormente el evento, generando un registro de auditoría en S3 y enviando una notificación mediante Amazon SES.
+
+## Configuración del Scheduler
+
+| Parámetro | Valor |
+|------------|--------|
+| Schedule Expression | `rate(5 minutes)` |
+| Variable Terraform | `watchdog_schedule` |
+| Timezone | `America/Guatemala` |
+
+## Justificación del intervalo de ejecución
+
+Se seleccionó una frecuencia de ejecución de cinco minutos para mejorar la capacidad de respuesta del sistema ante vencimientos de SLA.
+
+Esta configuración ofrece las siguientes ventajas:
+
+- Reduce significativamente el tiempo máximo que un ticket puede permanecer en estado `Abierto` después de haber vencido.
+- Garantiza que un ticket sea detectado y actualizado en un plazo máximo aproximado de cinco minutos.
+- Permite generar notificaciones cercanas al momento real del vencimiento.
+- Mantiene una carga reducida sobre DynamoDB, Lambda y SQS debido al bajo volumen esperado de tickets.
+- Representa un equilibrio adecuado entre rapidez de reacción y eficiencia operativa, evitando intervalos excesivamente agresivos que generarían ejecuciones innecesarias.
+
+## Gestión de zona horaria
+
+La variable `watchdog_timezone` utiliza el valor:
+
+`America/Guatemala`
+
+Aunque las expresiones basadas en `rate()` no dependen de zonas horarias, esta configuración se mantiene para soportar futuras expresiones basadas en horarios específicos, por ejemplo:
+
+`cron(0 8 * * ? *)`
+
+que permitirían ejecutar tareas programadas a las 08:00 horas de Guatemala.
+
+## Implementación mediante EventBridge Scheduler
+
+La programación se implementó mediante el recurso:
+
+`aws_scheduler_schedule.this`
+
+definido en `infra/modules/compute/main.tf`.
+
+Se seleccionó EventBridge Scheduler en lugar del recurso legacy `aws_cloudwatch_event_rule` debido a las siguientes capacidades adicionales:
+
+- Soporte nativo para zonas horarias IANA.
+- Programaciones únicas (one-off schedules).
+- Roles IAM dedicados por schedule.
+- Mejor alineación con el principio de least privilege.
+
+## IAM Role del Scheduler
+
+La invocación de la función watchdog se realiza mediante el rol:
+
+`aws_iam_role.scheduler_invoke`
+
+### Trust Policy
+
+Únicamente el servicio:
+
+`scheduler.amazonaws.com`
+
+puede asumir este rol.
+
+### Permisos otorgados
+
+| Acción | Recurso |
+|----------|----------|
+| `lambda:InvokeFunction` | ARN exacto de `aws_lambda_function.this` |
+
+La política evita el uso de comodines y restringe la capacidad de invocación exclusivamente a la función watchdog.
+
+## Separación de responsabilidades
+
+El rol utilizado por EventBridge Scheduler posee permisos significativamente más limitados que el execution role de la función Lambda.
+
+Mientras el scheduler únicamente requiere invocar una función específica, la Lambda necesita permisos para:
+
+- Consultar y actualizar DynamoDB.
+- Publicar mensajes en SQS.
+- Generar logs en CloudWatch.
+
+La separación de responsabilidades permite aplicar de forma efectiva el principio de least privilege y reducir la superficie de acceso de cada componente de la arquitectura.
+
+---
+
+# 5. End-to-End Async Proof
+
+## Lenguaje y Runtime
+
+La solución fue implementada utilizando **JavaScript sobre Node.js 22 (arm64)**, manteniendo consistencia con el resto de las funciones Lambda del proyecto, incluyendo los componentes de tickets, chat WebSocket y notificaciones.
+
+## Flujo End-to-End
+
+La validación del procesamiento asíncrono se realizó verificando el flujo completo desde la generación del mensaje hasta su persistencia y notificación.
+
+### Productor Principal: Endpoint HTTP
+
+El punto de entrada principal corresponde al endpoint:
+
+`POST /async/enqueue`
+
+expuesto mediante API Gateway REST y protegido mediante el mismo Cognito Authorizer utilizado por el resto de la API.
+
+La lógica se implementa en la Lambda de tickets mediante el handler:
+
+`handleAsyncEnqueue`
+
+ubicado en:
+
+`infra/modules/compute/src/index.js`
+
+### Publicación del mensaje
+
+Cuando la solicitud es recibida:
+
+1. La Lambda procesa el cuerpo de la petición en formato JSON.
+2. Utiliza `SQSClient.send(SendMessageCommand)` para publicar el mensaje en la cola configurada mediante la variable de entorno `ASYNC_QUEUE_URL`.
+3. AWS SQS genera un `MessageId` único para la solicitud.
+4. La API responde con código HTTP `202 Accepted`, incluyendo el `MessageId` real devuelto por AWS.
+
+### Activación del consumidor
+
+La cola se encuentra conectada a la función consumidora mediante el recurso:
+
+`aws_lambda_event_source_mapping`
+
+configurado con el ARN de la cola como origen de eventos.
+
+La integración utiliza long polling y procesa un único mensaje por invocación (`batch_size = 1`), favoreciendo la trazabilidad y el aislamiento de errores.
+
+### Procesamiento del mensaje
+
+El consumidor se implementa mediante la función:
+
+`async-consumer`
+
+cuyo código fuente se encuentra en:
+
+`infra/modules/compute/src/async-consumer/index.js`
+
+Para cada mensaje recibido, el proceso ejecuta las siguientes acciones:
+
+1. Deserializa el payload JSON.
+2. Genera un objeto de auditoría con información del evento y metadatos de procesamiento.
+3. Almacena el resultado en Amazon S3.
+4. Registra información de trazabilidad en CloudWatch Logs.
+5. Ejecuta acciones adicionales dependiendo del tipo de evento recibido.
+
+### Persistencia en Amazon S3
+
+Cada mensaje procesado genera un objeto dentro del bucket de adjuntos utilizando el siguiente patrón:
+
+```text
+s3://pdds-oyd-attachments-dev-<sufijo>/async-events/<messageId>.json
+```
+
+El archivo almacena:
+
+- Payload original.
+- Metadatos de procesamiento.
+- Información necesaria para auditoría y trazabilidad.
+
+### Registro de eventos
+
+Después de completar el procesamiento, la función registra un evento `async_consumer_ok` en CloudWatch Logs.
+
+El registro incluye:
+
+- `messageId`
+- `bucket`
+- `objectKey`
+
+Esta información permite correlacionar fácilmente:
+
+- El mensaje original en SQS.
+- La ejecución de Lambda.
+- El objeto persistido en S3.
+
+### Procesamiento de eventos de vencimiento
+
+Cuando el payload contiene:
+
+```json
+{
+  "event": "ticket.expired"
+}
+```
+
+el consumidor ejecuta una acción adicional de notificación mediante Amazon SES.
+
+El correo se envía al solicitante asociado al ticket utilizando la información incluida en el mensaje.
+
+### Productor Secundario: Watchdog
+
+Además del endpoint HTTP, la arquitectura dispone de un segundo productor de mensajes.
+
+La función watchdog publica directamente eventos con la siguiente estructura:
+
+```json
+{
+  "event": "ticket.expired"
+}
+```
+
+en la cola asíncrona.
+
+A partir de ese punto, el procesamiento continúa exactamente por el mismo flujo descrito anteriormente, reutilizando la misma infraestructura de consumo, auditoría y notificación.
+
+## Permisos del Consumidor
+
+Los permisos asociados al execution role del consumidor fueron definidos siguiendo el principio de least privilege.
+
+| Servicio | Acciones permitidas | Alcance |
+|-----------|--------------------|----------|
+| S3 | `PutObject` | `arn:aws:s3:::pdds-oyd-attachments-dev-<sufijo>/async-events/*` |
+| SQS | `ReceiveMessage`, `DeleteMessage`, `GetQueueAttributes` | ARN exacto de la cola asíncrona |
+| SES | `SendEmail`, `SendRawEmail` | Restringido a `soporte@lumenchat.app` mediante condición IAM |
+| CloudWatch Logs | `CreateLogStream`, `PutLogEvents` | Log group propio del consumidor |
+
+La restricción aplicada a SES garantiza que la función únicamente pueda enviar correos desde la dirección autorizada. Cualquier intento de utilizar una dirección diferente será rechazado por el servicio.
+
+## Estrategia de generación de Object Keys
+
+Los objetos almacenados en S3 utilizan el siguiente patrón:
+
+```text
+async-events/<messageId>.json
+```
+
+El identificador es generado directamente por Amazon SQS durante la operación `SendMessage`.
+
+Debido a que cada `MessageId` es único dentro del servicio, la estrategia garantiza unicidad natural de las claves y elimina el riesgo de colisiones incluso cuando múltiples productores publican mensajes concurrentemente.
+
+---
+
+# 6. Trade-offs Arquitectónicos
+
+## SQS Standard vs SQS FIFO
+
+Para la implementación del módulo `async/` se seleccionó Amazon SQS Standard.
+
+La siguiente tabla resume las principales diferencias evaluadas durante el diseño:
+
+| Característica | SQS Standard | SQS FIFO |
+|----------------|--------------|----------|
+| Throughput | Muy alto | Limitado |
+| Orden de mensajes | No garantizado | Garantizado por grupo |
+| Entrega | At-least-once | Exactly-once dentro de la ventana de deduplicación |
+| Complejidad operativa | Baja | Mayor |
+| Costo aproximado | Menor | Mayor |
+
+### Justificación de la decisión
+
+El volumen esperado para eventos `ticket.expired` es reducido y los mensajes representan operaciones independientes.
+
+No existe un requisito funcional que obligue a procesar tickets en un orden específico, y la idempotencia ya se encuentra garantizada mediante validaciones sobre DynamoDB antes de actualizar el estado del ticket.
+
+La utilización de FIFO habría introducido complejidad adicional mediante el manejo de:
+
+- `MessageGroupId`
+- `MessageDeduplicationId`
+
+sin aportar beneficios significativos para el dominio implementado.
+
+Por este motivo, SQS Standard representa la alternativa más simple, económica y adecuada para el escenario actual.
+
+## Backend Configurations vs Terraform Workspaces
+
+Para la gestión de entornos se seleccionó una estrategia basada en archivos `backend-<env>.hcl` independientes en lugar de Terraform Workspaces.
+
+### Comparación de alternativas
+
+| Aspecto | Backend independiente | Terraform Workspaces |
+|----------|----------------------|----------------------|
+| Configuración visible en el repositorio | Sí | No |
+| Dependencia del estado local | No | Sí |
+| Riesgo de operar sobre el entorno incorrecto | Bajo | Moderado |
+| Complejidad operativa | Baja | Baja |
+| Cantidad de archivos | Mayor | Menor |
+
+### Justificación de la decisión
+
+La principal ventaja de la estrategia seleccionada es que la configuración de cada entorno queda completamente documentada dentro del repositorio.
+
+Cada backend especifica explícitamente:
+
+- Bucket de estado.
+- Key del state.
+- Tabla de locking.
+
+Por el contrario, Terraform Workspaces depende del workspace activo almacenado localmente dentro del directorio `.terraform`.
+
+Esto introduce el riesgo de ejecutar operaciones sobre un entorno incorrecto debido a una selección previa inadvertida del workspace.
+
+Aunque Terraform Workspaces reduce la cantidad de archivos de configuración, la estrategia basada en backends independientes ofrece mayor visibilidad, auditabilidad y seguridad operativa para un equipo pequeño que comparte responsabilidades sobre la infraestructura.
+
+---
+
+# Evidence
+
+## Evidencia recopilada
+
+Toda la evidencia utilizada para validar la implementación se encuentra almacenada en el directorio:
+
+`infra/evidence/`
+
+Los artefactos también se encuentran referenciados desde la sección **Evidence** del archivo `infra/README.md`.
+
+| Archivo | Evidencia documentada |
+|----------|----------------------|
+| `async-foundation.txt` | Salida de Terraform con URL y ARN de la cola principal y la DLQ. |
+| `event-source-plan.txt` | Resultado del comando `aws lambda get-event-source-mapping`. |
+| `event-source.png` | Configuración del trigger del consumidor en la consola de Lambda. |
+| `scheduler-plan.txt` | Resultado del comando `aws scheduler get-schedule`. |
+| `scheduler.png` | Configuración del schedule en EventBridge Scheduler. |
+| `scheduler-target.png` | Configuración del target y rol IAM asociado al scheduler. |
+| `async-enqueue.txt` | Ejecución de `POST /async/enqueue` mostrando HTTP 202 y MessageId. |
+| `async-consumer.png` | Registro `async_consumer_ok` generado por CloudWatch Logs. |
+| `async-object.png` | Objeto generado en S3 bajo el prefijo `async-events/`. |
+| `github-environments.png` | Configuración de los entornos GitHub `dev` y `staging`. |
+| `github-environments-staging.png` | Configuración del approval gate para staging. |
+| `ruleset-config.png` | Ruleset aplicado sobre la rama principal. |
+| `ruleset-config-checks.png` | Status checks obligatorios configurados para el repositorio. |
+| `ruleset-blocked-merge.png` | Pull Request bloqueada por incumplimiento de validaciones. |
+| `ci-apply-dev.png` | Ejecución exitosa del despliegue en desarrollo. |
+| `ci-apply-staging.png` | Despliegue de staging detenido en espera de aprobación. |
+| `ci-destroy.png` | Workflow de destrucción protegido mediante aprobación manual. |
+| `ci-drift.png` | Evidencia de detección de drift y publicación del resultado en `GITHUB_STEP_SUMMARY`. |
