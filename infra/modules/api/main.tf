@@ -434,14 +434,6 @@ resource "aws_lambda_permission" "apigw_invoke_chat_ws" {
 }
 
 # ─── Health check (AWS_PROXY → Lambda) ─────────────────────────────────────
-#
-# Rubric OYD-D3 (Deliverable C common): "A configurable health check or
-# readiness check path (var.health_check_path) must be defined, defaulting
-# to '/'". El endpoint invoca a la Lambda real (no MOCK) para que el check
-# ejerza el cold-start y la conectividad básica del runtime, no solo el
-# borde de API Gateway. La Lambda atiende el path antes del check de auth
-# (no requiere JWT) — ver el dispatch de HEALTH_CHECK_PATH en index.js.
-#
 # La autorización del method queda en NONE porque load balancers y monitores
 # no llevan tokens.
 
@@ -470,8 +462,6 @@ resource "aws_api_gateway_integration" "health" {
 }
 
 # ─── Resource policy del API (ingress restriction) ─────────────────────────
-#
-# Rubric OYD-D3 (Deliverable B serverless): "Set an API Gateway resource
 # policy restricting invocation". Para nuestra arquitectura serverless sin
 # CloudFront/ALB delante, la restricción de "no bypassear el LB" no aplica
 # directamente — el filtrado real lo hacen las capas de WAF (rate limit por

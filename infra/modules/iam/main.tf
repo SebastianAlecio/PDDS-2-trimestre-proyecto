@@ -1,4 +1,4 @@
-# Módulo IAM — Deliverable A del rubric OYD-D5.
+# Módulo IAM 
 #
 # Centraliza la definición de TODOS los IAM roles del stack que antes vivían
 # inline en los módulos de compute (1 rol compartido + 1 rol del scheduler) y

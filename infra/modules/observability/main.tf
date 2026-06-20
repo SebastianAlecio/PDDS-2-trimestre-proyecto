@@ -1,16 +1,13 @@
-# Módulo Observability — Deliverable E del rubric OYD-D5.
+# Módulo Observability 
 #
 # Provisiona la capa de observabilidad operacional del stack:
-#   - 1 log group para API Gateway access logs (los log groups de Lambdas ya
-#     viven en el módulo compute, uno por función — cumple "at least one
-#     log group per compute resource" del rubric).
+#   - 1 log group para API Gateway access logs.
 #   - 1 SNS topic + email subscription para notificación de alarmas.
 #   - 3 metric alarms wired al topic:
 #       1. Lambda Errors > threshold por función (for_each)
 #       2. SQS DLQ ApproximateNumberOfMessagesVisible > threshold por DLQ
 #       3. API Gateway 5XXError > threshold
 #   - 1 CloudWatch dashboard con 3 widgets, body construido con jsonencode()
-#     (NO heredoc con ARNs hardcodeados — pitfall del rubric).
 #   - 1 AWS Budget mensual con notificación al 80% al SNS + email.
 
 data "aws_region" "current" {}
@@ -127,10 +124,7 @@ resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx" {
 }
 
 # ─── CloudWatch Dashboard ────────────────────────────────────────────────
-# Body construido con jsonencode() referenciando las variables — NO heredoc
-# con ARNs hardcodeados (pitfall del rubric: "Dashboard JSON with hardcoded
-# ARNs: The dashboard_body must use jsonencode() referencing Terraform
-# expressions rather than a heredoc string with literal ARNs").
+# Body construido con jsonencode() referenciando las variables.
 #
 # 3 widgets:
 #   1. API Gateway request count (Count + 4XXError + 5XXError stacked)

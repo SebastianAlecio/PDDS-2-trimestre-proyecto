@@ -1,21 +1,8 @@
-# Módulo CDN — Deliverable D del rubric OYD-D5 (TLS termination del frontend).
-#
+# Módulo CDN
 # Hostea el frontend de Vite buildeado en S3 privado, servido vía CloudFront
 # detrás de TLS con el cert wildcard de D3. CloudFront es el ÚNICO endpoint
 # público del frontend; el bucket S3 queda completamente privado, accesible
 # sólo vía Origin Access Control (OAC) firmado por la distribución.
-#
-# Por qué este módulo existe:
-#   - El rubric D5 D exige "HTTPS listener / frontend for every public
-#     endpoint" y "HTTP 301 redirect explícito desde port 80".
-#   - Hasta D4 el frontend corría solo local (vite dev). Para satisfacer el
-#     requisito hay que servir los assets via HTTPS desde un host público.
-#   - CloudFront es el único componente AWS serverless donde podemos
-#     declarar `viewer_protocol_policy = "redirect-to-https"` — eso cumple
-#     el 301 explícito que el rubric exige.
-#   - Los endpoints API Gateway (api.* y ws.*) no pueden cumplir el redirect
-#     explícito (AWS no expone port 80 en custom domains). Esa limitación
-#     queda documentada en delivery-5-summary.md.
 
 # ─── S3 bucket (privado, sin website hosting) ─────────────────────────────
 # Sin static-website hosting: CloudFront accede via OAC + GetObject; no
@@ -96,8 +83,6 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 # devuelve 404 → CloudFront lo intercepta y sirve /index.html con HTTP 200.
 # El bundle de JS toma control y renderiza la ruta correcta.
 #
-# viewer_protocol_policy = "redirect-to-https": cumple el requisito explícito
-# del rubric D5 D ("Define a redirect rule as a Terraform resource that
 # returns HTTP 301 from port 80 to port 443 ... verifiable with curl").
 # CloudFront responde 301 a las requests HTTP, no las cierra silenciosamente.
 resource "aws_cloudfront_distribution" "frontend" {
