@@ -3,6 +3,7 @@ import { AgentHistoryPage } from "./features/tickets/presentation/AgentHistoryPa
 import { AgentTicketPage } from "./features/tickets/presentation/AgentTicketPage";
 import { CollaboratorTicketPage } from "./features/tickets/presentation/CollaboratorTicketPage";
 import { CreateTicketPage } from "./features/tickets/presentation/CreateTicketPage";
+import { ManagerDashboardPage } from "./features/tickets/presentation/ManagerDashboardPage";
 import { MyTicketsPage } from "./features/tickets/presentation/MyTicketsPage";
 import { QueuePage } from "./features/tickets/presentation/QueuePage";
 import { LoginPage } from "./features/auth/presentation/LoginPage";
@@ -32,7 +33,7 @@ export function App() {
           path="/crear"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador", "gerente"]}>
+              <RequireRole allow={["colaborador"]}>
                 <CreateTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -43,7 +44,7 @@ export function App() {
           path="/mis-tickets"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador", "gerente"]}>
+              <RequireRole allow={["colaborador"]}>
                 <MyTicketsPage />
               </RequireRole>
             </RequireAuth>
@@ -54,7 +55,7 @@ export function App() {
           path="/mis-tickets/:id"
           element={
             <RequireAuth>
-              <RequireRole allow={["colaborador", "gerente"]}>
+              <RequireRole allow={["colaborador"]}>
                 <CollaboratorTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -65,7 +66,7 @@ export function App() {
           path="/cola"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
                 <QueuePage />
               </RequireRole>
             </RequireAuth>
@@ -76,7 +77,7 @@ export function App() {
           path="/agente/ticket/:id"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
                 <AgentTicketPage />
               </RequireRole>
             </RequireAuth>
@@ -87,7 +88,7 @@ export function App() {
           path="/agente/historial"
           element={
             <RequireAuth>
-              <RequireRole allow={["agente-n1", "agente-n2", "gerente"]}>
+              <RequireRole allow={["agente-n1", "agente-n2"]}>
                 <AgentHistoryPage />
               </RequireRole>
             </RequireAuth>
@@ -100,6 +101,17 @@ export function App() {
             <RequireAuth>
               <RequireRole allow={["gerente"]}>
                 <CreateUserForm />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/metricas"
+          element={
+            <RequireAuth>
+              <RequireRole allow={["gerente"]}>
+                <ManagerDashboardPage />
               </RequireRole>
             </RequireAuth>
           }
@@ -118,7 +130,11 @@ export function App() {
 function GlobalChatWidget() {
   const location = useLocation();
   const path = location.pathname;
-  if (path.startsWith("/mis-tickets/") || path.startsWith("/agente/ticket/")) {
+  if (
+    path.startsWith("/mis-tickets/") ||
+    path.startsWith("/agente/ticket/") ||
+    path.startsWith("/metricas")
+  ) {
     return null;
   }
   return <ChatWidget />;
@@ -132,7 +148,7 @@ function HomeRedirect() {
   const role = status.user.primaryRole;
   if (role === "colaborador") return <Navigate to="/mis-tickets" replace />;
   if (role === "agente-n1" || role === "agente-n2") return <Navigate to="/cola" replace />;
-  if (role === "gerente") return <Navigate to="/crear-usuario" replace />;
+  if (role === "gerente") return <Navigate to="/metricas" replace />;
   return <ComingSoon title={titleForRole(role)} caption={captionForRole(role)} />;
 }
 

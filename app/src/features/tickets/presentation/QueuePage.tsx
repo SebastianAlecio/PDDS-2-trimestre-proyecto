@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { AppHeader } from "../../../shared/ui/AppHeader";
+import { useAuth } from "../../../shared/auth/use-auth";
 import type {
   Ticket,
   TicketPriority,
@@ -14,10 +15,20 @@ import styles from "./QueuePage.module.css";
 // acciones inline en la tabla para unificar el flujo "click → ver panel".
 export function QueuePage() {
   const { state, reload } = useQueue();
+  const { status } = useAuth();
+
+  const viewerRole =
+    status.state === "signed-in" ? status.user.primaryRole : null;
+  const isN2 = viewerRole === "agente-n2";
+  const isN1 = viewerRole === "agente-n1";
 
   const unassignedCount =
     state.kind === "ready" ? state.data.unassigned.length : 0;
   const mineCount = state.kind === "ready" ? state.data.mine.length : 0;
+  const escalatedCount =
+    state.kind === "ready" ? state.data.escalated.length : 0;
+  const escalatedByMeCount =
+    state.kind === "ready" ? state.data.escalated_by_me.length : 0;
 
   return (
     <div className={styles.shell}>
@@ -41,6 +52,18 @@ export function QueuePage() {
               <span className={styles.metaKey}>Asignados a ti</span>
               <span className={styles.metaValue}>{mineCount}</span>
             </div>
+            {isN2 && (
+              <div className={styles.metaCard}>
+                <span className={styles.metaKey}>Cola N2</span>
+                <span className={styles.metaValue}>{escalatedCount}</span>
+              </div>
+            )}
+            {isN1 && (
+              <div className={styles.metaCard}>
+                <span className={styles.metaKey}>Escalados por mí</span>
+                <span className={styles.metaValue}>{escalatedByMeCount}</span>
+              </div>
+            )}
           </div>
 
           <div className={styles.headerRow}>
@@ -71,6 +94,17 @@ export function QueuePage() {
 
           {state.kind === "ready" && (
             <>
+              {isN2 && state.data.escalated.length > 0 && (
+                <QueueSection
+                  title="Cola N2 — Tickets escalados"
+                  meta={`${state.data.escalated.length} esperando`}
+                  tickets={state.data.escalated}
+                  emptyTitle=""
+                  emptyBody=""
+                  showResponsible={false}
+                />
+              )}
+
               <QueueSection
                 title="Sin asignar"
                 meta={`${state.data.unassigned.length} disponibles`}
@@ -88,6 +122,17 @@ export function QueuePage() {
                 emptyBody="Toma uno de la lista de arriba y aparecerá aquí."
                 showResponsible
               />
+
+              {isN1 && state.data.escalated_by_me.length > 0 && (
+                <QueueSection
+                  title="Escalados por mí"
+                  meta={`${state.data.escalated_by_me.length} en seguimiento`}
+                  tickets={state.data.escalated_by_me}
+                  emptyTitle=""
+                  emptyBody=""
+                  showResponsible
+                />
+              )}
             </>
           )}
         </div>

@@ -5,7 +5,9 @@ import { useAuth } from "../../../shared/auth/use-auth";
 import { ChatPane } from "../../chat/presentation/ChatPane";
 import { useChat } from "../../chat/presentation/use-chat";
 import { CloseTicketConfirmModal } from "./CloseTicketConfirmModal";
+import { EscalateTicketModal } from "./EscalateTicketModal";
 import { TicketAttachmentsView } from "./TicketAttachmentsView";
+import { TicketHistoryView } from "./TicketHistoryView";
 import { useAgentTicket } from "./use-agent-ticket";
 import { shortId } from "./use-create-ticket";
 import styles from "./AgentTicketPage.module.css";
@@ -16,7 +18,15 @@ export function AgentTicketPage() {
   const { status } = useAuth();
 
   const ticketId = params.id ?? null;
-  const { state, assignState, closeState, assign, close } = useAgentTicket(ticketId);
+  const {
+    state,
+    assignState,
+    closeState,
+    escalateState,
+    assign,
+    close,
+    escalate,
+  } = useAgentTicket(ticketId);
 
   // Cargamos history (REST) + WS para todos los tickets donde soy el
   // agente asignado, incluso si están cerrados — queremos ver el chat
@@ -39,9 +49,22 @@ export function AgentTicketPage() {
         : null;
 
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [confirmingEscalate, setConfirmingEscalate] = useState(false);
 
   const viewerSub =
     status.state === "signed-in" ? status.user.username : "";
+
+  // Solo agentes N1 escalan. N2 ya es el último nivel; el gerente no opera
+  // tickets. Y solo aplica sobre tickets que el N1 tomó y que están vivos
+  // (Abierto o En progreso) — un ticket cerrado o vencido no se escala.
+  const viewerRole =
+    status.state === "signed-in" ? status.user.primaryRole : null;
+  const canEscalate =
+    state.kind === "ready" &&
+    viewerRole === "agente-n1" &&
+    state.isAssignedToMe &&
+    (state.ticket.status === "Abierto" ||
+      state.ticket.status === "En progreso");
 
   return (
     <div className={styles.shell}>
@@ -133,6 +156,12 @@ export function AgentTicketPage() {
                 </section>
               )}
 
+              <TicketHistoryView
+                ticketId={state.ticket.id}
+                ticketCreatedAt={state.ticket.createdAt}
+                ticketRequesterName={state.ticket.requester.name}
+              />
+
               <div className={styles.actions}>
                 {state.ticket.status === "Cerrado" ? (
                   <button
@@ -143,14 +172,36 @@ export function AgentTicketPage() {
                     Volver a la cola
                   </button>
                 ) : state.isAssignedToMe ? (
-                  <button
-                    type="button"
-                    className={styles.closeBtn}
-                    onClick={() => setConfirmingClose(true)}
-                    disabled={closeState.kind === "pending"}
-                  >
-                    {closeState.kind === "pending" ? "Cerrando…" : "Cerrar ticket"}
-                  </button>
+                  <div className={styles.actionsRow}>
+                    {canEscalate && (
+                      <button
+                        type="button"
+                        className={styles.escalateBtn}
+                        onClick={() => setConfirmingEscalate(true)}
+                        disabled={
+                          escalateState.kind === "pending" ||
+                          closeState.kind === "pending"
+                        }
+                      >
+                        {escalateState.kind === "pending"
+                          ? "Escalando…"
+                          : "Escalar a N2"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.closeBtn}
+                      onClick={() => setConfirmingClose(true)}
+                      disabled={
+                        closeState.kind === "pending" ||
+                        escalateState.kind === "pending"
+                      }
+                    >
+                      {closeState.kind === "pending"
+                        ? "Cerrando…"
+                        : "Cerrar ticket"}
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -171,6 +222,11 @@ export function AgentTicketPage() {
                     {closeState.message}
                   </p>
                 )}
+                {escalateState.kind === "error" && (
+                  <p className={styles.inlineError} role="alert">
+                    {escalateState.message}
+                  </p>
+                )}
               </div>
             </section>
 
@@ -179,6 +235,7 @@ export function AgentTicketPage() {
                 <ChatPane
                   viewerSub={viewerSub}
                   messages={chat.messages}
+                  systemMessages={chat.systemMessages}
                   connectionState={chat.connectionState}
                   sendState={chat.sendState}
                   historyLoading={chat.historyState.kind === "loading"}
@@ -205,6 +262,21 @@ export function AgentTicketPage() {
           onConfirm={async () => {
             await close();
             setConfirmingClose(false);
+          }}
+        />
+      )}
+
+      {state.kind === "ready" && confirmingEscalate && (
+        <EscalateTicketModal
+          ticket={state.ticket}
+          isEscalating={escalateState.kind === "pending"}
+          onCancel={() => setConfirmingEscalate(false)}
+          onConfirm={async (razon) => {
+            await escalate(razon);
+            setConfirmingEscalate(false);
+            // Tras escalar el ticket ya no pertenece al N1 — sacamos al
+            // agente del panel para evitar acciones sobre datos stale.
+            navigate("/cola");
           }}
         />
       )}

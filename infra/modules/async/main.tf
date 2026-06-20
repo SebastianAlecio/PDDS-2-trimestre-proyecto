@@ -25,7 +25,7 @@ resource "aws_sqs_queue" "dlq" {
 # más de max_receive_count entregas sin DeleteMessage, SQS lo mueve
 # automáticamente a la DLQ. Sin redrive_policy, los mensajes problemáticos
 # se reciclarían infinitamente o se descartarían silenciosamente al
-# vencer message_retention_seconds (pitfall named del rubric).
+# vencer message_retention_seconds.
 resource "aws_sqs_queue" "main" {
   name                       = local.main_queue_name
   message_retention_seconds  = var.message_retention_seconds

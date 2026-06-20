@@ -222,6 +222,39 @@
   gap: var(--s-sm);
 }
 
+.actionsRow {
+  display: flex;
+  gap: var(--s-sm);
+  flex-wrap: wrap;
+}
+
+.actionsRow > button {
+  flex: 1;
+  min-width: 140px;
+}
+
+.escalateBtn {
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  background: var(--sev-mid);
+  color: #fff;
+  font-family: var(--type-text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 120ms ease, opacity 120ms ease;
+}
+
+.escalateBtn:hover:not(:disabled) {
+  background: #a55f0b;
+}
+
+.escalateBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .closeBtn {
   padding: 12px 20px;
   border-radius: 8px;
