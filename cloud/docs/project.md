@@ -361,60 +361,130 @@ El frontend (`app/src/features/tickets/presentation/schema.ts`) valida hasta **1
 
 ## 11. Diagrama de contenedores (v2)
 
-Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, queue, topic, servicio gestionado) y las flechas son llamadas reales entre ellos. La **v2** suma sobre la v1 (E3) el pipeline asíncrono: SNS topic, SQS principal, DLQ, y el *notifier* Lambda que manda emails vía SES.
+Vista C4 de nivel 2: cada caja es un contenedor desplegable (Lambda, tabla, bucket, queue, topic, servicio gestionado) y las flechas son llamadas reales entre ellos. El diagrama refleja el estado **actualmente desplegado en `dev`** — 5 Lambdas, dos API Gateways (REST + WebSocket), dos pipelines asíncronos (`ticket.closed` vía SNS + SQS y `ticket.expired` vía EventBridge Scheduler + SQS), KMS CMK encriptando S3 + DynamoDB, frontend servido por CloudFront, y observability (alarmas SNS + dashboard).
 
 ```mermaid
 flowchart TB
   user["Colaborador / Agente / Gerente<br/>(navegador)"]
+  oncall["On-call<br/>(email)"]
 
   subgraph fe["Frontend"]
-    spa["SPA Vite + React 19<br/>(corre local en Vite hoy;<br/>S3 + CloudFront en deploy futuro)"]
+    cf["CloudFront distribution<br/>app.ticke-t.lumenchat.app<br/>TLS 1.2_2021 · OAC"]
+    feS3[("S3 frontend bucket<br/>privado · SSE-S3<br/>SPA Vite + React 19")]
   end
 
-  subgraph sync["AWS · plano gestionado · pipeline síncrono"]
+  subgraph ingress["AWS · ingreso"]
     waf["AWS WAF v2<br/>rate-limit 2000/5m/IP"]
-    apigw["API Gateway REST<br/>stage 'api', custom domain<br/>api.ticke-t.lumenchat.app"]
-    cognito["Cognito User Pool<br/>4 groups, admin-only"]
-    lambda["Lambda chat-message-handler<br/>Node 22 · arm64 · 128MB<br/>router de 6 endpoints"]
-    ddb[("DynamoDB tickets-dev<br/>single-table + 4 GSIs")]
-    s3[("S3 attachments bucket<br/>versioning + SSE + SSL-only")]
+    apigwRest["API Gateway REST<br/>api.ticke-t.lumenchat.app<br/>stage 'api'"]
+    apigwWs["API Gateway WebSocket<br/>ws.ticke-t.lumenchat.app<br/>stage 'chat'"]
+    cognito["Cognito User Pool<br/>4 groups (colaborador,<br/>agente-n1, agente-n2, gerente)"]
   end
 
-  subgraph async["AWS · plano gestionado · pipeline asíncrono (E4)"]
+  subgraph compute["AWS · cómputo (Lambda Node 22 · arm64)"]
+    lambdaTickets["chat-message-handler<br/>(tickets) · 128 MB<br/>10 endpoints REST"]
+    lambdaWs["chat-ws · 128 MB<br/>$connect/$disconnect/sendMessage<br/>+ GET messages / POST attachments"]
+    lambdaNotifier["ticket-notifier · 128 MB<br/>SQS event source · batch=1"]
+    lambdaAsync["pdds-oyd-async-consumer · 128 MB<br/>SQS event source"]
+    lambdaWatchdog["pdds-oyd-watchdog · 128 MB<br/>EventBridge Scheduler<br/>rate(5 minutes)"]
+  end
+
+  subgraph data["AWS · datos (cifrados con CMK)"]
+    ddb[("DynamoDB tickets-dev<br/>single-table + 4 GSIs<br/>SSE = aws:kms")]
+    s3Att[("S3 attachments bucket<br/>versioning + bucket-key<br/>SSE = aws:kms")]
+    s3Async[("S3 async-events bucket<br/>audit log inmutable<br/>SSE = aws:kms")]
+    kms[["KMS CMK<br/>alias/pdds-oyd-dev<br/>rotación anual"]]
+  end
+
+  subgraph msg["AWS · mensajería"]
+    sched(["EventBridge Scheduler<br/>watchdog-schedule-v2"])
     sns(["SNS topic<br/>ticket-events"])
-    sqs(["SQS<br/>ticket-notifications"])
-    dlq(["SQS DLQ<br/>ticket-notifications-dlq<br/>maxReceiveCount=3"])
-    notifier["Lambda ticket-notifier<br/>Node 22 · arm64<br/>event source mapping batch=1"]
-    ses["Amazon SES<br/>dominio verificado<br/>lumenchat.app + DKIM"]
+    sqsNotif(["SQS ticket-notifications-dev"])
+    dlqNotif(["DLQ ticket-notifications-dev-dlq<br/>maxReceiveCount=3"])
+    sqsAsync(["SQS ticket-async-dev"])
+    dlqAsync(["DLQ ticket-async-dev-dlq<br/>maxReceiveCount=3"])
+    ses["Amazon SES<br/>identity lumenchat.app<br/>+ DKIM"]
   end
 
-  cw["CloudWatch Logs"]
+  subgraph obs["AWS · observability"]
+    cw["CloudWatch Logs<br/>(1 log group por Lambda<br/>+ API GW access logs)"]
+    dash["CloudWatch Dashboard<br/>pdds-oyd-dev-main"]
+    snsAlarms(["SNS alarmas<br/>pdds-oyd-dev-alarms"])
+    budget["AWS Budget<br/>USD · 80% threshold"]
+  end
 
-  user --> spa
-  spa -- "login (Amplify Auth)" --> cognito
-  spa -- "HTTPS + JWT" --> waf --> apigw
-  apigw -- "valida JWT" --> cognito
-  apigw -- "AWS_PROXY" --> lambda
-  lambda -- "SigV4 · Put/Query/Update" --> ddb
-  lambda -- "SigV4 · PutObject + presigned PUT URL" --> s3
-  spa -- "PUT directo a S3<br/>(adjuntos reales)" --> s3
+  %% Frontend
+  user --> cf
+  cf -- "OAC sigv4" --> feS3
 
-  lambda -- "Publish ticket.closed" --> sns
-  sns -- "fan-out (subscription)" --> sqs
-  sqs -- "event source mapping" --> notifier
-  notifier -- "SendEmail SigV4" --> ses
-  sqs -. "tras 3 fallos" .-> dlq
+  %% Ingreso REST
+  user -- "HTTPS + JWT" --> waf
+  waf --> apigwRest
+  apigwRest -- "valida JWT" --> cognito
+  apigwRest -- "AWS_PROXY" --> lambdaTickets
+  apigwRest -- "AWS_PROXY · /messages*" --> lambdaWs
 
-  lambda --> cw
-  notifier --> cw
+  %% Ingreso WebSocket
+  user -- "WSS + JWT en query" --> apigwWs
+  apigwWs -- "$connect/$disconnect/sendMessage" --> lambdaWs
+
+  %% Login
+  user -- "login (Amplify Auth)" --> cognito
+
+  %% Datos
+  lambdaTickets -- "Put/Query/Update" --> ddb
+  lambdaTickets -- "PutObject + presigned PUT URL" --> s3Att
+  lambdaTickets -- "ListUsersInGroup" --> cognito
+  user -- "PUT directo<br/>(adjuntos)" --> s3Att
+  lambdaWs -- "Put/Query/Delete (CONN#)" --> ddb
+  lambdaWs -- "GetObject + presigned GET URL" --> s3Att
+  ddb -. "encrypt/decrypt" .-> kms
+  s3Att -. "encrypt/decrypt" .-> kms
+  s3Async -. "encrypt/decrypt" .-> kms
+
+  %% WebSocket broadcast
+  lambdaWs -- "PostToConnection" --> apigwWs
+  lambdaTickets -- "broadcast sistema<br/>(escalado, asignado, cerrado)" --> apigwWs
+
+  %% Pipeline ticket.closed
+  lambdaTickets -- "Publish ticket.closed" --> sns
+  sns -- "subscription" --> sqsNotif
+  sqsNotif -- "event source mapping" --> lambdaNotifier
+  lambdaNotifier -- "SendEmail" --> ses
+  lambdaNotifier -- "GetItem/PutItem<br/>IDEMPOTENCY# (TTL 7d)" --> ddb
+  sqsNotif -. "tras 3 fallos" .-> dlqNotif
+
+  %% Pipeline ticket.expired (watchdog)
+  sched -- "rate(5 min)" --> lambdaWatchdog
+  lambdaWatchdog -- "Query GSI4 + Update" --> ddb
+  lambdaWatchdog -- "SendMessage ticket.expired" --> sqsAsync
+  lambdaTickets -- "SendMessage<br/>(POST /async/enqueue)" --> sqsAsync
+  sqsAsync -- "event source mapping" --> lambdaAsync
+  lambdaAsync -- "PutObject (audit JSON)" --> s3Async
+  lambdaAsync -- "SendEmail" --> ses
+  sqsAsync -. "tras 3 fallos" .-> dlqAsync
+
+  %% Observability
+  lambdaTickets --> cw
+  lambdaWs --> cw
+  lambdaNotifier --> cw
+  lambdaAsync --> cw
+  lambdaWatchdog --> cw
+  apigwRest --> cw
+  cw -- "metric alarms<br/>(errors, DLQ depth, 5xx)" --> snsAlarms
+  budget -- "80% threshold" --> snsAlarms
+  snsAlarms -- "email subscription" --> oncall
+  cw --> dash
 ```
 
-Hay cuatro planos:
+Hay siete planos:
 
-- **Frontend.** SPA de Vite/React 19 que conoce dos endpoints: el de Cognito (para login y refresh) y el de API Gateway (para llamadas de negocio). Para subir adjuntos, hace `PUT` directo a S3 usando los presigned URLs que devuelve el `POST /tickets`. Cuando se despliegue a producción vivirá en S3 servido por CloudFront.
-- **Ingreso a AWS (síncrono).** Tres capas en el orden estricto en que las atraviesa un request: WAF → API Gateway → Cognito authorizer → Lambda. Cada capa rechaza requests inválidas antes que la siguiente las procese. La Lambda síncrona orquesta dominio tickets (crear, listar, asignar, cerrar, gerencia de usuarios) — devuelve respuesta al cliente y, cuando aplica, publica un evento al pipeline asíncrono.
-- **Procesamiento asíncrono (E4).** El SNS topic `ticket-events` recibe eventos del dominio tickets (hoy solo `ticket.closed`). La SQS suscriptora `ticket-notifications` los entrega al *notifier* Lambda vía event source mapping (batch size 1). El *notifier* manda emails vía SES. Si SES rechaza (recipient no verificado en sandbox, throttling, etc.) y el mensaje falla 3 veces, SQS lo mueve a la DLQ para inspección manual.
-- **Datos.** Tickets en DynamoDB, adjuntos en S3. Ambas llamadas se firman con SigV4 desde el execution role de la Lambda; no hay credenciales en código.
+- **Frontend.** SPA de Vite + React 19 servida desde un bucket S3 privado a través de una distribución CloudFront con OAC (Origin Access Control) sigv4. TLS 1.2_2021 con cert ACM wildcard. HTTP → 301 a HTTPS forzado a nivel viewer policy. La SPA conoce tres endpoints: Cognito (login/refresh), API Gateway REST (CRUD de tickets), API Gateway WebSocket (chat tiempo real).
+- **Ingreso.** Tres capas para REST en orden estricto: WAF → API Gateway REST → Cognito authorizer → Lambda. WebSocket tiene su propio API Gateway separado, con autenticación del JWT en el handler `$connect` (los browsers no pueden setear headers en `new WebSocket()`, así que el token viaja en query string).
+- **Cómputo.** Cinco Lambdas Node 22 arm64, una por bounded context: `tickets` (REST CRUD + métricas + escalamiento + Cognito Admin), `chat-ws` (WebSocket + history + presigned URLs de adjuntos), `notifier` (consumer SNS→SQS para emails de `ticket.closed`), `async-consumer` (consumer del async queue para audit + emails de `ticket.expired` y otros), `watchdog` (cron cada 5 min que detecta tickets vencidos y los encola al async pipeline).
+- **Datos.** DynamoDB single-table con 4 GSIs (tickets + mensajes de chat + connections WS + idempotency markers + audit). Dos buckets S3 separados por dominio: `attachments` (adjuntos del chat, R/W desde las dos Lambdas síncronas) y `async-events` (audit log inmutable que escribe el async_consumer, no se lee desde la app). Las tres stores están cifradas con la misma CMK customer-managed; los Lambda execution roles tienen `kms:Decrypt` condicionado a `kms:ViaService = s3|dynamodb`.
+- **Pipeline asíncrono `ticket.closed`.** SNS topic `ticket-events` para soportar fan-out futuro (hoy una sola subscription). SQS `ticket-notifications` entrega al notifier vía event source mapping (batch=1). El notifier hace GET-before-send + PUT-after-send sobre DDB para idempotencia (markers `IDEMPOTENCY#<message_id>` con TTL 7 días). DLQ con `maxReceiveCount=3`.
+- **Pipeline asíncrono `ticket.expired`.** EventBridge Scheduler invoca el watchdog cada 5 minutos. El watchdog hace Query a GSI4 (`STATUS#Abierto` + filter por `fecha_limite ≤ now`), marca cada ticket vencido con `ConditionExpression`, y encola un evento al async queue. El `async-consumer` lo procesa: escribe el JSON al bucket `async-events` (audit) y manda email vía SES al solicitante. El mismo async queue recibe también lo que llega por `POST /async/enqueue` (endpoint del rubric OYD-D4 Deliverable E). DLQ con `maxReceiveCount=3`.
+- **Observability.** Un CloudWatch log group por Lambda + log group para los access logs del API Gateway. Tres tipos de alarmas que publican a un SNS topic `pdds-oyd-dev-alarms` con subscription email: errors por Lambda (threshold ≥5 en 5 min), profundidad de cada DLQ (≥1), y 5xx del API Gateway (≥10 en 5 min). Dashboard CloudWatch con widgets de requests, errors y SQS depth. AWS Budget mensual con notificación al 80% por SNS + email.
 
 ### 11.1 Diagrama de componentes de AWS (v2)
 
