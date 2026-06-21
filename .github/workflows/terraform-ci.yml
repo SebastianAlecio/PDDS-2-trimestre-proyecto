@@ -15,18 +15,9 @@ name: Terraform CI
 on:
   pull_request:
     branches: [main]
-    # Sin paths filter: el CI corre para CUALQUIER PR a main.
-    #
-    # Razón: los 3 jobs (fmt / validate / plan-dev) son required status checks
-    # del ruleset main-protection. Si el filter excluye un PR (ej: doc-only en
-    # cloud/docs/**), los checks nunca se reportan y el merge queda bloqueado
-    # con "expected but not present" indefinidamente — ni admin override
-    # destraba eso porque el ruleset no admite bypass_actors.
-    #
-    # Costo de correr el CI para PRs no-infra: terraform fmt + validate + plan
-    # ≈ 40-60s. Despreciable vs el costo operativo de un PR doc-only bloqueado.
-    # El plan corre contra el state de dev y no aplica cambios — leer el state
-    # de un workspace que no cambió es idempotente.
+    paths:
+      - "infra/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
