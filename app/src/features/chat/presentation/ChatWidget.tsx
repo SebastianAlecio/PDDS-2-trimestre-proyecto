@@ -37,24 +37,6 @@ export function ChatWidget() {
     };
   }, []);
 
-  // Polling de la lista de tickets cuando el widget está abierto. Mantiene
-  // la lista al día con cambios disparados desde otras pantallas (un agente
-  // toma el ticket → cambia "responsable", o el watchdog marca uno vencido).
-  // Sin esto el colaborador tiene que refrescar la página entera para ver
-  // que ya hay agente. 8s es balance entre latencia de UX y costo de polling.
-  // Cuando el widget está colapsado, no polleamos (el badge "💬 Chat de
-  // soporte" no muestra count de tickets activos).
-  useEffect(() => {
-    if (collapsed) return;
-    // Refetch inmediato al abrir el widget — útil tras un long minimize
-    // donde el state local quedó stale.
-    void reload();
-    const intervalId = window.setInterval(() => {
-      void reload();
-    }, 8000);
-    return () => window.clearInterval(intervalId);
-  }, [collapsed, reload]);
-
   // No abrir el WS si el ticket no tiene agente — no hay con quien chatear
   // y evitamos consumir una conexión inútil. El widget detecta esto desde
   // el shape del Ticket (responsible) y muestra una card de espera.
@@ -66,6 +48,35 @@ export function ChatWidget() {
   const isMatchedAssigned =
     matched !== null && matched.responsible !== "Sin asignar";
   const isMatchedClosed = matched !== null && matched.status === "Cerrado";
+
+  // Refetch inmediato al abrir el widget — útil tras un long minimize donde
+  // el state local quedó stale. Sólo depende de `collapsed` (no de
+  // `isMatchedAssigned`) para evitar loops: si dependiera de
+  // isMatchedAssigned, cada vez que reload pone ticketsState en "loading"
+  // y el bool oscila, este effect re-correría llamando reload incondicionalmente.
+  useEffect(() => {
+    if (collapsed) return;
+    void reload();
+  }, [collapsed, reload]);
+
+  // Polling de la lista de tickets cuando el widget está abierto pero NO
+  // hay una conversación activa con agente. Mantiene la lista al día con
+  // cambios disparados desde otras pantallas (un agente toma el ticket →
+  // cambia "responsable", o el watchdog marca uno vencido). 8s es balance
+  // entre latencia de UX y costo de polling.
+  //
+  // IMPORTANTE: se pausa cuando hay agente asignado. El refetch puede
+  // causar un flap momentáneo en `isMatchedAssigned` que desmonta el
+  // ChatPane y pierde el texto que el usuario está escribiendo. Mientras
+  // hay chat activo, el WS sincroniza mensajes en tiempo real.
+  useEffect(() => {
+    if (collapsed) return;
+    if (isMatchedAssigned) return;
+    const intervalId = window.setInterval(() => {
+      void reload();
+    }, 8000);
+    return () => window.clearInterval(intervalId);
+  }, [collapsed, reload, isMatchedAssigned]);
   // Cargamos history (y WS) para cualquier ticket con agente, incluso
   // cerrados — queremos mostrar la conversación archivada. La conexión WS
   // extra es benigna (no llegarán mensajes); el closedNotice bloquea

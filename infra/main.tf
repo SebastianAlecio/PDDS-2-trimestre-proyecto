@@ -2,6 +2,8 @@
 # (OIDC) cuando enable_oidc = true. Ningún módulo abajo crea roles inline —
 # todos consumen los ARNs como inputs.
 #
+# (touch para disparar el CI: el paths filter del workflow exige infra/**)
+#
 # OIDC se mantiene en false acá (Task 3 lo activa). Cuando se active, hay que
 # proveer github_owner y github_repo (vienen de root vars).
 module "iam" {
