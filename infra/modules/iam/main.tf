@@ -31,6 +31,14 @@ locals {
   # genera. Usado como Resource scoped (no wildcard) en las policies SES.
   ses_identity = "arn:aws:ses:${local.region}:${local.account_id}:identity/${var.ses_domain}"
 
+  # Pattern de identities del account — incluye el dominio + cualquier
+  # email-identity verificada (recipients en SES sandbox). En sandbox AWS
+  # evalúa ses:SendEmail contra TODAS las identities involucradas (sender
+  # Y recipients), por eso ambas tienen que estar listadas como Resource.
+  # La condition ses:FromAddress en cada policy restringe el From: real al
+  # sender configurado, así que el wildcard de identity no permite spoof.
+  ses_identities_all = "arn:aws:ses:${local.region}:${local.account_id}:identity/*"
+
   # Lambda full names — construidos por convención ($${base}-$${env}) para
   # romper el dependency cycle entre iam y compute. compute usa el mismo
   # pattern locales en su módulo, así que están alineados.
@@ -348,7 +356,7 @@ resource "aws_iam_role_policy" "notifier_lambda_ses_send" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-      Resource = [local.ses_identity]
+      Resource = [local.ses_identities_all]
       Condition = {
         StringEquals = {
           "ses:FromAddress" = var.ses_from_address
@@ -423,7 +431,7 @@ resource "aws_iam_role_policy" "async_consumer_lambda_ses_send" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-      Resource = [local.ses_identity]
+      Resource = [local.ses_identities_all]
       Condition = {
         StringEquals = {
           "ses:FromAddress" = var.ses_from_address
