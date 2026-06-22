@@ -93,7 +93,6 @@ output "dns_api_url" {
   value       = length(module.dns) > 0 ? module.dns[0].api_url : ""
 }
 
-# Re-exportados del módulo dns con los nombres exigidos por el rubric OYD-D3.
 output "domain_name" {
   description = "FQDN del custom domain del API (rubric OYD-D3: \"Outputs: domain_name and hosted_zone_id\")."
   value       = length(module.dns) > 0 ? module.dns[0].domain_name : ""
@@ -119,9 +118,8 @@ output "ws_management_endpoint" {
   value       = module.realtime.management_endpoint
 }
 
-# ─── Async messaging outputs (OYD-D4 Deliverable A evidence) ─────────────
-# Estos outputs los va a leer `terraform output` para generar
-# infra/evidence/async-foundation.txt (requisito del rubric).
+# ─── Async messaging outputs ─────────────
+# Estos outputs los va a leer `terraform output` para generar infra/evidence/async-foundation.txt.
 
 output "async_queue_url" {
   description = "URL de la cola principal del módulo async/. Útil para AWS CLI: aws sqs send-message --queue-url <output>."

@@ -1,4 +1,4 @@
-# OIDC federation para GitHub Actions — Deliverable C del rubric OYD-D5.
+# OIDC federation para GitHub Actions
 #
 # Provisiona el OpenID Connect provider de GitHub Actions y el ci_runner role
 # assumable via OIDC (sin access keys long-lived). Gateado por var.enable_oidc
@@ -45,10 +45,6 @@ resource "aws_iam_openid_connect_provider" "github" {
 #   - :pull_request                 — PR plan jobs (CI workflow)
 #   - :environment:dev              — workflow_dispatch dev (destroy, manual apply)
 #   - :environment:staging          — workflow_dispatch staging (apply, destroy)
-#
-# El rubric ejemplifica con :ref:refs/heads/main pero exige scope al repo.
-# Nuestro pipeline tiene PR plan + environment-gated deploys; todas estas
-# condiciones son específicas, identificables y validables — ninguna usa "*".
 data "aws_iam_policy_document" "ci_runner_assume" {
   count = var.enable_oidc ? 1 : 0
 

@@ -71,7 +71,7 @@ variable "environment_variables" {
   default     = {}
 }
 
-# ─── Role ARNs — vienen del módulo iam/ (Deliverable A del rubric OYD-D5) ──
+# ─── Role ARNs ──
 # Hasta D4 los roles se creaban inline acá. Ahora viven en infra/modules/iam/
 # y se pasan como inputs. Cumple "All role ARNs must be exposed as module
 # outputs and consumed by the modules that reference them — no role ARN may

@@ -1,4 +1,4 @@
-# Módulo KMS — Deliverable B del rubric OYD-D5.
+# Módulo KMS
 #
 # Provisiona UNA Customer Managed Key (CMK) que encripta:
 #   (a) el bucket S3 de adjuntos + async-events (upgrade desde SSE-S3 / AES256
