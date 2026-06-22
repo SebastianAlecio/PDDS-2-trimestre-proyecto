@@ -141,10 +141,7 @@ variable "notifications_max_receive_count" {
 }
 
 # ─── Async messaging (OYD-D4 Deliverable A) ────────────────────────────────
-# Estas vars cablean los inputs del módulo async/ desde root. Cada env (dev,
-# staging) puede sobrescribirlas en su tfvars — el rubric exige al menos 3
-# valores distintos entre dev y staging y estas son candidatas naturales
-# para diferenciar (retención y reintentos pueden ser más agresivos en dev).
+# Estas vars cablean los inputs del módulo async/ desde root.
 
 variable "async_queue_name_prefix" {
   description = "Prefijo para los nombres de la cola principal + DLQ del módulo async/. Combinado con environment forma el name final (ej. ticke-t-async-dev, ticke-t-async-dev-dlq)."
@@ -178,7 +175,6 @@ variable "async_dlq_message_retention_seconds" {
 
 # ─── Watchdog scheduler (OYD-D4 Deliverable C) ──────────────────────────
 # El watchdog corre periódicamente y marca tickets vencidos por SLA.
-# Cumple la categoría "cleanup or report generator" del rubric.
 
 variable "watchdog_timezone" {
   description = "IANA timezone para el cron del watchdog (ej. \"America/Guatemala\", \"UTC\"). El rubric OYD-D4 Deliverable C exige que el timezone sea un input variable, no hardcoded."

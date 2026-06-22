@@ -1,4 +1,3 @@
-# ─── IAM — Deliverable A del rubric OYD-D5 ─────────────────────────────────
 # Centraliza los 6 roles runtime (5 Lambdas + 1 Scheduler) + el ci_runner role
 # (OIDC) cuando enable_oidc = true. Ningún módulo abajo crea roles inline —
 # todos consumen los ARNs como inputs.
@@ -158,7 +157,7 @@ module "watchdog" {
   }
 }
 
-# ─── KMS — Deliverable B del rubric OYD-D5 ─────────────────────────────────
+# ─── KMS ────────
 # CMK que encripta S3 (attachments + async-events) y DynamoDB. Reemplaza:
 #   - SSE-S3 (AES256) que estaba activo en storage/ desde D2
 #   - DynamoDB AWS-managed default key

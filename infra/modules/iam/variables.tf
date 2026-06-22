@@ -15,11 +15,6 @@ variable "project_name" {
 }
 
 # ─── ARNs de recursos consumidos por las roles ────────────────────────────
-# Todos vienen como inputs; ninguno hardcodeado. Cumple el requisito del
-# rubric D5 Deliverable A: "All role ARNs or service account emails must be
-# exposed as module outputs and consumed by the modules that reference them.
-# No role ARN may be hardcoded in any module call." — el corolario aplica
-# también para los ARNs de recursos consumidos por las policies.
 
 variable "tickets_table_arn" {
   description = "ARN de la tabla DynamoDB. Las policies que dan acceso a DDB scopean a este ARN + /index/* según el GSI que cada rol consulte."
