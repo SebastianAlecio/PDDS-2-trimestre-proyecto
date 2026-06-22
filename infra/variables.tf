@@ -1,3 +1,4 @@
+# ambiente
 variable "environment" {
   description = "Deployment environment. Drives resource naming and per-environment overrides. Acepta dev / staging / prod — staging se agregó en OYD-D4 para el multi-env pipeline."
   type        = string
