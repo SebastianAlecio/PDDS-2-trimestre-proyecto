@@ -16,6 +16,12 @@ resource "null_resource" "npm_install" {
   triggers = {
     package_json = filemd5("${local.source_dir}/package.json")
     lock_exists  = fileexists("${local.source_dir}/package-lock.json") ? filemd5("${local.source_dir}/package-lock.json") : ""
+    # Detecta runners frios (CI nuevo, git clean local, etc.): si node_modules
+    # no esta presente, el trigger cambia y fuerza re-correr el provisioner.
+    # Sin esto, terraform veia "package.json no cambio" -> omitia el local-exec
+    # -> archive_file empaquetaba sin deps -> Lambda lanzaba Runtime.ImportModuleError
+    # al primer invoke (ej. "Cannot find module 'aws-jwt-verify'" en chat-ws).
+    node_modules_present = fileexists("${local.source_dir}/node_modules/.package-lock.json") ? "yes" : "no"
   }
 
   provisioner "local-exec" {
