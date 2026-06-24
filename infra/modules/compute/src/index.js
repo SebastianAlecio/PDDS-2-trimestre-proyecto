@@ -1458,14 +1458,17 @@ async function handleListTicketHistory(event, claims) {
 
   const groups = parseGroups(claims);
   const isGerente = groups.includes("gerente");
+  const isAgente = groups.includes("agente-n1") || groups.includes("agente-n2");
   const isSolicitante = metadata.solicitante?.user_id === sub;
-  const isAgentePresente = metadata["GSI2-PK"] === `AGENT#${sub}`;
   const historialAgentes = Array.isArray(metadata.historial_agentes)
     ? metadata.historial_agentes
     : [];
-  const isAgentePasado = historialAgentes.some((entry) => entry.sub === sub);
 
-  if (!isGerente && !isSolicitante && !isAgentePresente && !isAgentePasado) {
+  // Auth: cualquier agente o gerente puede ver el historial de cualquier ticket
+  // (es contexto operativo — eventos como "asignado/escalado/cerrado/vencido" —
+  // sin mensajes ni datos sensibles del cliente). Para colaboradores se exige
+  // ser el solicitante del ticket.
+  if (!isGerente && !isAgente && !isSolicitante) {
     return forbidden("no tenes acceso al historial de este ticket");
   }
 
