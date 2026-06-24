@@ -203,12 +203,6 @@ export function CreateTicketPage() {
               </p>
             </header>
 
-            <div className={styles.banner} role="status">
-              Por ahora solo se registra la metadata (nombre, tamaño, tipo)
-              junto con el ticket. La subida real a S3 con URLs firmadas se
-              cablea en la siguiente entrega.
-            </div>
-
             <label className={styles.fileDrop}>
               <input
                 type="file"
