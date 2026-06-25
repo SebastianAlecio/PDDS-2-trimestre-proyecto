@@ -6,29 +6,31 @@ Lista de áreas candidatas para el live change de la presentación final (Segmen
 
 ---
 
-## Candidate 1 — Ordenamiento por prioridad en la cola del agente
+## Candidate 1 — Ordenamiento por prioridad en la lista del colaborador
 
-**Title:** Sort estable por prioridad (`alta → media → baja`) en `GET /tickets/queue`.
+**Title:** Sort estable por prioridad (`alta → media → baja`) en `GET /tickets/me`.
 
-**Observable behavior:** hoy `GET /tickets/queue` devuelve los arrays `unassigned`, `mine` (+ `escalated` / `escalated_by_me` según rol) en el orden que la sort key del GSI les da — efectivamente cronológico — con prioridades mezcladas. El agente que quiere atender primero las urgencias las identifica visualmente por el color del `<PriorityTag>` (el frontend no filtra ni ordena por prioridad: pinta los arrays tal cual vienen). Cambio: el handler aplica un sort estable por prioridad antes de retornar, con peso `{alta:0, media:1, baja:2}`. Los tickets de igual prioridad mantienen su orden cronológico actual (sort estable). Resultado: el agente abre la cola y ve los rojos arriba, amarillos en el medio, verdes al final, sin que el frontend cambie nada.
+**Observable behavior:** hoy `GET /tickets/me` devuelve el array `items` en el orden que da la sort key del GSI1 (`ScanIndexForward: false` → más recientes primero), con prioridades mezcladas. La página `/mis-tickets` aplica un sort propio sobre ese array, pero solo agrupa por **status** (activos arriba, vencidos en el medio, resueltos/cerrados abajo) y preserva el orden que viene del backend dentro de cada grupo. Cambio: el handler aplica un sort estable por prioridad antes de retornar, con peso `{alta:0, media:1, baja:2}`. Como el `Array.prototype.sort` de JS es estable desde ES2019, el sort por status del frontend respeta el orden por prioridad dentro de cada bloque. Resultado: el colaborador abre `/mis-tickets` y dentro de cada sección (activos, vencidos, cerrados) ve los rojos arriba, amarillos en el medio, verdes al final — sin que el frontend cambie ni una línea.
 
-**Affected endpoint and handler:** `GET /tickets/queue` → función `handleQueue` en `infra/modules/compute/src/index.js`. El sort se aplica en memoria a cada uno de los 4 arrays del response después del Query a los GSIs (sin índice nuevo en DDB, sin cambios en TF).
+**Affected endpoint and handler:** `GET /tickets/me` → función `handleListMyTickets` (línea 488) en `infra/modules/compute/src/index.js`. El sort se aplica en memoria sobre el array `enriched` después del Query a GSI1 y del enrich de presigned URLs, justo antes del `return ok({ items, count })` (línea 524). Sin índice nuevo en DDB, sin cambios en TF.
 
 **Verification method:**
 ```bash
-# Pre-deploy: prioridades intercaladas en el orden cronológico del GSI
-curl -s -H "Authorization: Bearer $JWT" https://api.ticke-t.lumenchat.app/tickets/queue | jq '.unassigned | map(.prioridad)'
+# Pre-deploy: prioridades intercaladas en el orden cronológico del GSI1
+curl -s -H "Authorization: Bearer $JWT" https://api.ticke-t.lumenchat.app/tickets/me | jq '.items | map(.prioridad)'
 # → ["media","alta","baja","alta","media","baja"]
 
 # Post-deploy (mismo dataset, después del terraform-apply en main)
-curl -s -H "Authorization: Bearer $JWT" https://api.ticke-t.lumenchat.app/tickets/queue | jq '.unassigned | map(.prioridad)'
+curl -s -H "Authorization: Bearer $JWT" https://api.ticke-t.lumenchat.app/tickets/me | jq '.items | map(.prioridad)'
 # → ["alta","alta","media","media","baja","baja"]
 
-# Visual: refrescar https://app.ticke-t.lumenchat.app/agente — los tickets
-# con tag rojo (alta) quedan arriba del todo en cada sección de la tabla.
+# Visual: refrescar https://app.ticke-t.lumenchat.app/mis-tickets — los tickets
+# con tag rojo (alta) quedan arriba dentro de cada bloque de la tabla
+# (activos, vencidos, cerrados). Como hay tickets cerrados acumulados, el
+# reorden es visible aunque no haya tickets vivos en el momento del demo.
 ```
 
-**Rough scope:** ~5 líneas. Un mapa `{alta:0, media:1, baja:2}` + `.sort((a,b) => weight[a.prioridad] - weight[b.prioridad])` aplicado a los 4 arrays antes del return. Sin cambios en TF, en API Gateway, en DDB ni en el frontend.
+**Rough scope:** ~5 líneas. Un mapa `{alta:0, media:1, baja:2}` + `.sort((a,b) => weight[a.prioridad] - weight[b.prioridad])` aplicado al array `enriched` antes del return. Sin cambios en TF, en API Gateway, en DDB ni en el frontend.
 
 ---
 
