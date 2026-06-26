@@ -506,6 +506,15 @@ async function handleListMyTickets(event, claims) {
     limit = Math.min(parsed, 100);
   }
 
+  // Filtro opcional por prioridad (?priority=alta|media|baja). Si está
+  // ausente, se devuelven todas. Si está presente con valor invalido, 400.
+  const rawPriority = event.queryStringParameters?.priority;
+  if (rawPriority !== undefined && !ALLOWED_PRIORITIES.has(rawPriority)) {
+    return badRequest(
+      `'priority' must be one of: ${[...ALLOWED_PRIORITIES].join(", ")}`,
+    );
+  }
+
   try {
     const result = await ddb.send(
       new QueryCommand({
@@ -521,7 +530,20 @@ async function handleListMyTickets(event, claims) {
 
     const items = result.Items ?? [];
     const enriched = await Promise.all(items.map(enrichTicketAttachmentsWithUrls));
-    return ok({ items: enriched, count: result.Count ?? 0 });
+
+    // Filtro por prioridad si se solicitó.
+    const filtered = rawPriority
+      ? enriched.filter((t) => t.prioridad === rawPriority)
+      : enriched;
+
+    // Sort estable por prioridad: alta → media → baja. Dentro de cada
+    // prioridad se preserva el orden cronológico que viene de GSI1.
+    const PRIORIDAD_WEIGHT = { alta: 0, media: 1, baja: 2 };
+    const sorted = filtered.sort(
+      (a, b) => PRIORIDAD_WEIGHT[a.prioridad] - PRIORIDAD_WEIGHT[b.prioridad],
+    );
+
+    return ok({ items: sorted, count: sorted.length });
   } catch (err) {
     console.error("dynamodb_query_failed:", err);
     return serverError("failed to list tickets", { name: err.name, message: err.message });
